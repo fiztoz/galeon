@@ -1,9 +1,10 @@
+import { FIELD } from './connection/field';
+import { ProtocolFields } from './connection/ProtocolFields';
 import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { ConnectionProfile, BandwidthRule } from '../types';
 import { OnboardingProtocol } from './OnboardingWizard';
-import { SshKeyHelper } from './SshKeyHelper';
 import { ProfileImportExport } from './ProfileImportExport';
 import {
   EMPTY_SSH_TUNNEL,
@@ -13,8 +14,8 @@ import {
   validateSshTunnelDestination,
 } from './sshTunnel';
 import { SshTunnelProfiles } from './SshTunnelProfiles';
-import { SshConfigConnection, SshConfigImport } from './SshConfigImport';
-import { Server, Trash2, Pencil, Plus, Save, Database, Key, AlertTriangle, Settings, Eraser } from 'lucide-react';
+import { SshConfigConnection } from './SshConfigImport';
+import { Server, Trash2, Pencil, Plus, Save, Database, Settings, Eraser } from 'lucide-react';
 
 // Neutral defaults for friend installs (no org-specific endpoints baked in).
 const DEFAULT_S3_ENDPOINT = '';
@@ -37,9 +38,6 @@ const defaultPortFor = (proto: string): number => {
   if (proto === 'ftps') return DEFAULT_FTPS_PORT;
   return DEFAULT_FTP_PORT;
 };
-
-const FIELD =
-  'w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all placeholder:text-zinc-500';
 
 /** Friend-readable connect errors (strip noisy Rust/Tauri wrappers when present). */
 const formatConnectError = (err: unknown): string => {
@@ -1052,259 +1050,12 @@ export const Connection: React.FC<ConnectionProps> = ({
               </select>
             </div>
             
-            {/* S3 Fields */}
-            {protocol === 's3' && (
-              <>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Bucket Name</label>
-                  <input type="text" value={bucket} onChange={(e) => setBucket(e.target.value)} required placeholder="e.g. my-bucket" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
-                  <p className="mt-1 text-xs text-zinc-500">Bucket name (not the full URL)</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Access Key ID</label>
-                  <input type="text" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Secret Access Key</label>
-                  <input type="password" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Custom Endpoint</label>
-                  <input type="text" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="Leave empty for AWS, or https://minio.example.com:9000" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
-                  <p className="mt-1 text-xs text-zinc-500">MinIO / R2 / Wasabi: paste the API endpoint URL</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Region</label>
-                    <input type="text" value={region} onChange={(e) => setRegion(e.target.value)} placeholder="us-east-1 (optional for MinIO)" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
-                  </div>
-                  <div className="flex items-end pb-2">
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="disable-ssl"
-                        checked={dangerDisableSsl}
-                        onChange={(e) => setDangerDisableSsl(e.target.checked)}
-                        className="w-4 h-4 text-yellow-500 bg-zinc-800 border-zinc-600 rounded focus:ring-yellow-500"
-                      />
-                      <label htmlFor="disable-ssl" className="text-xs text-zinc-400">
-                        Disable SSL Verify
-                        {dangerDisableSsl && (
-                          <span className="ml-1 text-yellow-500">(self-signed OK)</span>
-                        )}
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Advanced Settings Toggle */}
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="flex items-center space-x-2 text-xs text-zinc-400 hover:text-zinc-200"
-                >
-                  <span>{showAdvanced ? '▼' : '▶'}</span>
-                  <span>Advanced S3 Options</span>
-                </button>
-                
-                {/* Advanced Settings Panel */}
-                {showAdvanced && (
-                  <div className="p-4 bg-zinc-800/50 rounded-lg border border-zinc-700 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="text-sm font-medium text-zinc-200">Virtual Host Style</label>
-                        <p className="text-xs text-zinc-500">Use bucket.endpoint.com style URLs</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setUseVirtualHostStyle(!useVirtualHostStyle)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          useVirtualHostStyle ? 'bg-gale-teal' : 'bg-zinc-700'
-                        }`}
-                      >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          useVirtualHostStyle ? 'translate-x-6' : 'translate-x-1'
-                        }`} />
-                      </button>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-zinc-200 mb-1">Storage Class</label>
-                      <select
-                        value={storageClass}
-                        onChange={(e) => setStorageClass(e.target.value)}
-                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all"
-                      >
-                        <option value="STANDARD">Standard</option>
-                        <option value="REDUCED_REDUNDANCY">Reduced Redundancy</option>
-                        <option value="STANDARD_IA">Standard-IA</option>
-                        <option value="ONEZONE_IA">One Zone-IA</option>
-                        <option value="INTELLIGENT_TIERING">Intelligent-Tiering</option>
-                        <option value="GLACIER">Glacier</option>
-                        <option value="GLACIER_DEEP_ARCHIVE">Glacier Deep Archive</option>
-                      </select>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-zinc-200 mb-1">Bandwidth Limit (KB/s)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="Unlimited"
-                        value={maxBandwidth}
-                        onChange={(e) => setMaxBandwidth(e.target.value ? Number(e.target.value) : '')}
-                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all placeholder:text-zinc-500"
-                      />
-                      <p className="mt-1 text-xs text-zinc-500">Leave blank for unlimited speed</p>
-                    </div>
-
-                    {renderBandwidthRulesSection()}
-                  </div>
-                )}
-              </>
-            )}
-            
-            {/* SFTP Fields */}
-            {(protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps') && (
-              <>
-                {protocol === 'sftp' && (
-                  <>
-                    <SshConfigImport onSelect={handleSshConfigSelect} />
-                    {sshConfigNotice && (
-                      <div className="p-3 bg-amber-950/30 border border-amber-800/50 rounded-lg text-xs text-amber-200">
-                        {sshConfigNotice}
-                      </div>
-                    )}
-                  </>
-                )}
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
-                    Host
-                  </label>
-                  <input
-                    type="text"
-                    value={host}
-                    onChange={(e) => setHost(e.target.value)}
-                    required
-                    placeholder="e.g., sftp.example.com"
-                    className={FIELD}
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
-                      Port
-                    </label>
-                    <input
-                      type="number"
-                      value={port}
-                      onChange={(e) => setPort(Number(e.target.value))}
-                      className={FIELD}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
-                      Username
-                    </label>
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      required
-                      className={FIELD}
-                      autoCapitalize="off"
-                      autoCorrect="off"
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                  </div>
-                </div>
-                <div className="mb-3">
-                  <label htmlFor="storage-password" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
-                    Password
-                  </label>
-                  <div className="space-y-2">
-                    <div>
-                      <p className="mb-1 text-xs text-zinc-500">
-                        {protocol === 'sftp'
-                          ? 'Default authentication. A password entered here takes precedence over an SSH key.'
-                          : 'Stored securely in your OS keyring when you save this profile.'}
-                      </p>
-                      <input
-                        id="storage-password"
-                        type="password"
-                        value={sftpPassword}
-                        onChange={(e) => setSftpPassword(e.target.value)}
-                        placeholder="Enter password"
-                        className={FIELD}
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        autoComplete="current-password"
-                        spellCheck={false}
-                      />
-                    </div>
-                    {protocol === 'sftp' && (
-                    <>
-                    <div className="flex items-center gap-3 text-xs text-zinc-500" aria-hidden="true">
-                      <span className="h-px flex-1 bg-zinc-700" />
-                      <span>or use an SSH key</span>
-                      <span className="h-px flex-1 bg-zinc-700" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-zinc-500">SSH Private Key Path</label>
-                      <input
-                        type="text"
-                        value={keyPath}
-                        onChange={(e) => setKeyPath(e.target.value)}
-                        placeholder="/Users/you/.ssh/id_ed25519"
-                        className={FIELD}
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        autoComplete="off"
-                        spellCheck={false}
-                      />
-                    </div>
-                    {/* SSH Key Helper */}
-                    <button
-                      type="button"
-                      onClick={() => setShowSshHelper(!showSshHelper)}
-                      className="flex items-center space-x-1 text-xs text-gale-teal hover:text-deep-current transition-colors"
-                    >
-                      <Key className="w-3 h-3" />
-                      <span>{showSshHelper ? 'Hide Key Helper' : 'Need an SSH key? Generate one'}</span>
-                    </button>
-                    {showSshHelper && (
-                      <SshKeyHelper
-                        onKeyGenerated={(path) => {
-                          setKeyPath(path);
-                          setShowSshHelper(false);
-                        }}
-                        onClose={() => setShowSshHelper(false)}
-                      />
-                    )}
-                    </>
-                    )}
-                  </div>
-                </div>
-                {protocol === 'sftp' && !keyPath && !sftpPassword && !credsLoading && (
-                    <div className="p-3 bg-amber-950/30 border border-amber-800/50 rounded-lg">
-                        <div className="flex items-start space-x-2">
-                            <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5" />
-                            <div>
-                                <p className="text-xs text-amber-200 font-medium">Authentication Required</p>
-                                <p className="text-xs text-amber-400/80 mt-1">
-                                    Enter a password, or choose an SSH key if this server does not allow password login.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                )}
-              </>
-            )}
+            <ProtocolFields
+              protocol={protocol}
+              s3={{ bucket, setBucket, accessKey, setAccessKey, secretKey, setSecretKey, endpoint, setEndpoint, region, setRegion, dangerDisableSsl, setDangerDisableSsl, showAdvanced, setShowAdvanced, useVirtualHostStyle, setUseVirtualHostStyle, storageClass, setStorageClass, maxBandwidth, setMaxBandwidth, bandwidthRules: renderBandwidthRulesSection() }}
+              remote={{ host, setHost, port, setPort, username, setUsername, sftpPassword, setSftpPassword }}
+              ssh={{ keyPath, setKeyPath, showSshHelper, setShowSshHelper, sshConfigNotice, credsLoading, handleSshConfigSelect }}
+            />
 
             {(protocol === 's3' || protocol === 'sftp') && (
               <SshTunnelProfiles
