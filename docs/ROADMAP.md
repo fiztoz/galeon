@@ -125,7 +125,14 @@ Stability and UX good enough to publish.
   under OFL in `public/fonts/`; CSP now allows no external host at all
 - CSP is set and verified against the built assets, but still wants a `tauri dev`
   pass to confirm Tauri's injected bootstrap and real IPC
-- Local pane: drag between panes (the resizable split landed — see below)
+- Drag **between** the panes. Deliberately not built: Tauri's
+  `dragDropEnabled` defaults to true and its own config docs say HTML5 drag and
+  drop requires turning it off, which is exactly how the Explorer receives drops
+  from Finder today. In-app drag would trade a working feature for a convenience.
+  Both directions already have explicit, keyboard-reachable actions — "Upload to
+  remote" in the local pane, "Download here" plus dialog-free batch download in the
+  remote pane. Revisit only with a plan to keep OS drops (e.g. route internal drags
+  through app state instead of HTML5 DnD).
 - Finish v0.4's dual-pane: the local pane, layout toggle, and both transfer
   directions are in; the resizable split and drag-between-panes are not
 

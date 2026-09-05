@@ -48,6 +48,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `aria-valuenow/min/max`, and its arrow keys stop propagation so a focused
   divider never drives the list behind it. The ratio persists in
   `app_settings.json` next to the other layout preferences.
+- Drag *between* the panes was evaluated and deliberately not built: Tauri's
+  `dragDropEnabled` is on by default, its config docs state HTML5 drag and drop
+  needs it off, and it is the mechanism the Explorer uses to accept Finder drops
+  today. Both transfer directions are already available as explicit actions.
 - `AppSettings.split_ratio` (`Option<f64>`; absent means 50/50), so the split rides
   the same backward-compatible settings path as the rest.
 
