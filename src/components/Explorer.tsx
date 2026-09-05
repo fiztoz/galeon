@@ -1,3 +1,4 @@
+import { useObjectListing, useObjectSorting } from '../hooks/useObjectListing';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import React, { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -87,13 +88,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
 }) => {
   const isS3 = !protocol || protocol === 's3';
   const isFsProtocol = protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps';
-  const [prefix, setPrefix] = useState('');
-  const [objects, setObjects] = useState<GaleonObject[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  // Distinct from `error`, which any action (delete, rename…) can set: this means the
-  // current listing failed, so the rows we show are unknown rather than empty.
-  const [listFailed, setListFailed] = useState(false);
+  const { prefix, setPrefix, objects, loading, error, setError, listFailed, fetchDirectory } = useObjectListing(sessionId);
 
   // Modal states
   const [showCreateFolder, setShowCreateFolder] = useState(false);
@@ -110,12 +105,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
   const [shareTarget, setShareTarget] = useState<GaleonObject | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   
-  // Search, Filter, Sort states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'folders' | 'files'>('all');
-  const [sortKey, setSortKey] = useState<'name' | 'size' | 'date'>('name');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  
   // Multi-select states
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
   
@@ -127,8 +116,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
   const { prefixSizeBytes, prefixFileCount, prefixSizeLoading, prefixSizeError, folderSizes } =
     useFolderSizes(sessionId, prefix, isS3, loading, objects);
-  const listNonceRef = useRef(0);
-
   // Upload pre-flight: route uploads whose remote key already exists
   // through the conflict modal instead of silently overwriting
   const initiateUploadsWithConflictCheck = async (
@@ -196,89 +183,8 @@ export const Explorer: React.FC<ExplorerProps> = ({
     };
   }, [prefix, onInitiateUpload]);
 
-  const fetchDirectory = async (currentPrefix: string) => {
-    // Listings race: prefix changes, Refresh, and create/delete/rename all fire one.
-    // Only the most recent request may touch state, otherwise a slow failure for a
-    // folder we already navigated away from wipes the rows we are actually showing.
-    const nonce = ++listNonceRef.current;
-    setLoading(true);
-    setError('');
-    setListFailed(false);
-    try {
-      const res = await invoke<GaleonObject[]>('list_directory', {
-        sessionId,
-        prefix: currentPrefix,
-      });
-      if (nonce !== listNonceRef.current) return;
-      setObjects(res);
-    } catch (err: unknown) {
-      if (nonce !== listNonceRef.current) return;
-      const msg = typeof err === 'string' ? err : err instanceof Error ? err.message : String(err);
-      setError(msg.replace(/^Error:\s*/i, '') || 'Failed to list directory.');
-      setListFailed(true);
-      setObjects([]);
-    } finally {
-      // A newer request owns the spinner from here on.
-      if (nonce === listNonceRef.current) setLoading(false);
-    }
-  };
-
-  // Filtered and sorted objects
-  const filteredObjects = React.useMemo(() => {
-    let result = [...objects];
-    
-    // Apply search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(obj => obj.name.toLowerCase().includes(query));
-    }
-    
-    // Apply type filter
-    if (filterType === 'folders') {
-      result = result.filter(obj => obj.objectType === 'folder');
-    } else if (filterType === 'files') {
-      result = result.filter(obj => obj.objectType === 'file');
-    }
-    
-    // Apply sorting
-    result.sort((a, b) => {
-      // Folders always come first
-      if (a.objectType === 'folder' && b.objectType !== 'folder') return -1;
-      if (a.objectType !== 'folder' && b.objectType === 'folder') return 1;
-      
-      let comparison = 0;
-      switch (sortKey) {
-        case 'name':
-          comparison = a.name.localeCompare(b.name);
-          break;
-        case 'size': {
-          const sizeOf = (obj: GaleonObject) => {
-            if (obj.objectType === 'file') return obj.sizeBytes || 0;
-            return folderSizes[obj.fullKey]?.totalBytes || 0;
-          };
-          comparison = sizeOf(a) - sizeOf(b);
-          break;
-        }
-        case 'date':
-          const dateA = a.lastModified ? new Date(a.lastModified).getTime() : 0;
-          const dateB = b.lastModified ? new Date(b.lastModified).getTime() : 0;
-          comparison = dateA - dateB;
-          break;
-      }
-      return sortDirection === 'asc' ? comparison : -comparison;
-    });
-    
-    return result;
-  }, [objects, searchQuery, filterType, sortKey, sortDirection, folderSizes]);
-
-  const handleSort = (key: 'name' | 'size' | 'date') => {
-    if (sortKey === key) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(key);
-      setSortDirection('asc');
-    }
-  };
+  const { searchQuery, setSearchQuery, filterType, setFilterType, sortKey, sortDirection, filteredObjects, handleSort } =
+    useObjectSorting(objects, folderSizes);
 
   const { selectedItems, setSelectedItems, setLastSelectedIndex, handleSelectItem, handleSelectAll, clearSelection } =
     useMultiSelect(filteredObjects);
