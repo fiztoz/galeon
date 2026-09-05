@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <!-- App icon background: deep ocean radial gradient -->
+    <radialGradient id="bg" cx="0.35" cy="0.25" r="1.05">
+      <stop offset="0" stop-color="#1A5276"/>
+      <stop offset="0.7" stop-color="#0E3D5C"/>
+      <stop offset="1" stop-color="#081726"/>
+    </radialGradient>
+    <!-- Main sail: 3-stop gradient for tactile depth -->
+    <linearGradient id="sail-main" x1="136" y1="40" x2="206" y2="168" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#99F6E4"/>
+      <stop offset="0.5" stop-color="#5EEAD4"/>
+      <stop offset="1" stop-color="#2DD4BF"/>
+    </linearGradient>
+    <!-- Jib sail -->
+    <linearGradient id="sail-jib" x1="120" y1="76" x2="84" y2="168" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#CCFBF1"/>
+      <stop offset="0.5" stop-color="#99F6E4"/>
+      <stop offset="1" stop-color="#5EEAD4"/>
+    </linearGradient>
+    <!-- Specular highlight for Liquid Glass depth -->
+    <linearGradient id="sail-highlight" x1="140" y1="48" x2="180" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Subtle vignette for depth -->
+    <radialGradient id="vignette" cx="0.5" cy="0.5" r="0.7">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.15"/>
+    </radialGradient>
+  </defs>
+  <!-- Squircle background (macOS standard) -->
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="116" fill="url(#vignette)"/>
+  <!-- Mark centered and scaled -->
+  <g transform="translate(74,74) scale(1.42)">
+    <g transform="translate(24,8)">
+      <!-- gale strokes -->
+      <path d="M14 78 H58" stroke="#F5A524" stroke-width="11" stroke-linecap="round"/>
+      <path d="M6 110 H46" stroke="#F5A524" stroke-width="11" stroke-linecap="round"/>
+      <path d="M18 142 H54" stroke="#F5A524" stroke-width="11" stroke-linecap="round"/>
+      <!-- jib sail -->
+      <path d="M120 76 C102 96 90 130 84 168 L120 168 Z" fill="url(#sail-jib)"/>
+      <!-- main sail -->
+      <path d="M136 40 C180 56 204 112 208 168 L136 168 Z" fill="url(#sail-main)"/>
+      <!-- sail highlight for tactile depth -->
+      <path d="M136 40 C180 56 204 112 208 168 L136 168 Z" fill="url(#sail-highlight)"/>
+      <!-- mast -->
+      <rect x="124" y="16" width="8" height="160" rx="4" fill="#F8FAFC"/>
+      <!-- pennant -->
+      <path d="M132 16 L172 27 L132 38 Z" fill="#F5A524"/>
+      <!-- hull -->
+      <path d="M44 186 L212 186 C206 206 189 220 167 220 L89 220 C68 220 50 206 44 186 Z" fill="#F8FAFC"/>
+    </g>
+  </g>
+</svg>

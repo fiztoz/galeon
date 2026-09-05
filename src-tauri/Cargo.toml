@@ -1,0 +1,49 @@
+[package]
+name = "galeon"
+version = "1.0.0-alpha.3"
+description = "Galeon Object Storage Client"
+authors = ["Hanafee Hama"]
+license = "MIT"
+edition = "2021"
+
+[lib]
+name = "galeon_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+opendal = { version = "0.50", features = ["services-s3", "services-sftp", "executors-tokio", "layers-throttle"] }
+ssh2 = { version = "0.9", features = ["vendored-openssl"] }
+suppaftp = { version = "^8", features = ["native-tls"] }
+uuid = { version = "1.8", features = ["v4", "serde"] }
+futures-util = "0.3"
+chrono = { version = "0.4", features = ["serde"] }
+glob = "0.3"
+keyring = { version = "3", features = ["apple-native", "sync-secret-service"] }
+lazy_static = "1.5.0"
+md5 = "0.7"
+dirs = "5.0"
+notify = "8.2.0"
+aws-config = "1"
+aws-credential-types = "1"
+aws-sdk-s3 = "1"
+# Custom HTTP client for S3 metadata when SSL verify is disabled (self-signed MinIO).
+# hyper_014 path is already enabled transitively by aws-sdk-s3's `rustls` feature;
+# declare the same features so HyperClientBuilder is available as a direct dep.
+aws-smithy-runtime = { version = "1", default-features = false, features = ["client", "connector-hyper-0-14-x"] }
+hyper-rustls = { version = "0.24", default-features = false, features = ["http1", "http2", "tls12", "logging", "native-tokio"] }
+rustls = { version = "0.21", features = ["dangerous_configuration"] }
+urlencoding = "2"
+# Match OpenDAL's reqwest major for HttpClient::with(reqwest::Client)
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "stream", "charset"] }
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }

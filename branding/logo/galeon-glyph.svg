@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="sail" x1="16" y1="6" x2="26" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5EEAD4"/>
+      <stop offset="1" stop-color="#0E7490"/>
+    </linearGradient>
+  </defs>
+  <!-- Micro mark: absolute minimum for 16-24px -->
+  <!-- Single sail silhouette + mast + gold accent -->
+  <g>
+    <!-- single gale stroke -->
+    <line x1="3" y1="14" x2="10" y2="14" stroke="#F5A524" stroke-width="2" stroke-linecap="round"/>
+    <!-- main sail only -->
+    <path d="M17 6 C22 8 26 18 26 24 L17 24 Z" fill="url(#sail)"/>
+    <!-- mast -->
+    <rect x="16" y="3" width="2" height="24" rx="1" fill="#0C2233"/>
+    <!-- pennant -->
+    <path d="M18 3 L24 6 L18 9 Z" fill="#F5A524"/>
+    <!-- hull -->
+    <path d="M8 26 L26 26 C25 28 23 30 21 30 L12 30 C10 30 8 28 8 26 Z" fill="#0C2233"/>
+  </g>
+</svg>

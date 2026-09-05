@@ -1,0 +1,199 @@
+name: Release
+
+# Builds the macOS .dmg and publishes it to GitHub Releases.
+#
+# Tag-driven: pushing v<version> is the release action. The tag must match the
+# version in package.json / Cargo.toml / tauri.conf.json — that guard exists
+# because those three are already required to agree (AGENTS.md 3.7), and a release
+# built from a mismatched tree is a confusing artifact nobody can trace back.
+#
+# Signing is opportunistic, never assumed:
+#   APPLE_CERTIFICATE set  -> import Developer ID, sign (notarize if APPLE_ID set)
+#   APPLE_CERTIFICATE absent -> unsigned build, published and labelled unsigned
+# An unsigned macOS build still trips Gatekeeper on first open, so the release body
+# states the right-click -> Open step instead of letting users discover it, and an
+# unsigned build is never described as notarized.
+#
+# Secrets are mapped per-step via `env:` so they never land in $GITHUB_ENV or in a
+# later step's environment.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and publish, e.g. v1.0.0-alpha.4'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-macos:
+    name: Build macOS .dmg
+    runs-on: macos-latest
+    steps:
+      - name: Resolve the release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          case "$TAG" in
+            v*) echo "value=$TAG" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::tag '$TAG' must start with v"; exit 1 ;;
+          esac
+
+      - uses: actions/checkout@v4
+        with:
+          # A dispatch builds an *existing* tag, so check that out, not HEAD.
+          ref: ${{ steps.tag.outputs.value }}
+
+      - name: Assert the tag matches the declared versions
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          set -euo pipefail
+          WANT="${TAG#v}"
+          PKG=$(node -p "require('./package.json').version")
+          CARGO=$(grep -E '^version = ' src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          CONF=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$PKG" != "$WANT" ] || [ "$CARGO" != "$WANT" ] || [ "$CONF" != "$WANT" ]; then
+            echo "::error::tag $TAG does not match the tree (package.json=$PKG cargo=$CARGO tauri.conf=$CONF)"
+            exit 1
+          fi
+          echo "Version $WANT agrees across tag, package.json, Cargo.toml and tauri.conf.json."
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install JS deps
+        run: bun install --frozen-lockfile
+
+      # Universal so a single DMG covers Apple Silicon and Intel, matching
+      # scripts/build-dmg.sh.
+      - name: Add Rust targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Unit tier must be green before bundling
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib -- --skip integrity_e2e
+
+      - name: Import the Developer ID certificate (only when configured)
+        id: sign
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APPLE_CERTIFICATE:-}" ]; then
+            echo "No certificate configured — this release will be UNSIGNED."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          # Ephemeral, generated, throwaway keychain password: it protects nothing
+          # outside this job and is never reused or logged.
+          KC_PASS="$(openssl rand -hex 16)"
+          security create-keychain -p "$KC_PASS" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KC_PASS" build.keychain
+          security set-keychain-settings -t 7200 build.keychain
+          printf '%s' "$APPLE_CERTIFICATE" | base64 -D -o cert.p12
+          security import cert.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASS" build.keychain
+          rm -f cert.p12
+
+      - name: Build
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
+            # The same escape hatch scripts/macos-signing-preflight.sh documents.
+            APPLE_SIGNING_IDENTITY='-'
+            export APPLE_SIGNING_IDENTITY
+            echo "Building UNSIGNED (APPLE_SIGNING_IDENTITY=-)"
+          else
+            echo "Building signed as $APPLE_SIGNING_IDENTITY"
+            [ -n "${APPLE_ID:-}" ] && echo "Notarization requested." || echo "Signed but NOT notarized."
+          fi
+          bun run tauri build --target universal-apple-darwin
+
+      - name: Collect artifacts and checksums
+        id: bundle
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          DMG=$(find src-tauri/target -name '*.dmg' -path '*/bundle/dmg/*' | head -1)
+          [ -n "$DMG" ] || { echo "::error::the build produced no .dmg"; exit 1; }
+          cp "$DMG" out/
+          ( cd out && shasum -a 256 ./*.dmg > SHA256SUMS )
+          echo "dmg=$(basename "$DMG")" >> "$GITHUB_OUTPUT"
+          echo "Built $(basename "$DMG") — $(du -h out/*.dmg | cut -f1)"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.value }}
+          DMG: ${{ steps.bundle.outputs.dmg }}
+          SIGNED: ${{ steps.sign.outputs.enabled }}
+        run: |
+          set -euo pipefail
+          if [ "$SIGNED" = "true" ]; then
+            STATUS="**Signed** with the maintainer's Apple Developer ID. Notarization is applied only when the notarization secrets are configured; if they are not, Gatekeeper can still prompt on first open."
+          else
+            STATUS="**Unsigned and not notarized** — no Apple Developer ID is configured for CI. Gatekeeper will block a normal first open, so use the right-click step below. Say so rather than letting people discover it."
+          fi
+          printf '%s\n' \
+            "## Galeon ${TAG}" \
+            "" \
+            "${STATUS}" \
+            "" \
+            "### Install (macOS)" \
+            "" \
+            "1. Download \`${DMG}\` below." \
+            "2. Open the DMG and drag **Galeon** into **Applications**." \
+            "3. First launch: **right-click Galeon → Open**, then confirm **Open**." \
+            "" \
+            "Every later launch is a normal double-click." \
+            "" \
+            "Verify the download with \`shasum -a 256 -c SHA256SUMS\`." \
+            "" \
+            "### Provenance" \
+            "" \
+            "- Commit: \`${GITHUB_SHA}\`" \
+            "- Build: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            "- Built by CI; no manual step produced this artifact." \
+            "" \
+            "### Feedback" \
+            "" \
+            "Bugs and requests go to [issues](${{ github.server_url }}/${{ github.repository }}/issues)." \
+            "" \
+            "Please report security problems privately — see [SECURITY.md](${{ github.server_url }}/${{ github.repository }}/blob/main/SECURITY.md)." \
+            > notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file notes.md
+            gh release upload "$TAG" out/* --clobber
+          else
+            gh release create "$TAG" out/* --title "Galeon ${TAG}" --notes-file notes.md
+          fi
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: galeon-dmg-${{ steps.tag.outputs.value }}
+          path: out/*
+          if-no-files-found: error

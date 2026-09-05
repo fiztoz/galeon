@@ -1,0 +1,215 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Space+Grotesk:wght@300..700&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  /* Galeon Brand Accent Colors */
+  --color-abyss: #0C2233;
+  --color-gale-teal: #2DD4BF;
+  --color-deep-current: #0E7490;
+  --color-doubloon: #F5A524;
+  --color-foam: #F8FAFC;
+
+  /* App Chrome Surfaces overrides */
+  --color-chrome-bg: #09090b; /* zinc-950 */
+  --color-chrome-sidebar: #18181b; /* zinc-900 */
+  --color-chrome-border: #27272a; /* zinc-800 */
+
+  /*
+   * Text that sits ON an accent fill (Gale Teal / Doubloon). This is not part of
+   * the flippable surface scale — it must stay dark in both themes, because
+   * near-white on Gale Teal is ~1.9:1 and unreadable. Previously these sites
+   * borrowed `text-zinc-950`, which doubles as the page background and therefore
+   * *has* to flip; naming the intent is what makes a light theme possible.
+   */
+  --color-on-accent: #09090b;
+
+  /*
+   * Secondary button + its hover lift. Zinc 700/600 cannot serve this role
+   * through a theme inversion, because those two steps are also the dim *text*
+   * tiers — inverting them for text makes the hover go dark instead of light.
+   * Kept as an explicit pair so both themes stay monotonic.
+   */
+  --color-raised: #3f3f46;        /* == zinc-700 in dark */
+  --color-raised-hover: #52525b;  /* == zinc-600 in dark */
+
+  /* Fonts */
+  --font-sans: "Inter", sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+:root {
+  color-scheme: dark;
+
+  /*
+   * Theme-flippable page base. Components use Tailwind utilities (which resolve
+   * through --color-zinc-*), but the document itself is painted here, so it must
+   * read from variables rather than a literal.
+   */
+  --app-bg: #09090b;
+  --app-fg: #fafafa;
+
+  font-family: var(--font-sans), Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+
+  /*
+   * Galeon is macOS-first (Overlay titlebar). Defaults assume traffic lights
+   * live in the chrome; non-mac builds strip the inset via .platform-other.
+   *
+   * Traffic cluster ≈ x:14 + ~54px wide + 20px gap → content starts ~88–96px.
+   */
+  --titlebar-height: 52px;
+  /* Traffic cluster + comfortable gap so labels never sit under the green button */
+  --traffic-lights-inset: 96px;
+}
+
+html.platform-other {
+  --titlebar-height: 0px;
+  --traffic-lights-inset: 0px;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--app-bg);
+  color: var(--app-fg);
+  overflow: hidden;
+}
+
+/* Single-line native toolbar under the macOS overlay titlebar */
+.app-titlebar {
+  height: var(--titlebar-height, 52px);
+  min-height: 44px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  app-region: drag;
+}
+
+/* Left-edge bars that sit under the traffic lights — keep a clear gap */
+.app-titlebar-traffic {
+  padding-left: var(--traffic-lights-inset, 92px);
+}
+
+html.platform-other .app-titlebar-traffic {
+  padding-left: 1rem;
+}
+
+/* Interactive controls must not start window drags */
+.app-titlebar button,
+.app-titlebar a,
+.app-titlebar input,
+.app-titlebar [data-no-drag],
+.app-titlebar [data-no-drag] * {
+  app-region: no-drag;
+}
+
+/* Full-bleed surfaces that need room under traffic lights (modals, etc.) */
+.macos-traffic-safe {
+  padding-top: max(0px, calc(var(--titlebar-height, 0px) - 12px));
+}
+
+/* Ensure Inter uses tabular figures for speeds and sizes */
+.metric-text {
+  font-family: var(--font-sans), sans-serif;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Technical data */
+.tech-text {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.85rem;
+}
+
+/* Scrollable component utility */
+.galeon-scrollbar {
+  /* Token-driven, not a literal, so the thumb follows the theme. #3f3f46 and
+     #52525b were exactly zinc-700 / zinc-600. */
+  --scrollbar-thumb: var(--color-zinc-700);
+  --scrollbar-track: transparent;
+
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* WebKit / Blink fallback for older runtimes */
+@supports not (scrollbar-color: auto) {
+  .galeon-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .galeon-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .galeon-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--color-zinc-700);
+    border-radius: 9999px;
+  }
+
+  .galeon-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--color-zinc-600);
+  }
+}
+
+/* ── Light theme ──────────────────────────────────────────────────────────────
+ *
+ * Mechanism: 916 of Galeon's color usages are raw Tailwind zinc utilities, and
+ * v4 compiles every one of them to `var(--color-zinc-N)` — including the alpha
+ * forms, which land inside `@supports (color: color-mix(...))` and so also
+ * resolve through the variable (verified against the built stylesheet). Redefining
+ * the scale on the theme root therefore re-skins the whole app, and preserves the
+ * *relative* ordering that hover/raised/hairline states depend on.
+ *
+ * Two roles a variable swap cannot separate, handled by named tokens above:
+ *   `text-on-accent`  — text on Gale Teal (stays dark in both themes)
+ *   `bg-raised`       — secondary buttons, whose hover must lighten in both themes
+ *
+ * The scale is not a mirror image. Tiers 100-600 are used *only* as text in this
+ * codebase, so they get real dark values that keep WCAG AA on a light page;
+ * 700-950 are surfaces/borders and get light values.
+ *
+ * Requires color-mix (Safari/WKWebView 16.2+). On an older WebKit the alpha
+ * utilities fall back to their baked dark literal, so a light-mode user on macOS
+ * 12 would see dark-tinted panels over a light page — degraded, not broken.
+ */
+html[data-theme='light'] {
+  color-scheme: light;
+
+  --app-bg: #fafafa;
+  --app-fg: #18181b;
+
+  /* Text tiers — kept dark enough for AA on the light page. */
+  --color-zinc-100: #09090b; /* ~19:1  primary text            */
+  --color-zinc-200: #18181b; /* ~16:1  secondary emphasis      */
+  --color-zinc-300: #27272a; /* ~13:1  body text               */
+  --color-zinc-400: #3f3f46; /* ~9.6:1 muted labels            */
+  --color-zinc-500: #52525b; /* ~7.4:1 dim labels              */
+  --color-zinc-600: #71717a; /* ~4.4:1 dimmest hints           */
+
+  /* Surface tiers — page, panels, hairlines. */
+  --color-zinc-700: #d4d4d8;
+  --color-zinc-800: #e4e4e7;
+  --color-zinc-900: #f4f4f5;
+  --color-zinc-950: #fafafa;
+  --color-zinc-50: #09090b;
+
+  /* App chrome tokens + secondary button pair. */
+  --color-chrome-bg: #fafafa;
+  --color-chrome-sidebar: #f4f4f5;
+  --color-chrome-border: #e4e4e7;
+  --color-raised: #e4e4e7;
+  --color-raised-hover: #d4d4d8;
+}

@@ -1,0 +1,113 @@
+name: CI
+
+# Gates the repo on the checks that actually catch regressions here:
+# formatting, types, clippy, and the Rust suite (125 unit + 64 transfer-integrity
+# e2e against MinIO).
+#
+# macOS is the shipping target (docs/RELEASE_MACOS.md), so the Rust suite runs on
+# both: Linux carries the MinIO e2e tier, macOS proves the ship build compiles and
+# its unit/keyring tests hold. Unit coverage on both means a Linux-only break in
+# them cannot slip through.
+#
+# The e2e tier reuses scripts/dev-minio.sh rather than re-declaring a MinIO
+# service here, so CI and a local run can never drift apart on endpoint, bucket,
+# or credentials. Those values are dev-only and hardcoded by integrity_e2e.rs.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (fmt + types)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install JS deps
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run --bun tsc --noEmit
+
+  backend-linux:
+    name: Rust suite (Linux + MinIO e2e)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tauri v2 on Linux links against webkit2gtk/gtk; needed to compile the lib.
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -o Acquire::Retries=3 -y \
+            libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Start and seed the local MinIO loop
+        run: |
+          ./scripts/dev-minio.sh up
+          ./scripts/dev-minio.sh seed
+          ./scripts/dev-minio.sh status
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --lib --tests -- -D warnings
+
+      - name: Cargo test (full suite, incl. integrity e2e)
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+
+      - name: Stop MinIO
+        if: always()
+        run: ./scripts/dev-minio.sh down
+
+  backend-macos:
+    name: Rust suite (macOS)
+    runs-on: macos-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Cargo test (unit tier; MinIO e2e runs on Linux)
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib -- --skip integrity_e2e
+
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install JS deps
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build

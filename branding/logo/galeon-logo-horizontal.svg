@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 200" fill="none">
+  <defs>
+    <linearGradient id="sail-main" x1="136" y1="40" x2="206" y2="168" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5EEAD4"/>
+      <stop offset="0.6" stop-color="#2DD4BF"/>
+      <stop offset="1" stop-color="#0E7490"/>
+    </linearGradient>
+    <linearGradient id="sail-jib" x1="120" y1="76" x2="84" y2="168" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#99F6E4"/>
+      <stop offset="0.5" stop-color="#5EEAD4"/>
+      <stop offset="1" stop-color="#14B8A6"/>
+    </linearGradient>
+    <linearGradient id="sail-highlight" x1="140" y1="48" x2="180" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(10,16) scale(0.66)">
+    <g transform="translate(24,8)">
+      <!-- gale strokes -->
+      <path d="M14 78 H58" stroke="#F5A524" stroke-width="11" stroke-linecap="round"/>
+      <path d="M6 110 H46" stroke="#F5A524" stroke-width="11" stroke-linecap="round"/>
+      <path d="M18 142 H54" stroke="#F5A524" stroke-width="11" stroke-linecap="round"/>
+      <!-- jib sail -->
+      <path d="M120 76 C102 96 90 130 84 168 L120 168 Z" fill="url(#sail-jib)"/>
+      <!-- main sail -->
+      <path d="M136 40 C180 56 204 112 208 168 L136 168 Z" fill="url(#sail-main)"/>
+      <!-- sail highlight -->
+      <path d="M136 40 C180 56 204 112 208 168 L136 168 Z" fill="url(#sail-highlight)"/>
+      <!-- mast -->
+      <rect x="124" y="16" width="8" height="160" rx="4" fill="#0C2233"/>
+      <!-- pennant -->
+      <path d="M132 16 L172 27 L132 38 Z" fill="#F5A524"/>
+      <!-- hull -->
+      <path d="M44 186 L212 186 C206 206 189 220 167 220 L89 220 C68 220 50 206 44 186 Z" fill="#0C2233"/>
+    </g>
+  </g>
+  <!-- Wordmark: Space Grotesk Medium, tracking +6% -->
+  <!-- Convert text to outlines before production use -->
+  <text x="196" y="128" font-family="'Space Grotesk', 'Inter', system-ui, sans-serif" font-size="76" font-weight="600" letter-spacing="6" fill="#0C2233">GALEON</text>
+</svg>

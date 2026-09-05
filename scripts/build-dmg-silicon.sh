@@ -1,0 +1,28 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source "$(dirname "$0")/macos-signing-preflight.sh"
+
+PKG_VERSION=$(node -p "require('./package.json').version")
+CARGO_VERSION=$(grep -E '^version = ' src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+TAURI_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+
+if [[ "$PKG_VERSION" != "$CARGO_VERSION" || "$PKG_VERSION" != "$TAURI_VERSION" ]]; then
+  echo "Version mismatch detected:"
+  echo "  package.json:      $PKG_VERSION"
+  echo "  Cargo.toml:        $CARGO_VERSION"
+  echo "  tauri.conf.json:   $TAURI_VERSION"
+  exit 1
+fi
+
+echo "Building Galeon $PKG_VERSION (Apple Silicon macOS .dmg)"
+echo ""
+echo "Ensure you have the required target installed via rustup:"
+echo "  rustup target add aarch64-apple-darwin"
+echo ""
+
+ensure_macos_signing_chain
+
+bun install
+bun run build
+bun tauri build --target aarch64-apple-darwin
