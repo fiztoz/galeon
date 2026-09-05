@@ -39,6 +39,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **`Explorer.tsx` 1,866 → 1,610 lines** and its eight dialogs no longer repeat themselves.
+  `src/components/Dialogs.tsx` is now the app's dialog vocabulary: one `Dialog` shell
+  (overlay + card + heading + footer) and the shapes Explorer was re-declaring —
+  `TextPromptDialog` (Create Folder and Rename were the same dialog), `DestinationDialog`
+  (Move and Copy were the same dialog), `ConfirmDialog` (Delete and Batch Delete were the
+  same dialog), plus `ShareLinkDialog` and `ConflictDialog`.
+  Transient input a dialog owns — prompt text, chosen destination, expiry, the generated
+  URL and its "copied" flash — moved *into* the dialog and is handed back on confirm, which
+  deleted seven `useState`s from Explorer and the reset-on-close lines that went with them.
+  Handlers now take the value they act on (`handleRename(newName)`, `handleMove(destination)`)
+  instead of reading component state.
 - **`App.tsx` 1,166 → 937 lines.** It had crept past the ~1k ceiling in AGENTS.md 3.2
   while the dual-pane and theme work landed in it. Three cohesive pieces moved out:
   - `src/types.ts` — `AppSettings`, `ConnectionProfile`, `BandwidthRule`,

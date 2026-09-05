@@ -1,11 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { openUrl } from '@tauri-apps/plugin-opener';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, Pencil, MoreVertical, FolderInput, FolderDown, Share2, Check, Copy, Info, Loader2, ExternalLink, Eye, PenLine, AlertTriangle } from 'lucide-react';
+import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, Pencil, MoreVertical, FolderInput, FolderDown, Share2, Copy, Info, Loader2, Eye, PenLine, AlertTriangle } from 'lucide-react';
 import { ProtocolCapabilities } from '../types';
+import {
+  ConflictDialog,
+  ConfirmDialog,
+  DestinationDialog,
+  ShareLinkDialog,
+  TextPromptDialog,
+} from './Dialogs';
 import { isPreviewableFile } from './PropertiesInspector';
 
 export interface GaleonObject {
@@ -115,24 +121,17 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
   // Modal states
   const [showCreateFolder, setShowCreateFolder] = useState(false);
-  const [newFolderName, setNewFolderName] = useState('');
   const [showRename, setShowRename] = useState(false);
   const [renameTarget, setRenameTarget] = useState<GaleonObject | null>(null);
-  const [renameNewName, setRenameNewName] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<GaleonObject | null>(null);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [moveTarget, setMoveTarget] = useState<GaleonObject | null>(null);
-  const [moveDestination, setMoveDestination] = useState('/');
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyTarget, setCopyTarget] = useState<GaleonObject | null>(null);
-  const [copyDestination, setCopyDestination] = useState('/');
   const [availableFolders, setAvailableFolders] = useState<string[]>([]);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareTarget, setShareTarget] = useState<GaleonObject | null>(null);
-  const [shareExpiration, setShareExpiration] = useState(3600);
-  const [generatedUrl, setGeneratedUrl] = useState('');
-  const [urlCopied, setUrlCopied] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -867,11 +866,10 @@ export const Explorer: React.FC<ExplorerProps> = ({
     });
   }, [onRegisterCommands]);
 
-  const handleCreateFolder = async () => {
-    if (!newFolderName.trim()) return;
+  const handleCreateFolder = async (name: string) => {
+    if (!name.trim()) return;
     try {
-      await onCreateFolder(prefix, newFolderName.trim());
-      setNewFolderName('');
+      await onCreateFolder(prefix, name.trim());
       setShowCreateFolder(false);
       await fetchDirectory(prefix);
     } catch (err: any) {
@@ -879,15 +877,14 @@ export const Explorer: React.FC<ExplorerProps> = ({
     }
   };
 
-  const handleRename = async () => {
-    if (!renameTarget || !renameNewName.trim()) return;
+  const handleRename = async (newName: string) => {
+    if (!renameTarget || !newName.trim()) return;
     try {
       // Strip trailing slash from fullKey for proper prefix calculation
       const cleanFullKey = renameTarget.fullKey.replace(/\/$/, '');
       const prefixPath = cleanFullKey.substring(0, cleanFullKey.length - renameTarget.name.length);
-      const newKey = prefixPath + renameNewName.trim();
+      const newKey = prefixPath + newName.trim();
       await onRenameObject(renameTarget.fullKey, newKey, renameTarget.objectType === 'folder');
-      setRenameNewName('');
       setShowRename(false);
       setRenameTarget(null);
       await fetchDirectory(prefix);
@@ -926,12 +923,12 @@ export const Explorer: React.FC<ExplorerProps> = ({
     }
   };
 
-  const handleMove = async () => {
-    if (!moveTarget || !moveDestination) return;
+  const handleMove = async (destination: string) => {
+    if (!moveTarget || !destination) return;
     try {
       const sourcePath = moveTarget.fullKey.replace(/\/$/, '');
       const sourceName = moveTarget.name;
-      const destPrefix = moveDestination === '/' ? '' : moveDestination.replace(/\/$/, '/');
+      const destPrefix = destination === '/' ? '' : destination.replace(/\/$/, '/');
       const newKey = destPrefix + sourceName;
       
       if (sourcePath === newKey.replace(/\/$/, '')) {
@@ -942,19 +939,18 @@ export const Explorer: React.FC<ExplorerProps> = ({
       await onRenameObject(sourcePath, newKey, moveTarget.objectType === 'folder');
       setShowMoveModal(false);
       setMoveTarget(null);
-      setMoveDestination('/');
       await fetchDirectory(prefix);
     } catch (err: any) {
       setError(String(err));
     }
   };
 
-  const handleCopy = async () => {
-    if (!copyTarget || !copyDestination) return;
+  const handleCopy = async (destination: string) => {
+    if (!copyTarget || !destination) return;
     try {
       const sourcePath = copyTarget.fullKey.replace(/\/$/, '');
       const sourceName = copyTarget.name;
-      const destPrefix = copyDestination === '/' ? '' : copyDestination.replace(/\/$/, '/');
+      const destPrefix = destination === '/' ? '' : destination.replace(/\/$/, '/');
       const newKey = destPrefix + sourceName;
       
       if (sourcePath === newKey.replace(/\/$/, '')) {
@@ -970,7 +966,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
       });
       setShowCopyModal(false);
       setCopyTarget(null);
-      setCopyDestination('/');
       await fetchDirectory(prefix);
     } catch (err: any) {
       setError(String(err));
@@ -1402,9 +1397,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
                       <button
                         onClick={() => {
                           setShareTarget(obj);
-                          setShareExpiration(3600);
-                          setGeneratedUrl('');
-                          setUrlCopied(false);
                           setShowShareModal(true);
                           setActiveMenu(null);
                         }}
@@ -1439,7 +1431,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
                 <button
                   onClick={() => {
                     setRenameTarget(obj);
-                    setRenameNewName(obj.name);
                     setShowRename(true);
                     setActiveMenu(null);
                   }}
@@ -1491,343 +1482,96 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
       {/* Create Folder Modal */}
       {showCreateFolder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-96 shadow-2xl">
-            <h3 className="text-lg font-semibold mb-4">Create New Folder</h3>
-            <input
-              type="text"
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()}
-              placeholder="Folder name"
-              className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all mb-4"
-              autoFocus
-              autoCapitalize="off"
-              autoCorrect="off"
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => { setShowCreateFolder(false); setNewFolderName(''); }}
-                className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateFolder}
-                className="px-4 py-2 bg-gale-teal text-on-accent hover:bg-deep-current hover:text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
+        <TextPromptDialog
+          title="Create New Folder"
+          placeholder="Folder name"
+          confirmLabel="Create"
+          onConfirm={handleCreateFolder}
+          onCancel={() => setShowCreateFolder(false)}
+        />
       )}
 
-      {/* Rename Modal */}
       {showRename && renameTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-96 shadow-2xl">
-            <h3 className="text-lg font-semibold mb-4">Rename</h3>
-            <input
-              type="text"
-              value={renameNewName}
-              onChange={(e) => setRenameNewName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleRename()}
-              placeholder="New name"
-              className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all mb-4"
-              autoFocus
-              autoCapitalize="off"
-              autoCorrect="off"
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => { setShowRename(false); setRenameTarget(null); setRenameNewName(''); }}
-                className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleRename}
-                className="px-4 py-2 bg-gale-teal text-on-accent hover:bg-deep-current hover:text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                Rename
-              </button>
-            </div>
-          </div>
-        </div>
+        <TextPromptDialog
+          title="Rename"
+          placeholder="New name"
+          confirmLabel="Rename"
+          initialValue={renameTarget.name}
+          onConfirm={handleRename}
+          onCancel={() => { setShowRename(false); setRenameTarget(null); }}
+        />
       )}
 
-      {/* Delete Confirmation Modal */}
       {showDeleteConfirm && deleteTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-96 shadow-2xl">
-            <h3 className="text-lg font-semibold mb-2">Delete {deleteTarget.objectType === 'folder' ? 'Folder' : 'File'}</h3>
-            <p className="text-zinc-400 text-sm mb-4">
-              Are you sure you want to delete <span className="text-zinc-200 font-medium">"{deleteTarget.name}"</span>?
-              {deleteTarget.objectType === 'folder' && (
-                <span className="block mt-1 text-yellow-400">This will delete all contents inside the folder.</span>
-              )}
-            </p>
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => { setShowDeleteConfirm(false); setDeleteTarget(null); }}
-                className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Move Modal */}
-      {showMoveModal && moveTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-96 shadow-2xl">
-            <h3 className="text-lg font-semibold mb-4">Move "{moveTarget.name}" to...</h3>
-            <div className="mb-4">
-              <label className="block text-sm text-zinc-400 mb-2">Select destination folder:</label>
-              <select
-                value={moveDestination}
-                onChange={(e) => setMoveDestination(e.target.value)}
-                className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all"
-              >
-                <option value="/">Root (/)</option>
-                {availableFolders.map((folder) => (
-                  <option key={folder} value={folder}>
-                    {folder}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => { setShowMoveModal(false); setMoveTarget(null); setMoveDestination('/'); }}
-                className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleMove}
-                className="px-4 py-2 bg-gale-teal text-on-accent hover:bg-deep-current hover:text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                Move
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Copy Modal */}
-      {showCopyModal && copyTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-96 shadow-2xl">
-            <h3 className="text-lg font-semibold mb-4">Copy "{copyTarget.name}" to...</h3>
-            <div className="mb-4">
-              <label className="block text-sm text-zinc-400 mb-2">Select destination folder:</label>
-              <select
-                value={copyDestination}
-                onChange={(e) => setCopyDestination(e.target.value)}
-                className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all"
-              >
-                <option value="/">Root (/)</option>
-                {availableFolders.map((folder) => (
-                  <option key={folder} value={folder}>
-                    {folder}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => { setShowCopyModal(false); setCopyTarget(null); setCopyDestination('/'); }}
-                className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCopy}
-                className="px-4 py-2 bg-gale-teal text-on-accent hover:bg-deep-current hover:text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                Copy
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Share Link Modal */}
-      {showShareModal && shareTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-96 shadow-2xl">
-            <h3 className="text-lg font-semibold mb-4">Share Link</h3>
-            <p className="text-sm text-zinc-400 mb-4">
-              Generate a temporary link for <span className="text-zinc-200 font-medium">"{shareTarget.name}"</span>
-            </p>
-            
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Link Expiration</label>
-              <select
-                value={shareExpiration}
-                onChange={(e) => setShareExpiration(Number(e.target.value))}
-                className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all"
-              >
-                <option value={3600}>1 Hour</option>
-                <option value={43200}>12 Hours</option>
-                <option value={86400}>1 Day</option>
-                <option value={604800}>7 Days</option>
-              </select>
-            </div>
-
-            {!generatedUrl ? (
-              <button
-                onClick={async () => {
-                  try {
-                    const url = await onGeneratePresignedUrl(shareTarget.fullKey, shareExpiration);
-                    setGeneratedUrl(url);
-                  } catch (err: any) {
-                    setError(String(err));
-                  }
-                }}
-                className="w-full py-2 bg-gale-teal text-on-accent hover:bg-deep-current hover:text-white rounded-lg text-sm font-medium transition-colors mb-4"
-              >
-                Generate Link
-              </button>
-            ) : (
-              <div className="mb-4">
-                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Generated URL</label>
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    value={generatedUrl}
-                    readOnly
-                    className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-300 focus:outline-none"
-                  />
-                  <button
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(generatedUrl);
-                        setUrlCopied(true);
-                        setTimeout(() => setUrlCopied(false), 2000);
-                      } catch (err) {
-                        console.error('Failed to copy:', err);
-                      }
-                    }}
-                    className="px-3 py-2 bg-raised hover:bg-raised-hover rounded-lg text-sm"
-                    title="Copy link"
-                  >
-                    {urlCopied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await openUrl(generatedUrl);
-                      } catch (err) {
-                        setError(String(err));
-                      }
-                    }}
-                    className="px-3 py-2 bg-raised hover:bg-raised-hover rounded-lg text-sm"
-                    title="Open in browser"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </button>
-                </div>
-                {urlCopied && (
-                  <p className="text-xs text-green-400 mt-1">Copied to clipboard!</p>
-                )}
-              </div>
+        <ConfirmDialog
+          title={`Delete ${deleteTarget.objectType === 'folder' ? 'Folder' : 'File'}`}
+          titleClassName="mb-2"
+          confirmLabel="Delete"
+          tone="danger"
+          onCancel={() => { setShowDeleteConfirm(false); setDeleteTarget(null); }}
+          onConfirm={handleDelete}
+        >
+          <p className="text-zinc-400 text-sm mb-4">
+            Are you sure you want to delete <span className="text-zinc-200 font-medium">"{deleteTarget.name}"</span>?
+            {deleteTarget.objectType === 'folder' && (
+              <span className="block mt-1 text-yellow-400">This will delete all contents inside the folder.</span>
             )}
-
-            <div className="flex justify-end">
-              <button
-                onClick={() => { setShowShareModal(false); setShareTarget(null); setGeneratedUrl(''); setUrlCopied(false); }}
-                className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+          </p>
+        </ConfirmDialog>
       )}
 
-      {/* Batch Delete Confirmation Modal */}
+      {showMoveModal && moveTarget && (
+        <DestinationDialog
+          title={`Move "${moveTarget.name}" to...`}
+          folders={availableFolders}
+          confirmLabel="Move"
+          onConfirm={handleMove}
+          onCancel={() => { setShowMoveModal(false); setMoveTarget(null); }}
+        />
+      )}
+
+      {showCopyModal && copyTarget && (
+        <DestinationDialog
+          title={`Copy "${copyTarget.name}" to...`}
+          folders={availableFolders}
+          confirmLabel="Copy"
+          onConfirm={handleCopy}
+          onCancel={() => { setShowCopyModal(false); setCopyTarget(null); }}
+        />
+      )}
+
+      {showShareModal && shareTarget && (
+        <ShareLinkDialog
+          fileName={shareTarget.name}
+          onGenerate={(seconds) => onGeneratePresignedUrl(shareTarget.fullKey, seconds)}
+          onError={(message) => setError(message)}
+          onClose={() => { setShowShareModal(false); setShareTarget(null); }}
+        />
+      )}
+
       {showBatchDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-96 shadow-2xl">
-            <h3 className="text-lg font-semibold mb-4">Delete {selectedItems.size} Items</h3>
-            <p className="text-zinc-400 text-sm mb-4">
-              Are you sure you want to delete {selectedItems.size} selected items?
-              <span className="block mt-1 text-yellow-400">This action cannot be undone.</span>
-            </p>
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => setShowBatchDeleteConfirm(false)}
-                className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleBatchDelete}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium"
-              >
-                Delete All
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title={`Delete ${selectedItems.size} Items`}
+          confirmLabel="Delete All"
+          tone="danger"
+          onCancel={() => setShowBatchDeleteConfirm(false)}
+          onConfirm={handleBatchDelete}
+        >
+          <p className="text-zinc-400 text-sm mb-4">
+            Are you sure you want to delete {selectedItems.size} selected items?
+            <span className="block mt-1 text-yellow-400">This action cannot be undone.</span>
+          </p>
+        </ConfirmDialog>
       )}
 
-      {/* Conflict Resolution Modal */}
       {showConflictModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-[420px] shadow-2xl">
-            <h3 className="text-lg font-semibold mb-2">File Already Exists</h3>
-            <p className="text-zinc-400 text-sm mb-4">
-              <span className="text-zinc-200 font-medium">{conflictFile}</span> already exists at the destination.
-            </p>
-            <div className="mb-4">
-              <label className="flex items-center space-x-2 text-sm text-zinc-400 cursor-pointer hover:text-zinc-200">
-                <input
-                  type="checkbox"
-                  checked={applyToAll}
-                  onChange={(e) => setApplyToAll(e.target.checked)}
-                  className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-gale-teal focus:ring-gale-teal focus:ring-1 accent-gale-teal"
-                />
-                <span>Apply to all ({pendingConflicts.length} files)</span>
-              </label>
-            </div>
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => handleConflictResolve('skip')}
-                className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 bg-zinc-800 hover:bg-zinc-700 rounded-lg"
-              >
-                Skip
-              </button>
-              <button
-                onClick={() => handleConflictResolve('rename')}
-                className="px-4 py-2 text-sm text-zinc-300 bg-raised hover:bg-raised-hover rounded-lg"
-              >
-                Rename
-              </button>
-              <button
-                onClick={() => handleConflictResolve('overwrite')}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-medium"
-              >
-                Overwrite
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConflictDialog
+          fileName={conflictFile}
+          pendingCount={pendingConflicts.length}
+          applyToAll={applyToAll}
+          onApplyToAllChange={setApplyToAll}
+          onResolve={handleConflictResolve}
+        />
       )}
 
       {/* Floating Batch Toolbar */}

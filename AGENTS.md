@@ -101,6 +101,13 @@ If you need “clean a string for connection fields,” **do not** invent `clean
 - Never log access keys, secret keys, passwords, or export files that include secrets.
 - Export with secrets is opt-in; import with secrets requires explicit confirm + content hash (TOCTOU).
 - `danger_disable_ssl_verification` is dangerous: force off on profile **import**; user must re-enable deliberately.
+- **CSP contract** (`app.security.csp` in `src-tauri/tauri.conf.json`): `script-src` is `'self'`
+  and `style-src` is `'self' 'unsafe-inline'`. Tauri *appends* per-load nonces and `'sha256-…'`
+  asset hashes to those directives at runtime (`manager::set_csp` → `replace_csp_nonce`), so the
+  app's own bundle stays allowed without `'unsafe-inline'` in `script-src`. Do **not** add an inline
+  `<style>` or `<script>` to `index.html`: Tauri nonces `<style>` elements, and CSP3 then ignores
+  `'unsafe-inline'` for the whole directive — which would break every inline `style={{…}}` attribute
+  (progress-bar widths, context-menu position, split-pane width). Keep page-level CSS in `index.css`.
 - Overwrite import: if connection identity changes without new secrets, **clear vault** for that profile id (no rebinding old secrets to a new host).
 
 ### 3.7 Commits & diffs
