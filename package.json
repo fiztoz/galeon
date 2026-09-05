@@ -2,6 +2,10 @@
   "name": "galeon",
   "private": true,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fiztoz/galeon.git"
+  },
   "version": "1.0.0-alpha.3",
   "type": "module",
   "scripts": {

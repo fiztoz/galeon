@@ -7,6 +7,12 @@
 <p align="center"><em>Sail your cloud.</em></p>
 
 <p align="center">
+  <a href="https://github.com/fiztoz/galeon/actions/workflows/ci.yml"><img src="https://github.com/fiztoz/galeon/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+  <a href="SECURITY.md"><img src="https://img.shields.io/badge/security-policy-lightgrey" alt="Security policy"></a>
+</p>
+
+<p align="center">
 A fast, lightweight desktop client for object & remote storage —<br>
 Rust + Tauri + React, built as a modern alternative to Cyberduck and Transmit.<br>
 <strong>MIT licensed</strong> · no telemetry · no account · secrets in your OS keychain.
