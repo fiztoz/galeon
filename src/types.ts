@@ -80,3 +80,12 @@ export interface PresignHistoryEntry {
   expiresInSeconds: number;
   createdAt: string;
 }
+
+export interface GaleonObject {
+  name: string;
+  fullKey: string;
+  objectType: 'folder' | 'file';
+  sizeBytes: number | null;
+  lastModified: string | null;
+}
+

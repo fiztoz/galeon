@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Download, FolderDown, Eye, Share2, PenLine, Info, Pencil, FolderInput, Copy, Trash2 } from 'lucide-react';
-import type { GaleonObject } from './Explorer';
+import type { GaleonObject } from '../types';
 import type { ProtocolCapabilities } from '../types';
 import { isPreviewableFile } from './PropertiesInspector';
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { GaleonObject } from '../components/Explorer';
+import type { GaleonObject } from '../types';
 
 interface PrefixSizeProgress {
   jobId: string;

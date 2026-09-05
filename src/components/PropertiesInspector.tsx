@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
 import { X, FileText, Folder, Database, Tag, Clock, HardDrive, Loader2, AlertCircle, Save, ShieldCheck, Copy, Check, Eye, ExternalLink } from 'lucide-react';
-import { GaleonObject } from './Explorer';
+import type { GaleonObject } from '../types';
 import { ProtocolCapabilities } from '../types';
 
 // ── Interfaces ────────────────────────────────────────────────────────────────

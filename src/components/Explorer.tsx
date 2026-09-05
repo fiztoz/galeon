@@ -6,7 +6,7 @@ import { useFolderSizes } from '../hooks/useFolderSizes';
 import { save } from '@tauri-apps/plugin-dialog';
 import { useUploadPipeline, type PendingConflict } from '../hooks/useUploadPipeline';
 import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, MoreVertical, Loader2, AlertTriangle } from 'lucide-react';
-import { ProtocolCapabilities } from '../types';
+import { ProtocolCapabilities, GaleonObject } from '../types';
 import {
   ConflictDialog,
   ConfirmDialog,
@@ -15,14 +15,6 @@ import {
   TextPromptDialog,
 } from './Dialogs';
 import { ObjectContextMenu, useObjectContextMenu, type ObjectMenuAction } from './ObjectContextMenu';
-
-export interface GaleonObject {
-  name: string;
-  fullKey: string;
-  objectType: 'folder' | 'file';
-  sizeBytes: number | null;
-  lastModified: string | null;
-}
 
 /** Format byte count to human-readable size string. Reused by LocalPane. */
 export const formatSize = (bytes: number | null) => {

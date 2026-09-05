@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { GaleonObject } from '../components/Explorer';
+import type { GaleonObject } from '../types';
 
 export function useObjectListing(sessionId: string) {
   const [prefix, setPrefix] = useState('');
