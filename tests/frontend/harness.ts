@@ -1,4 +1,6 @@
 import { mock } from 'bun:test';
+import * as React from 'react';
+const actualReact = { ...React };
 // Minimal deterministic hook runner: rerenders are explicit; effects run after render.
 export function hookHarness() {
   let slots: any[] = [], cursor = 0, pending: (() => void)[] = [];
@@ -17,7 +19,7 @@ export function hookHarness() {
       }
     },
   };
-  mock.module('react', () => ({ ...react, default: react }));
+  mock.module('react', () => ({ ...actualReact, ...react, default: { ...actualReact, ...react } }));
   return {
     render<T>(fn: () => T): T { cursor = 0; const result = fn(); const effects = pending; pending = []; effects.forEach(fn => fn()); return result; },
     unmount() { slots.forEach(slot => slot?.cleanup?.()); slots = []; },

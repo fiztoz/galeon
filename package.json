@@ -10,6 +10,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test:frontend": "bun tests/frontend/run.ts",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"

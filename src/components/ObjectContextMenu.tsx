@@ -17,9 +17,16 @@ interface ObjectContextMenuProps {
 
 export function ObjectContextMenu({ obj, menuPosition, protocol, capabilities, downloadDestination, onAction, onClose }: ObjectContextMenuProps) {
   useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('scroll', onClose, true);
     document.addEventListener('click', onClose);
     document.addEventListener('contextmenu', onClose);
     return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('scroll', onClose, true);
       document.removeEventListener('click', onClose);
       document.removeEventListener('contextmenu', onClose);
     };
