@@ -68,7 +68,7 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Advanced Settings Toggle */}
                 <button
                   type="button"
@@ -78,7 +78,7 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                   <span>{showAdvanced ? '▼' : '▶'}</span>
                   <span>Advanced S3 Options</span>
                 </button>
-                
+
                 {/* Advanced Settings Panel */}
                 {showAdvanced && (
                   <div className="p-4 bg-zinc-800/50 rounded-lg border border-zinc-700 space-y-4">
@@ -99,7 +99,7 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                         }`} />
                       </button>
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-zinc-200 mb-1">Storage Class</label>
                       <select
@@ -116,7 +116,7 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                         <option value="GLACIER_DEEP_ARCHIVE">Glacier Deep Archive</option>
                       </select>
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-zinc-200 mb-1">Bandwidth Limit (KB/s)</label>
                       <input

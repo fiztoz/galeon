@@ -19,4 +19,3 @@ export const defaultPortFor = (proto: string): number => {
   if (proto === 'ftps') return DEFAULT_FTPS_PORT;
   return DEFAULT_FTP_PORT;
 };
-

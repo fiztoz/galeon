@@ -49,30 +49,30 @@ export function useObjectSorting(objects: GaleonObject[], folderSizes: Record<st
   const [filterType, setFilterType] = useState<'all' | 'folders' | 'files'>('all');
   const [sortKey, setSortKey] = useState<'name' | 'size' | 'date'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  
+
   // Filtered and sorted objects
   const filteredObjects = React.useMemo(() => {
     let result = [...objects];
-    
+
     // Apply search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(obj => obj.name.toLowerCase().includes(query));
     }
-    
+
     // Apply type filter
     if (filterType === 'folders') {
       result = result.filter(obj => obj.objectType === 'folder');
     } else if (filterType === 'files') {
       result = result.filter(obj => obj.objectType === 'file');
     }
-    
+
     // Apply sorting
     result.sort((a, b) => {
       // Folders always come first
       if (a.objectType === 'folder' && b.objectType !== 'folder') return -1;
       if (a.objectType !== 'folder' && b.objectType === 'folder') return 1;
-      
+
       let comparison = 0;
       switch (sortKey) {
         case 'name':
@@ -94,7 +94,7 @@ export function useObjectSorting(objects: GaleonObject[], folderSizes: Record<st
       }
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-    
+
     return result;
   }, [objects, searchQuery, filterType, sortKey, sortDirection, folderSizes]);
 

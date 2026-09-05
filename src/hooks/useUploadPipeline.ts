@@ -24,7 +24,7 @@ interface UploadPipelineOptions {
 
 export function useUploadPipeline({ sessionId, prefix, onInitiateUpload, onInitiateDownload }: UploadPipelineOptions) {
   const [isDragging, setIsDragging] = useState(false);
-  
+
   // Conflict resolution state
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [conflictFile, setConflictFile] = useState<string>('');
@@ -66,7 +66,7 @@ export function useUploadPipeline({ sessionId, prefix, onInitiateUpload, onIniti
 
     const setupListeners = async () => {
       const window = getCurrentWindow();
-      
+
       const over = await window.listen<{ paths: string[] }>('tauri://drag-over', () => {
         if (active) setIsDragging(true);
       });
@@ -177,7 +177,7 @@ export function useUploadPipeline({ sessionId, prefix, onInitiateUpload, onIniti
         multiple: true,
         title: 'Select files to upload',
       });
-      
+
       if (selected) {
         const files = Array.isArray(selected) ? selected : [selected];
         await initiateUploadsWithConflictCheck(toUploadTargets(files, prefix));

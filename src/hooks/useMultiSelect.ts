@@ -6,7 +6,7 @@ export function useMultiSelect(filteredObjects: readonly { fullKey: string }[]) 
   // Multi-select handlers
   const handleSelectItem = (key: string, index: number, shiftKey: boolean = false) => {
     const newSelected = new Set(selectedItems);
-    
+
     if (shiftKey && lastSelectedIndex !== null) {
       // Range select
       const startIndex = Math.min(lastSelectedIndex, index);
@@ -24,7 +24,7 @@ export function useMultiSelect(filteredObjects: readonly { fullKey: string }[]) 
         newSelected.add(key);
       }
     }
-    
+
     setSelectedItems(newSelected);
     setLastSelectedIndex(index);
   };

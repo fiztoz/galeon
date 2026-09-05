@@ -88,4 +88,3 @@ export interface GaleonObject {
   sizeBytes: number | null;
   lastModified: string | null;
 }
-
