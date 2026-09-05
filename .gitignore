@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 
 reports
+# Local task/handoff notes — never publish (AGENTS.md §5 forbids task dumps in-repo)
+.handoff/
