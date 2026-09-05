@@ -40,6 +40,7 @@ export function useFolderSizes(sessionId: string, prefix: string, isS3: boolean,
   const folderJobRefs = useRef<Map<string, string>>(new Map());
   const folderQueueRef = useRef<string[]>([]);
   const folderRunningRef = useRef(0);
+  const folderGenerationRef = useRef(0);
   const folderSizesRef = useRef(folderSizes);
   folderSizesRef.current = folderSizes;
   const prefixSizeCacheKey = (targetPrefix: string) => `${sessionId}:${targetPrefix}`;
@@ -66,8 +67,13 @@ export function useFolderSizes(sessionId: string, prefix: string, isS3: boolean,
   };
 
   const startFolderSizeScan = (folderKey: string) => {
+    const generation = folderGenerationRef.current;
     invoke<ComputePrefixSizeResponse>('compute_prefix_size', { sessionId, prefix: folderKey })
       .then((res) => {
+        if (generation !== folderGenerationRef.current) {
+          cancelPrefixSizeJob(res.jobId);
+          return;
+        }
         folderJobRefs.current.set(res.jobId, folderKey);
         if (res.cached && res.totalBytes != null) {
           folderJobRefs.current.delete(res.jobId);
@@ -87,6 +93,7 @@ export function useFolderSizes(sessionId: string, prefix: string, isS3: boolean,
         }));
       })
       .catch(() => {
+        if (generation !== folderGenerationRef.current) return;
         setFolderSizes((prev) => ({
           ...prev,
           [folderKey]: { status: 'error' },
@@ -113,12 +120,18 @@ export function useFolderSizes(sessionId: string, prefix: string, isS3: boolean,
   };
 
   const cancelInFlightFolderSizeJobs = () => {
+    folderGenerationRef.current += 1;
     for (const jobId of folderJobRefs.current.keys()) {
       cancelPrefixSizeJob(jobId);
     }
     folderJobRefs.current.clear();
     folderQueueRef.current = [];
     folderRunningRef.current = 0;
+    // Cancelled scans must be eligible to run again when returning to a folder.
+    folderSizesRef.current = Object.fromEntries(
+      Object.entries(folderSizesRef.current).filter(([, entry]) => entry.status === 'ready'),
+    );
+    setFolderSizes(folderSizesRef.current);
   };
 
   useEffect(() => {
@@ -217,8 +230,13 @@ export function useFolderSizes(sessionId: string, prefix: string, isS3: boolean,
       setPrefixFileCount(null);
     }
 
+    let active = true;
     invoke<ComputePrefixSizeResponse>('compute_prefix_size', { sessionId, prefix })
       .then((res) => {
+        if (!active) {
+          cancelPrefixSizeJob(res.jobId);
+          return;
+        }
         prefixSizeJobRef.current = res.jobId;
         applyComputePrefixSizeResponse(res, prefix, (totalBytes, fileCount) => {
           setPrefixSizeLoading(false);
@@ -227,9 +245,15 @@ export function useFolderSizes(sessionId: string, prefix: string, isS3: boolean,
         });
       })
       .catch((err) => {
+        if (!active) return;
         setPrefixSizeLoading(false);
         setPrefixSizeError(String(err));
       });
+    return () => {
+      active = false;
+      cancelPrefixSizeJob(prefixSizeJobRef.current);
+      prefixSizeJobRef.current = null;
+    };
   }, [prefix, loading, sessionId, isS3]);
 
   useEffect(() => {
@@ -271,14 +295,13 @@ export function useFolderSizes(sessionId: string, prefix: string, isS3: boolean,
 
     folderQueueRef.current = toScan;
     drainFolderSizeQueue();
-  }, [objects, loading, sessionId, isS3]);
+    return cancelInFlightFolderSizeJobs;
+  }, [prefix, objects, loading, sessionId, isS3]);
 
   useEffect(() => {
     return () => {
       cancelPrefixSizeJob(prefixSizeJobRef.current);
-      for (const jobId of folderJobRefs.current.keys()) {
-        cancelPrefixSizeJob(jobId);
-      }
+      cancelInFlightFolderSizeJobs();
     };
   }, []);
 
