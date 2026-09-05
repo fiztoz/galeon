@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, CornerDownLeft, Folder, Server, Command } from 'lucide-react';
-import { ConnectionProfile } from '../App';
+import { ConnectionProfile } from '../types';
 
 export interface CommandAction {
   id: string;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
-import { ConnectionProfile, BandwidthRule } from '../App';
+import { ConnectionProfile, BandwidthRule } from '../types';
 import { OnboardingProtocol } from './OnboardingWizard';
 import { SshKeyHelper } from './SshKeyHelper';
 import { ProfileImportExport } from './ProfileImportExport';

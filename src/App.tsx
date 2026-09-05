@@ -7,90 +7,23 @@ import { TransferManager, TransferState } from './components/TransferManager';
 import { CommandPalette, CommandAction } from './components/CommandPalette';
 import { PropertiesInspector } from './components/PropertiesInspector';
 import { ActiveEditors, EditSessionInfo } from './components/ActiveEditors';
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { Link, Trash2, Clock, ExternalLink, Copy, Check, Command, RefreshCw, Settings, Columns } from 'lucide-react';
+import { Link, Command, RefreshCw, Settings, Columns } from 'lucide-react';
 import { SyncPanel, SyncProfile } from './components/SyncPanel';
 import { OnboardingWizard, OnboardingProtocol } from './components/OnboardingWizard';
 import { SettingsPanel } from './components/SettingsPanel';
 import { DeleteProgressToast, DeleteProgress } from './components/DeleteProgressToast';
 import { LocalPane } from './components/LocalPane';
 import { SplitPane } from './components/SplitPane';
-import { applyTheme, nextThemeMode, parseThemeMode, THEME_LABELS, watchSystemTheme, type ThemeMode } from './theme';
+import { PresignHistoryModal } from './components/PresignHistoryModal';
+import { nextThemeMode, THEME_LABELS } from './theme';
+import { useLayoutPreferences } from './hooks/useLayoutPreferences';
 
-/** Mirrors `types::AppSettings` (camelCase) in the Rust layer. */
-interface AppSettings {
-  onboardingComplete: boolean;
-  /** Present from 1.0.0-alpha.3 on; absent in a user's existing app_settings.json. */
-  dualPaneEnabled?: boolean;
-  localPanePath?: string | null;
-  /** 0..1 fraction of the width given to the local pane; absent means 50/50. */
-  splitRatio?: number | null;
-  /** "system" | "dark" | "light"; absent or unknown resolves to system. */
-  theme?: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-}
-
-export interface BandwidthRule {
-  enabled: boolean;
-  startTime: string; // "HH:MM"
-  endTime: string;
-  days: number[]; // 0=Mon..6=Sun
-  limitKbps: number; // 0 = unlimited
-}
-
-export interface ConnectionProfile {
-  id: string;
-  name: string;
-  protocol?: 's3' | 'sftp' | 'ftp' | 'ftps'; // Protocol type, defaults to 's3'
-  // S3 fields
-  endpoint?: string;
-  region?: string;
-  accessKey?: string;
-  secretKey?: string;
-  bucket?: string; // Now optional for SFTP/FTP
-  dangerDisableSslVerification?: boolean;
-  useVirtualHostStyle?: boolean;
-  storageClass?: string;
-  maxBandwidth?: number;
-  bandwidthRules?: BandwidthRule[];
-  // SFTP/FTP fields
-  host?: string;
-  port?: number;
-  username?: string;
-  keyPath?: string; // Path to SSH private key
-  passiveMode?: boolean; // FTP passive mode
-  encrypt?: boolean; // FTPS encryption
-  // Optional SSH bastion used to forward the configured S3/SFTP destination.
-  sshTunnel?: {
-    host: string;
-    port: number;
-    username: string;
-    keyPath?: string;
-    // Import/export only. Saved profiles keep this in the OS keyring, not config JSON.
-    password?: string;
-  };
-  // Reusable tunnel identity; tunnel metadata is stored in ssh_tunnel_profiles.json.
-  sshTunnelProfileId?: string;
-}
-
-export interface ProtocolCapabilities {
-  supportsPresignedUrls: boolean;
-  supportsMultipart: boolean;
-  supportsStorageClass: boolean;
-  supportsVirtualHostStyle: boolean;
-  supportsBucketConcept: boolean;
-  supportsBulkDelete: boolean;
-}
-
-export interface PresignHistoryEntry {
-  id: string;
-  fileKey: string;
-  fileName: string;
-  url: string;
-  expiresInSeconds: number;
-  createdAt: string;
-}
+import type {
+  AppSettings,
+  ConnectionProfile,
+  PresignHistoryEntry,
+  ProtocolCapabilities,
+} from './types';
 
 function App() {
   const [session, setSession] = useState<{
@@ -138,15 +71,21 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [onboardingProtocol, setOnboardingProtocol] = useState<OnboardingProtocol | null>(null);
 
-  // Dual-pane browser: local ⇄ remote. Persisted through the same
-  // `app_settings.json` round-trip as every other preference (not localStorage),
-  // so there is one settings store for the app.
-  const [dualPaneEnabled, setDualPaneEnabled] = useState(false);
-  const [localPanePath, setLocalPanePath] = useState('');
-  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
-  const [splitRatio, setSplitRatio] = useState(0.5);
-  const settingsLoadedRef = useRef(false);
-  const persistedPrefsRef = useRef('');
+  // Layout preferences (dual pane, its path, split ratio, theme) live in one
+  // hook: they are a cohesive cluster that only talks to app_settings.json, and
+  // putting them here kept growing the shell. See hooks/useLayoutPreferences.
+  const {
+    dualPaneEnabled,
+    setDualPaneEnabled,
+    toggleDualPane,
+    localPanePath,
+    setLocalPanePath,
+    splitRatio,
+    setSplitRatio,
+    themeMode,
+    setThemeMode,
+    applyLoadedSettings,
+  } = useLayoutPreferences();
   const localPaneCmdsRef = useRef<{ refresh: () => void; newFolder: () => void } | null>(null);
 
   useEffect(() => {
@@ -156,46 +95,12 @@ function App() {
     loadAppSettings();
   }, []);
 
-  // Persist the layout/theme preferences (debounced: pane navigation changes them often).
-  useEffect(() => {
-    if (!settingsLoadedRef.current) return;
-    const snapshot = JSON.stringify([dualPaneEnabled, localPanePath || null, themeMode, splitRatio]);
-    if (snapshot === persistedPrefsRef.current) return;
-    const t = setTimeout(async () => {
-      try {
-        // Read-modify-write so `save_app_settings` never drops other fields.
-        const settings = await invoke<AppSettings>('get_app_settings');
-        await invoke('save_app_settings', {
-          settings: {
-            ...settings,
-            dualPaneEnabled,
-            localPanePath: localPanePath || null,
-            theme: themeMode,
-            splitRatio,
-            updatedAtMs: Date.now(),
-          },
-        });
-        persistedPrefsRef.current = snapshot;
-      } catch (err) {
-        console.error('Failed to persist preferences:', err);
-      }
-    }, 400);
-    return () => clearTimeout(t);
-  }, [dualPaneEnabled, localPanePath, themeMode, splitRatio]);
-
-  // Paint the theme, and keep following the OS while the user is on "system".
-  useEffect(() => {
-    applyTheme(themeMode);
-    if (themeMode !== 'system') return;
-    return watchSystemTheme(() => applyTheme('system'));
-  }, [themeMode]);
-
   // Global keyboard shortcut: ⌥⌘L → toggle dual pane
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.altKey && e.metaKey && e.key.toLowerCase() === 'l') {
         e.preventDefault();
-        setDualPaneEnabled((prev) => !prev);
+        toggleDualPane();
       }
     };
     window.addEventListener('keydown', handler);
@@ -221,23 +126,8 @@ function App() {
     try {
       const settings = await invoke<AppSettings>('get_app_settings');
       setShowOnboarding(!settings.onboardingComplete);
-      setDualPaneEnabled(settings.dualPaneEnabled ?? false);
-      setLocalPanePath(settings.localPanePath ?? '');
-      setSplitRatio(
-        typeof settings.splitRatio === 'number' && settings.splitRatio >= 0 && settings.splitRatio <= 1
-          ? settings.splitRatio
-          : 0.5,
-      );
-      const mode = parseThemeMode(settings.theme);
-      setThemeMode(mode);
-      persistedPrefsRef.current = JSON.stringify([
-        settings.dualPaneEnabled ?? false,
-        settings.localPanePath ?? '',
-        mode,
-        typeof settings.splitRatio === 'number' ? settings.splitRatio : 0.5,
-      ]);
-      settingsLoadedRef.current = true;
-      applyTheme(mode);
+      // One fetch feeds both concerns; the hook seeds itself and paints the theme.
+      applyLoadedSettings(settings);
     } catch (err) {
       console.error('Failed to load app settings:', err);
     }
@@ -700,7 +590,7 @@ function App() {
         { id: 'new-folder', label: 'New Folder', keywords: 'create directory mkdir', run: () => explorerCmdsRef.current?.newFolder() },
         { id: 'upload', label: 'Upload Files', keywords: 'put send', run: () => explorerCmdsRef.current?.upload() },
         { id: 'cycle-theme', label: `Theme: ${THEME_LABELS[themeMode]}`, hint: 'System → Light → Dark', keywords: 'appearance dark light theme mode colours colors', run: () => setThemeMode((prev) => nextThemeMode(prev)) },
-        { id: 'toggle-dual-pane', label: dualPaneEnabled ? 'Hide Local Pane' : 'Show Local Pane', hint: '⌥⌘L', keywords: 'local filesystem split side by side dual pane', run: () => setDualPaneEnabled((prev) => !prev) },
+        { id: 'toggle-dual-pane', label: dualPaneEnabled ? 'Hide Local Pane' : 'Show Local Pane', hint: '⌥⌘L', keywords: 'local filesystem split side by side dual pane', run: () => toggleDualPane() },
         { id: 'inspector', label: 'Open Properties Inspector', keywords: 'metadata details info', run: () => setInspectorOpen(true) },
         { id: 'links', label: 'Shared Links History', keywords: 'presign url share', run: () => { loadPresignHistory(); setShowHistory(true); } },
         ...(editSessions.length > 0
@@ -767,12 +657,6 @@ function App() {
       </>
     );
   }
-
-  const formatDuration = (seconds: number) => {
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-    return `${Math.floor(seconds / 86400)}d`;
-  };
 
   return (
     <div className="h-screen flex flex-col bg-zinc-950">
@@ -1039,127 +923,15 @@ function App() {
 
       {/* Presign History Modal */}
       {showHistory && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-[600px] max-h-[80vh] shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold flex items-center space-x-2">
-                <Link className="w-5 h-5 text-gale-teal" />
-                <span>Shared Links History</span>
-              </h3>
-              <div className="flex items-center space-x-2">
-                {presignHistory.length > 0 && (
-                  <button
-                    onClick={clearPresignHistory}
-                    className="flex items-center space-x-1 text-xs text-red-400 hover:text-red-300"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    <span>Clear All</span>
-                  </button>
-                )}
-                <button
-                  onClick={() => setShowHistory(false)}
-                  className="text-zinc-400 hover:text-zinc-200 text-xl"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto space-y-2">
-              {presignHistory.length === 0 ? (
-                <div className="text-center py-8 text-zinc-500">
-                  <Link className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p>No shared links yet</p>
-                  <p className="text-xs mt-1">Generate a share link from the file context menu</p>
-                </div>
-              ) : (
-                presignHistory.map((entry) => (
-                  <HistoryItem
-                    key={entry.id}
-                    entry={entry}
-                    formatDuration={formatDuration}
-                    onDelete={deletePresignHistoryEntry}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+        <PresignHistoryModal
+          entries={presignHistory}
+          onClearAll={clearPresignHistory}
+          onDelete={deletePresignHistoryEntry}
+          onClose={() => setShowHistory(false)}
+        />
       )}
     </div>
   );
 }
-
-const HistoryItem: React.FC<{
-  entry: PresignHistoryEntry;
-  formatDuration: (seconds: number) => string;
-  onDelete: (id: string) => void;
-}> = ({ entry, formatDuration, onDelete }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(entry.url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  };
-
-  const handleOpen = async () => {
-    if (isExpired) return;
-    try {
-      await openUrl(entry.url);
-    } catch (err) {
-      console.error('Failed to open URL:', err);
-    }
-  };
-
-  const createdAt = new Date(entry.createdAt);
-  const isExpired = Date.now() > createdAt.getTime() + entry.expiresInSeconds * 1000;
-
-  return (
-    <div className={`p-3 rounded-lg border ${isExpired ? 'bg-zinc-900/50 border-zinc-800 opacity-60' : 'bg-zinc-800/50 border-zinc-700'}`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2 min-w-0">
-          <span className="text-sm font-medium truncate">{entry.fileName}</span>
-          {isExpired && <span className="text-xs text-red-400">Expired</span>}
-        </div>
-        <div className="flex items-center space-x-1">
-          <button
-            onClick={handleCopy}
-            className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-200"
-          >
-            {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-          </button>
-          <button
-            type="button"
-            onClick={handleOpen}
-            disabled={isExpired}
-            title={isExpired ? 'Link expired' : 'Open in browser'}
-            className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <ExternalLink className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => onDelete(entry.id)}
-            className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-red-400"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-      <div className="flex items-center space-x-3 mt-1 text-xs text-zinc-500 metric-text">
-        <span className="flex items-center space-x-1">
-          <Clock className="w-3 h-3" />
-          <span>Expires in {formatDuration(entry.expiresInSeconds)}</span>
-        </span>
-        <span>•</span>
-        <span>{createdAt.toLocaleDateString()} {createdAt.toLocaleTimeString()}</span>
-      </div>
-    </div>
-  );
-};
 
 export default App;

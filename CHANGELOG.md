@@ -37,6 +37,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   The light scale is tuned rather than mirrored: its text tiers hold WCAG AA
   (4.63:1–19.06:1) on the light page.
 
+### Changed
+
+- **`App.tsx` 1,166 → 937 lines.** It had crept past the ~1k ceiling in AGENTS.md 3.2
+  while the dual-pane and theme work landed in it. Three cohesive pieces moved out:
+  - `src/types.ts` — `AppSettings`, `ConnectionProfile`, `BandwidthRule`,
+    `ProtocolCapabilities`, `PresignHistoryEntry`. Six feature components were importing
+    their types from the app shell; they now import from `types`, so the shell is no
+    longer a dependency for everyone else's data shapes.
+  - `src/components/PresignHistoryModal.tsx` — the Shared Links dialog plus its
+    `HistoryItem` row and `formatDuration` helper (only that dialog renders a duration,
+    so it stopped being prop-drilled). Derived `createdAt`/`isExpired` moved above the
+    handlers that read them.
+  - `src/hooks/useLayoutPreferences.ts` — dual-pane flag, local pane path, split ratio
+    and theme, with their debounced persistence and the system-theme listener.
+- Fixed in passing: the startup settings snapshot was built with `?? ''` on the load
+  side but `|| null` on the persist side, so the two never matched and **every launch
+  rewrote `app_settings.json` once for no reason**. One `snapshot()` helper now feeds both.
+
+Moves were verified by token-diffing the extracted code against the original: the
+modal's only differences are the two intended edits, and the hook's are renames plus
+that snapshot fix.
+
 ### Added
 
 - **Resizable dual-pane split.** A new `SplitPane` component replaces the fixed 50/50

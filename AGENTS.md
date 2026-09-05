@@ -39,6 +39,8 @@ Product intent lives in [`docs/DIRECTION.md`](docs/DIRECTION.md). UI tokens and 
 | Connection form / connect flow | `src/components/Connection.tsx` |
 | Local filesystem pane (dual-pane) | `src/components/LocalPane.tsx` |
 | App shell / profiles state | `src/App.tsx` |
+| Shared frontend wire types (camelCase mirrors of Rust structs) | `src/types.ts` |
+| Layout preferences (dual pane, split ratio, theme) | `src/hooks/useLayoutPreferences.ts` |
 | Theme CSS variables | `src/index.css` |
 
 **Do not re-introduce** S3 builder + sanitize + SSL wiring inlined into `connect_bucket` / `connect_storage` / `auto_reconnect`. Use `s3_connect::open_s3_operator` (or the smaller helpers in that module).
@@ -140,6 +142,10 @@ All live S3 sessions go through **`s3_connect`**:
 
 - `App.tsx`: shell, session, profile list load/save orchestration.
 - Feature UI: one component file per major surface (`Explorer`, `TransferManager`, `ProfileImportExport`, …).
+- Shared wire types live in `src/types.ts`. Do not import types from `App.tsx`, and do not
+  re-export them from it — that made the shell a dependency of every feature component.
+- A cohesive group of `useState` + effects that only talks to one backend surface belongs in
+  `src/hooks/useX.ts`, not inline in `App.tsx` (see `useLayoutPreferences`).
 - Prefer a small **discriminated union** for multi-step modals over many boolean `useState`s.
 - Match existing zinc + Gale Teal UI; follow `DESIGN.md` (no violet/fuchsia, Doubloon only for progress/metrics).
 

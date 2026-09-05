@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { save, open } from '@tauri-apps/plugin-dialog';
-import { ConnectionProfile } from '../App';
+import { ConnectionProfile } from '../types';
 import { AlertTriangle, Download, Upload } from 'lucide-react';
 
 interface ProfileImportResult {

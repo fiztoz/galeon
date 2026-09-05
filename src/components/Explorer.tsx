@@ -5,7 +5,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, Pencil, MoreVertical, FolderInput, FolderDown, Share2, Check, Copy, Info, Loader2, ExternalLink, Eye, PenLine, AlertTriangle } from 'lucide-react';
-import { ProtocolCapabilities } from '../App';
+import { ProtocolCapabilities } from '../types';
 import { isPreviewableFile } from './PropertiesInspector';
 
 export interface GaleonObject {

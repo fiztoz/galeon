@@ -18,7 +18,7 @@ import {
   Clock,
   Loader2,
 } from 'lucide-react';
-import { ConnectionProfile } from '../App';
+import { ConnectionProfile } from '../types';
 
 // ── Contract types (matching backend camelCase exactly) ─────────────────────
 
