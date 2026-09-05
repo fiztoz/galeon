@@ -1,3 +1,4 @@
+import { useMultiSelect } from '../hooks/useMultiSelect';
 import React, { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useFolderSizes } from '../hooks/useFolderSizes';
@@ -118,8 +119,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   
   // Multi-select states
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
   
   // Conflict resolution state
@@ -283,44 +282,8 @@ export const Explorer: React.FC<ExplorerProps> = ({
     }
   };
 
-  // Multi-select handlers
-  const handleSelectItem = (key: string, index: number, shiftKey: boolean = false) => {
-    const newSelected = new Set(selectedItems);
-    
-    if (shiftKey && lastSelectedIndex !== null) {
-      // Range select
-      const startIndex = Math.min(lastSelectedIndex, index);
-      const endIndex = Math.max(lastSelectedIndex, index);
-      for (let i = startIndex; i <= endIndex; i++) {
-        if (filteredObjects[i]) {
-          newSelected.add(filteredObjects[i].fullKey);
-        }
-      }
-    } else {
-      // Toggle select
-      if (newSelected.has(key)) {
-        newSelected.delete(key);
-      } else {
-        newSelected.add(key);
-      }
-    }
-    
-    setSelectedItems(newSelected);
-    setLastSelectedIndex(index);
-  };
-
-  const handleSelectAll = () => {
-    if (selectedItems.size === filteredObjects.length) {
-      setSelectedItems(new Set());
-    } else {
-      setSelectedItems(new Set(filteredObjects.map(obj => obj.fullKey)));
-    }
-  };
-
-  const clearSelection = () => {
-    setSelectedItems(new Set());
-    setLastSelectedIndex(null);
-  };
+  const { selectedItems, setSelectedItems, setLastSelectedIndex, handleSelectItem, handleSelectAll, clearSelection } =
+    useMultiSelect(filteredObjects);
 
   const handleBatchDownload = async () => {
     let localPath: string | null = null;

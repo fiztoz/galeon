@@ -1,0 +1,20 @@
+import { test, expect } from 'bun:test';
+import { hookHarness } from './harness';
+const harness = hookHarness();
+const { useMultiSelect } = await import('../../src/hooks/useMultiSelect');
+test('shift selection follows visible order and clearing resets the anchor', () => {
+  const visible = ['z', 'filtered-third', 'a'].map(fullKey => ({fullKey}));
+  const render = () => harness.render(() => useMultiSelect(visible));
+  let hook = render();
+  hook.handleSelectItem('z', 0); hook = render();
+  hook.handleSelectItem('a', 2, true); hook = render();
+  expect([...hook.selectedItems]).toEqual(['z', 'filtered-third', 'a']);
+  hook.clearSelection(); hook = render();
+  hook.handleSelectItem('a', 2, true); hook = render();
+  expect([...hook.selectedItems]).toEqual(['a']);
+  hook.handleSelectAll(); hook = render();
+  expect(hook.selectedItems.size).toBe(3);
+  hook.handleSelectAll(); hook = render();
+  expect(hook.selectedItems.size).toBe(0);
+  harness.unmount();
+});
