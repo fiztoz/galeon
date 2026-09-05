@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useFolderSizes } from '../hooks/useFolderSizes';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, Pencil, MoreVertical, FolderInput, FolderDown, Share2, Copy, Info, Loader2, Eye, PenLine, AlertTriangle } from 'lucide-react';
+import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, MoreVertical, Loader2, AlertTriangle } from 'lucide-react';
 import { ProtocolCapabilities } from '../types';
 import {
   ConflictDialog,
@@ -13,7 +13,7 @@ import {
   ShareLinkDialog,
   TextPromptDialog,
 } from './Dialogs';
-import { isPreviewableFile } from './PropertiesInspector';
+import { ObjectContextMenu, useObjectContextMenu, type ObjectMenuAction } from './ObjectContextMenu';
 
 export interface GaleonObject {
   name: string;
@@ -108,8 +108,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
   const [availableFolders, setAvailableFolders] = useState<string[]>([]);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareTarget, setShareTarget] = useState<GaleonObject | null>(null);
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
-  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   
   // Search, Filter, Sort states
@@ -285,6 +283,25 @@ export const Explorer: React.FC<ExplorerProps> = ({
   const { selectedItems, setSelectedItems, setLastSelectedIndex, handleSelectItem, handleSelectAll, clearSelection } =
     useMultiSelect(filteredObjects);
 
+  const { activeMenu, setActiveMenu, menuPosition, openItemMenu, handleRowContextMenu } =
+    useObjectContextMenu(selectedItems, setSelectedItems, setLastSelectedIndex);
+
+  const handleMenuAction = (action: ObjectMenuAction, obj: GaleonObject) => {
+    switch (action) {
+      case 'download': handleDownload(obj); return;
+      case 'downloadHere': handleDownloadHere(obj); return;
+      case 'preview': onShowPreview?.(obj); break;
+      case 'share': setShareTarget(obj); setShowShareModal(true); break;
+      case 'edit': onEditRemoteFile?.(obj.fullKey); break;
+      case 'properties': onShowProperties?.(obj); break;
+      case 'rename': setRenameTarget(obj); setShowRename(true); break;
+      case 'move': setMoveTarget(obj); fetchAllFolders(); setShowMoveModal(true); break;
+      case 'copy': setCopyTarget(obj); fetchAllFolders(); setShowCopyModal(true); break;
+      case 'delete': setDeleteTarget(obj); setShowDeleteConfirm(true); break;
+    }
+    setActiveMenu(null);
+  };
+
   const handleBatchDownload = async () => {
     let localPath: string | null = null;
 
@@ -373,45 +390,12 @@ export const Explorer: React.FC<ExplorerProps> = ({
     if (navRequest) setPrefix(navRequest.path);
   }, [navRequest?.nonce]);
 
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClose = () => setActiveMenu(null);
-    if (activeMenu) {
-      document.addEventListener('click', handleClose);
-      document.addEventListener('contextmenu', handleClose);
-      return () => {
-        document.removeEventListener('click', handleClose);
-        document.removeEventListener('contextmenu', handleClose);
-      };
-    }
-  }, [activeMenu]);
-
   const normalizeFsPath = (path: string) => path.replace(/\/+/g, '/');
 
   const handleDoubleClick = (obj: GaleonObject) => {
     if (obj.objectType === 'folder') {
       setPrefix(isFsProtocol ? normalizeFsPath(obj.fullKey) : obj.fullKey);
     }
-  };
-
-  const openItemMenu = (obj: GaleonObject, x: number, y: number) => {
-    const menuWidth = 160;
-    const menuHeight = 320;
-    setMenuPosition({
-      x: Math.max(8, Math.min(x, window.innerWidth - menuWidth - 8)),
-      y: Math.max(8, Math.min(y, window.innerHeight - menuHeight - 8)),
-    });
-    setActiveMenu(obj.fullKey);
-  };
-
-  const handleRowContextMenu = (e: React.MouseEvent, obj: GaleonObject, index: number) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!selectedItems.has(obj.fullKey)) {
-      setSelectedItems(new Set([obj.fullKey]));
-      setLastSelectedIndex(index);
-    }
-    openItemMenu(obj, e.clientX, e.clientY);
   };
 
   // Conflict resolution helpers
@@ -1033,138 +1017,16 @@ export const Explorer: React.FC<ExplorerProps> = ({
         )}
       </div>
 
-      {/* Context Menu Portal */}
-      {activeMenu && (
-        <div
-          className="fixed min-w-[10.5rem] bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-[9999] py-1"
-          style={{ left: menuPosition.x, top: menuPosition.y }}
-          onClick={(e) => e.stopPropagation()}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          {(() => {
-            const obj = objects.find(o => o.fullKey === activeMenu);
-            if (!obj) return null;
-
-            const menuBtn = (className = 'text-zinc-200') =>
-              `w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-700 whitespace-nowrap ${className}`;
-
-            return (
-              <>
-                {obj.objectType === 'file' && (
-                  <>
-                    <button
-                      onClick={() => handleDownload(obj)}
-                      className={menuBtn()}
-                    >
-                      <Download className="w-4 h-4 shrink-0" />
-                      <span>Download</span>
-                    </button>
-                    {downloadDestination && (
-                      <button
-                        onClick={() => handleDownloadHere(obj)}
-                        className={menuBtn()}
-                      >
-                        <FolderDown className="w-4 h-4 shrink-0" />
-                        <span>Download here</span>
-                      </button>
-                    )}
-                    {isPreviewableFile(obj.fullKey, protocol) && (
-                      <button
-                        onClick={() => {
-                          onShowPreview?.(obj);
-                          setActiveMenu(null);
-                        }}
-                        className={menuBtn()}
-                      >
-                        <Eye className="w-4 h-4 shrink-0" />
-                        <span>Preview</span>
-                      </button>
-                    )}
-                    {capabilities?.supportsPresignedUrls && (
-                      <button
-                        onClick={() => {
-                          setShareTarget(obj);
-                          setShowShareModal(true);
-                          setActiveMenu(null);
-                        }}
-                        className={menuBtn()}
-                      >
-                        <Share2 className="w-4 h-4 shrink-0" />
-                        <span>Share Link</span>
-                      </button>
-                    )}
-                    <button
-                      onClick={() => {
-                        onEditRemoteFile?.(obj.fullKey);
-                        setActiveMenu(null);
-                      }}
-                      className={menuBtn()}
-                    >
-                      <PenLine className="w-4 h-4 shrink-0" />
-                      <span>Edit Externally</span>
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={() => {
-                    onShowProperties?.(obj);
-                    setActiveMenu(null);
-                  }}
-                  className={menuBtn()}
-                >
-                  <Info className="w-4 h-4 shrink-0" />
-                  <span>Properties</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setRenameTarget(obj);
-                    setShowRename(true);
-                    setActiveMenu(null);
-                  }}
-                  className={menuBtn()}
-                >
-                  <Pencil className="w-4 h-4 shrink-0" />
-                  <span>Rename</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setMoveTarget(obj);
-                    fetchAllFolders();
-                    setShowMoveModal(true);
-                    setActiveMenu(null);
-                  }}
-                  className={menuBtn()}
-                >
-                  <FolderInput className="w-4 h-4 shrink-0" />
-                  <span>Move to...</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setCopyTarget(obj);
-                    fetchAllFolders();
-                    setShowCopyModal(true);
-                    setActiveMenu(null);
-                  }}
-                  className={menuBtn()}
-                >
-                  <Copy className="w-4 h-4 shrink-0" />
-                  <span>Copy to...</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setDeleteTarget(obj);
-                    setShowDeleteConfirm(true);
-                    setActiveMenu(null);
-                  }}
-                  className={menuBtn('text-red-400')}
-                >
-                  <Trash2 className="w-4 h-4 shrink-0" />
-                  <span>Delete</span>
-                </button>
-              </>
-            );
-          })()}
-        </div>
+      {activeMenu && objects.find(obj => obj.fullKey === activeMenu) && (
+        <ObjectContextMenu
+          obj={objects.find(obj => obj.fullKey === activeMenu)!}
+          menuPosition={menuPosition}
+          protocol={protocol}
+          capabilities={capabilities}
+          downloadDestination={downloadDestination}
+          onClose={() => setActiveMenu(null)}
+          onAction={handleMenuAction}
+        />
       )}
 
       {/* Create Folder Modal */}
