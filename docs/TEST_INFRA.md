@@ -85,3 +85,13 @@ cargo test --lib -- --skip integrity_e2e
 cargo test --lib sftp_native::
 cargo test --lib ftp_native::
 ```
+
+## Frontend regression tests
+
+Run `bun run test:frontend` for the Explorer hook suites. They exercise listing races,
+filtered selection, folder-size cancellation, native drop cleanup, conflict resolution,
+and context-menu dismissal without connecting to storage. Each suite runs in a separate
+Bun process so its React/Tauri module mocks cannot affect another suite.
+
+These deterministic hook tests complement `bun run build`; they do not replace the
+native Tauri visual pass for themes, dialogs, and split-pane interactions.
