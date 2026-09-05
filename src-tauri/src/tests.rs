@@ -948,6 +948,7 @@ fn test_default_app_settings_shape() {
         dual_pane_enabled: false,
         local_pane_path: None,
         theme: None,
+        split_ratio: None,
         created_at_ms: now,
         updated_at_ms: now,
     };
@@ -963,6 +964,7 @@ fn test_app_settings_serialization_round_trip() {
         dual_pane_enabled: true,
         local_pane_path: Some("/Users/example/Downloads".to_string()),
         theme: Some("light".to_string()),
+        split_ratio: Some(0.38),
         created_at_ms: 1000,
         updated_at_ms: 2000,
     };
@@ -991,6 +993,7 @@ fn test_app_settings_parses_legacy_file_without_dual_pane_fields() {
     assert!(!parsed.dual_pane_enabled, "dual pane defaults to off");
     assert_eq!(parsed.local_pane_path, None);
     assert_eq!(parsed.theme, None, "theme falls back to system");
+    assert_eq!(parsed.split_ratio, None, "unset split means 50/50");
     assert_eq!(parsed.updated_at_ms, 2000, "existing fields survive");
 }
 

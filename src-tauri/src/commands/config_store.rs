@@ -71,6 +71,7 @@ pub(crate) fn default_app_settings() -> AppSettings {
         dual_pane_enabled: false,
         local_pane_path: None,
         theme: None,
+        split_ratio: None,
         created_at_ms: now,
         updated_at_ms: now,
     }

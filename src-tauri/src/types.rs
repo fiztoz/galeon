@@ -127,6 +127,9 @@ pub struct AppSettings {
     pub dual_pane_enabled: bool,
     /// Last directory the local pane was viewing. `None` until the user navigates.
     pub local_pane_path: Option<String>,
+    /// Fraction of the dual-pane width given to the local pane, 0.0..1.0.
+    /// `None` means "never dragged", which the UI renders as a 50/50 split.
+    pub split_ratio: Option<f64>,
     /// `"system"` | `"dark"` | `"light"`. `None` (or an unknown value) means
     /// system, so the field can never put the app into an unrenderable state.
     pub theme: Option<String>,

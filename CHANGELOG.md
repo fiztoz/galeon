@@ -39,6 +39,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Resizable dual-pane split.** A new `SplitPane` component replaces the fixed 50/50
+  layout: drag the divider with the pointer, nudge it with the keyboard
+  (`←`/`→`, Shift for a bigger step, `Home`/`End` to fully collapse, `Enter` to
+  re-center), double-click to reset to 50/50, and drag firmly past the minimum to
+  snap a pane fully shut so either side can take the whole width without reaching
+  for the toggle. The separator is a real `role="separator"` with an accessible name
+  and `aria-valuenow/min/max`, and its arrow keys stop propagation so a focused
+  divider never drives the list behind it. The ratio persists in
+  `app_settings.json` next to the other layout preferences.
+- `AppSettings.split_ratio` (`Option<f64>`; absent means 50/50), so the split rides
+  the same backward-compatible settings path as the rest.
+
+### Added
+
 - **Fonts are vendored; a launch now makes zero third-party requests.** Inter,
   JetBrains Mono and Space Grotesk were fetched from Google Fonts on every start,
   which leaked the user's IP to Google and made "offline by design" only partly

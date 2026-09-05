@@ -14,6 +14,7 @@ import { OnboardingWizard, OnboardingProtocol } from './components/OnboardingWiz
 import { SettingsPanel } from './components/SettingsPanel';
 import { DeleteProgressToast, DeleteProgress } from './components/DeleteProgressToast';
 import { LocalPane } from './components/LocalPane';
+import { SplitPane } from './components/SplitPane';
 import { applyTheme, nextThemeMode, parseThemeMode, THEME_LABELS, watchSystemTheme, type ThemeMode } from './theme';
 
 /** Mirrors `types::AppSettings` (camelCase) in the Rust layer. */
@@ -22,6 +23,8 @@ interface AppSettings {
   /** Present from 1.0.0-alpha.3 on; absent in a user's existing app_settings.json. */
   dualPaneEnabled?: boolean;
   localPanePath?: string | null;
+  /** 0..1 fraction of the width given to the local pane; absent means 50/50. */
+  splitRatio?: number | null;
   /** "system" | "dark" | "light"; absent or unknown resolves to system. */
   theme?: string | null;
   createdAtMs: number;
@@ -141,6 +144,7 @@ function App() {
   const [dualPaneEnabled, setDualPaneEnabled] = useState(false);
   const [localPanePath, setLocalPanePath] = useState('');
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  const [splitRatio, setSplitRatio] = useState(0.5);
   const settingsLoadedRef = useRef(false);
   const persistedPrefsRef = useRef('');
   const localPaneCmdsRef = useRef<{ refresh: () => void; newFolder: () => void } | null>(null);
@@ -155,7 +159,7 @@ function App() {
   // Persist the layout/theme preferences (debounced: pane navigation changes them often).
   useEffect(() => {
     if (!settingsLoadedRef.current) return;
-    const snapshot = JSON.stringify([dualPaneEnabled, localPanePath || null, themeMode]);
+    const snapshot = JSON.stringify([dualPaneEnabled, localPanePath || null, themeMode, splitRatio]);
     if (snapshot === persistedPrefsRef.current) return;
     const t = setTimeout(async () => {
       try {
@@ -167,6 +171,7 @@ function App() {
             dualPaneEnabled,
             localPanePath: localPanePath || null,
             theme: themeMode,
+            splitRatio,
             updatedAtMs: Date.now(),
           },
         });
@@ -176,7 +181,7 @@ function App() {
       }
     }, 400);
     return () => clearTimeout(t);
-  }, [dualPaneEnabled, localPanePath, themeMode]);
+  }, [dualPaneEnabled, localPanePath, themeMode, splitRatio]);
 
   // Paint the theme, and keep following the OS while the user is on "system".
   useEffect(() => {
@@ -218,12 +223,18 @@ function App() {
       setShowOnboarding(!settings.onboardingComplete);
       setDualPaneEnabled(settings.dualPaneEnabled ?? false);
       setLocalPanePath(settings.localPanePath ?? '');
+      setSplitRatio(
+        typeof settings.splitRatio === 'number' && settings.splitRatio >= 0 && settings.splitRatio <= 1
+          ? settings.splitRatio
+          : 0.5,
+      );
       const mode = parseThemeMode(settings.theme);
       setThemeMode(mode);
       persistedPrefsRef.current = JSON.stringify([
         settings.dualPaneEnabled ?? false,
         settings.localPanePath ?? '',
         mode,
+        typeof settings.splitRatio === 'number' ? settings.splitRatio : 0.5,
       ]);
       settingsLoadedRef.current = true;
       applyTheme(mode);
@@ -856,9 +867,12 @@ function App() {
       </header>
       <main className="flex-1 overflow-hidden">
         {dualPaneEnabled ? (
-          <div className="flex h-full">
-            {/* Local pane — left half */}
-            <div className="w-1/2 min-w-[320px] border-r border-zinc-800 overflow-hidden">
+          <SplitPane
+              label="Local and remote pane divider"
+              ratio={splitRatio}
+              onRatioChange={setSplitRatio}
+              left={
+              <div className="h-full overflow-hidden">
               <LocalPane
                 initialPath={localPanePath || undefined}
                 remotePrefix={recentPaths[0] ?? ''}
@@ -872,9 +886,10 @@ function App() {
                 onRegisterCommands={(cmds) => { localPaneCmdsRef.current = cmds; }}
                 onPathChange={setLocalPanePath}
               />
-            </div>
-            {/* Remote pane — right half */}
-            <div className="w-1/2 min-w-[320px] overflow-hidden">
+              </div>
+              }
+              right={
+              <div className="h-full overflow-hidden">
               <Explorer
                 key={session.sessionId}
                 sessionId={session.sessionId}
@@ -895,8 +910,9 @@ function App() {
                 onRegisterCommands={handleRegisterCommands}
                 downloadDestination={localPanePath || undefined}
               />
-            </div>
-          </div>
+              </div>
+              }
+            />
         ) : (
           <Explorer
             key={session.sessionId}

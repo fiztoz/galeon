@@ -114,6 +114,9 @@ Stability and UX good enough to publish.
 - **Architecture pass** — `lib.rs` 7,176 → ~180 lines; commands split into 17 feature modules ✅
 - **Dual-pane browser** (local ⇄ remote) first increment ✅
 - **Light theme** (system / dark / light) ✅
+- **Resizable dual-pane split** (`SplitPane`) — pointer drag, keyboard-operable
+  separator, snap-to-collapse so one pane can take the full width, double-click to
+  reset, ratio persisted in `app_settings.json` ✅
 - MIT license, SECURITY.md, public-facing README, CSP, release CI ✅
 
 **Open follow-ups:**
@@ -122,7 +125,7 @@ Stability and UX good enough to publish.
   under OFL in `public/fonts/`; CSP now allows no external host at all
 - CSP is set and verified against the built assets, but still wants a `tauri dev`
   pass to confirm Tauri's injected bootstrap and real IPC
-- Local pane: resizable split, drag between panes
+- Local pane: drag between panes (the resizable split landed — see below)
 - Finish v0.4's dual-pane: the local pane, layout toggle, and both transfer
   directions are in; the resizable split and drag-between-panes are not
 
