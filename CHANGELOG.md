@@ -39,6 +39,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Fonts are vendored; a launch now makes zero third-party requests.** Inter,
+  JetBrains Mono and Space Grotesk were fetched from Google Fonts on every start,
+  which leaked the user's IP to Google and made "offline by design" only partly
+  true. The roman variable faces now ship in `public/fonts/` with their SIL OFL
+  license and copyright texts (the license requires them to travel with the font),
+  plus a provenance/refresh note. Only the latin + latin-ext subsets are included —
+  the rest roughly tripled the payload for no UI string that needs them — and each
+  `@font-face` carries a `unicode-range`, so a browser reads only the file it
+  actually needs. 304 KB total, italic omitted because the UI has none.
+- `Content-Security-Policy` tightened accordingly: `style-src` and `font-src` no
+  longer name any external host, so the policy now allows nothing off-machine.
+
+### Added
+
 - **Release CI** — `.github/workflows/release.yml`: pushing a `v<version>` tag builds
   the universal macOS `.dmg` and publishes it to GitHub Releases with SHA-256
   checksums and a provenance footer. The tag must match `package.json`,

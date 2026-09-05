@@ -118,8 +118,8 @@ Stability and UX good enough to publish.
 
 **Open follow-ups:**
 
-- Self-host Inter / Space Grotesk / JetBrains Mono so a launch makes no third-party
-  font request (the app currently pulls from Google Fonts; see SECURITY.md)
+- ~~Self-host the UI fonts so a launch makes no third-party request~~ ✅ vendored
+  under OFL in `public/fonts/`; CSP now allows no external host at all
 - CSP is set and verified against the built assets, but still wants a `tauri dev`
   pass to confirm Tauri's injected bootstrap and real IPC
 - Local pane: resizable split, drag between panes
@@ -178,4 +178,4 @@ install friction, not opening the doors.
 | Auto-update | Deferred | Needs trusted signatures + a feed; no update server planned. Manual download per release |
 | Update hosting later | Prefer public Releases *or* object storage | No GitHub PAT inside the app |
 | Bundle identifier | Keep `com.fizto.galeon` | It is also the keyring namespace and `app_config_dir`; renaming orphans existing users' credentials and profiles without a migration (AGENTS.md §6) |
-| Third-party runtime requests | Known debt | Google Fonts is fetched at launch today. Self-hosting is the fix; until then SECURITY.md states it instead of claiming a fully offline app |
+| Third-party runtime requests | **None** | UI fonts are vendored under OFL in `public/fonts/` and the CSP names no external host, so a launch makes zero outbound requests. Verified, not asserted |

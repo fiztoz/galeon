@@ -33,12 +33,12 @@ setting to live with.
 ## What is not in scope
 
 - No telemetry, analytics, crash reporting, or usage tracking, and no update feed
-  or account system. **One caveat, stated plainly:** the stylesheet pulls Inter,
-  Space Grotesk and JetBrains Mono from Google Fonts, so a launch with network
-  access makes one third-party font request that reveals your IP to Google. It is
-  not tracking, but it is not fully offline either. The app degrades to system
-  fonts without it, and self-hosting the three families is the open fix
-  (tracked in the roadmap) if you want that request gone.
+  or account system. **A launch makes no third-party network request at all:** the
+  three UI fonts are vendored in `public/fonts/` under their own OFL licenses, and
+  the Content-Security-Policy allows no external host. Verified by replaying the
+  shipped CSP against the built output and counting outbound requests: zero.
+  Everything that leaves the machine is a request you initiated, to an endpoint you
+  configured.
 - Galeon is not a sandbox. It is a normal user-level desktop app: anything with your
   user permissions can read what you can read. It does not defend against a machine
   that is already compromised.
