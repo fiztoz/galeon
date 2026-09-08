@@ -214,11 +214,12 @@ somewhere; tag it and let CI produce the artifact.
   Gatekeeper** on a clean first open (`spctl` → `rejected`, `origin=Apple
   Development`). This is Apple's policy, not a Galeon bug — don't "fix" it by
   disabling verification somewhere in the app.
-- **Developer ID + notarization is optional and gated on secrets.** If
-  `RELEASE_MACOS.md`'s notarization variables are present, CI signs and
-  notarizes; if not, it still publishes the artifact and labels it unsigned, and
-  users get the one-time **right-click → Open** step. Never make an unsigned build
-  claim to be notarized.
+- **Ad-hoc signing is the default; Developer ID + notarization is opt-in.**
+  `MACOS_SIGNING_MODE=adhoc` (also the unset default) uses no Apple secrets and
+  publishes as **ad-hoc signed, not notarized**. `developer-id` requires the
+  documented signing secrets, with all-or-none notarization credentials. CI
+  verifies the artifact, not just secret presence, before labelling its status.
+  Never describe an ad-hoc signature as a verified developer identity.
 - **Auto-update is deliberately not implemented.** It needs a trusted signing
   story plus a feed; the feed is also where a hobby project becomes an
   availability obligation. Releases are manual download until someone owns that.
@@ -239,7 +240,7 @@ directory, and land it a release before the rename.
 1. **Do not** add auto-update, an update feed, or a GitHub-token update client unless asked.
 2. **Do not** treat Apple Developer Program enrollment as a blocker for publishing — document it, don't invent unsigned workarounds as permanent behavior.
 3. **Do not** tell users to run Terminal or disable Gatekeeper as the normal path.
-4. Release-facing copy: download the `.dmg` from Releases → drag to Applications → **right-click → Open** once (unless the build is notarized).
+4. Release-facing copy: download the `.dmg` from Releases → drag to Applications → **right-click → Open** for unnotarized builds. If still blocked, point to the per-app **Privacy & Security → Open Anyway** flow in `RELEASE_MACOS.md`, never disabling Gatekeeper. A new build may require approval again.
 5. Prefer user-visible polish (transfers, explorer, protocols) over distribution infrastructure.
 
 Details: [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/RELEASE_MACOS.md`](docs/RELEASE_MACOS.md).

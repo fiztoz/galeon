@@ -1,6 +1,6 @@
 //! Native FTP/FTPS implementation using suppaftp with native-tls
 //!
-//! suppaftp v8 uses native-tls for FTPS (no OpenSSL dependency).
+//! FTPS uses native-tls (the platform TLS backend).
 //! FTP is synchronous I/O and runs on blocking threads via spawn_blocking.
 
 use serde::{Deserialize, Serialize};
@@ -28,6 +28,18 @@ pub fn default_port(_secure: bool) -> u16 {
     21
 }
 
+/// Reject control-channel injection before an argument reaches suppaftp.
+///
+/// SuppaFTP writes command arguments to the FTP control channel. CR/LF would
+/// let an otherwise valid username, credential, or path terminate that command
+/// and inject another one, so validate every user-controlled argument centrally.
+pub(crate) fn validate_ftp_argument(value: &str, field: &str) -> Result<(), String> {
+    if value.contains(['\r', '\n']) {
+        return Err(format!("FTP {field} cannot contain CR or LF."));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FtpEntry {
     pub name: String,
@@ -44,6 +56,11 @@ pub struct FtpSession {
 
 impl FtpSession {
     pub fn connect(config: &FtpConfig) -> Result<Self, String> {
+        validate_ftp_argument(&config.host, "host")?;
+        validate_ftp_argument(&config.username, "username")?;
+        if let Some(credential) = config.credential.as_deref() {
+            validate_ftp_argument(credential, "credential")?;
+        }
         let addr = format!("{}:{}", config.host, config.port);
 
         let mut ftp_stream = NativeTlsFtpStream::connect(&addr)
@@ -71,6 +88,7 @@ impl FtpSession {
     }
 
     pub fn list_dir(&mut self, path: &str) -> Result<Vec<FtpEntry>, String> {
+        validate_ftp_argument(path, "path")?;
         let path = crate::sftp_native::collapse_slashes(path);
         self.stream
             .cwd(&path)
@@ -114,6 +132,7 @@ impl FtpSession {
     }
 
     pub fn download(&mut self, remote: &str, local: &str) -> Result<(), String> {
+        validate_ftp_argument(remote, "remote path")?;
         let reader = self
             .stream
             .retr_as_buffer(remote)
@@ -134,6 +153,7 @@ impl FtpSession {
     }
 
     pub fn upload(&mut self, local: &str, remote: &str) -> Result<(), String> {
+        validate_ftp_argument(remote, "remote path")?;
         let mut file =
             std::fs::File::open(local).map_err(|e| format!("Open local {}: {}", local, e))?;
 
@@ -144,6 +164,7 @@ impl FtpSession {
     }
 
     pub fn file_size(&mut self, path: &str) -> Result<u64, String> {
+        validate_ftp_argument(path, "path")?;
         self.stream
             .size(path)
             .map_err(|e| format!("SIZE {}: {}", path, e))
@@ -151,16 +172,21 @@ impl FtpSession {
     }
 
     pub fn exists(&mut self, path: &str) -> bool {
+        if validate_ftp_argument(path, "path").is_err() {
+            return false;
+        }
         self.stream.size(path).is_ok() || self.stream.cwd(path).is_ok()
     }
 
     pub fn mkdir(&mut self, path: &str) -> Result<(), String> {
+        validate_ftp_argument(path, "path")?;
         self.stream
             .mkdir(path)
             .map_err(|e| format!("MKD {}: {}", path, e))
     }
 
     pub fn remove(&mut self, path: &str, is_dir: bool) -> Result<(), String> {
+        validate_ftp_argument(path, "path")?;
         if is_dir {
             self.stream
                 .rmdir(path)
@@ -173,6 +199,8 @@ impl FtpSession {
     }
 
     pub fn rename(&mut self, from: &str, to: &str) -> Result<(), String> {
+        validate_ftp_argument(from, "source path")?;
+        validate_ftp_argument(to, "destination path")?;
         self.stream
             .rename(from, to)
             .map_err(|e| format!("RNFR {} -> {}: {}", from, to, e))
@@ -192,6 +220,26 @@ impl FtpSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ftp_arguments_reject_crlf_in_credentials_and_paths() {
+        for (field, value) in [
+            ("username", "user\nSITE EVIL"),
+            ("credential", "secret\r\nNOOP"),
+            ("path", "/incoming\nDELE important.txt"),
+        ] {
+            let error = validate_ftp_argument(value, field).unwrap_err();
+            assert!(error.contains(field));
+            assert!(error.contains("CR or LF"));
+        }
+    }
+
+    #[test]
+    fn ftp_arguments_allow_regular_credentials_and_paths() {
+        assert!(validate_ftp_argument("user@example", "username").is_ok());
+        assert!(validate_ftp_argument("p@ss word!", "credential").is_ok());
+        assert!(validate_ftp_argument("/incoming/report 01.txt", "path").is_ok());
+    }
 
     #[test]
     fn test_ftp_config_roundtrip() {

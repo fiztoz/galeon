@@ -4,11 +4,15 @@ Get from install to your first connection in a few minutes.
 
 ## Install (downloaded `.dmg`)
 
-Galeon is currently shared **privately** (not a public store download). Builds may be signed with a local development certificate, so macOS Gatekeeper can warn on first open.
+Download the `.dmg` from [GitHub Releases](https://github.com/fiztoz/galeon/releases).
+Default builds are **ad-hoc signed, not notarized**, so Gatekeeper can block first open.
 
-1. Open the DMG you were sent and drag **Galeon** to **Applications**.
-2. In **Applications**, **right-click** Galeon → **Open** → confirm **Open**.
-3. After that, normal double-click usually works for **this** install.
+1. Open the DMG and drag **Galeon** to **Applications**.
+2. In **Applications**, try **right-click** Galeon → **Open** → confirm **Open**.
+   If still blocked, after that attempt use **System Settings → Privacy & Security
+   → Open Anyway**, only if you trust this download. Never disable Gatekeeper.
+3. After that, normal double-click usually works for **this** install. A new build
+   may need approval again. See the [release guide](RELEASE_MACOS.md).
 
 When a new version arrives, replace the app the same way (no automatic updater yet).
 

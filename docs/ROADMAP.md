@@ -18,15 +18,15 @@ macOS `.dmg` artifacts produced by `.github/workflows/release.yml` are all publi
 | Do now | Still deferred |
 |--------|----------------|
 | Public repo; CI builds `.dmg` on a `v*` tag → GitHub Release | Auto-update (`tauri-plugin-updater`) — needs a trusted signing story and an availability commitment |
-| Apple Development or unsigned builds, published honestly | Paid **Developer ID** + **notarization** ($99/yr) — optional, wired to CI secrets when worth it |
+| Ad-hoc signed builds, explicitly labelled **not notarized** | Paid **Developer ID** + **notarization** — optional, enabled by signing mode and CI secrets |
 | One-time Gatekeeper step documented: right-click → **Open** | "Double-click and it just works" for strangers |
 | Product polish users actually feel | Windows/Linux public installers, docs site, benchmark PR |
 
 **The honest constraint:** a build that is not notarized still trips Gatekeeper on
 first launch for anyone who didn't build it themselves. Publishing the source and
 the artifact doesn't change that, and auto-update doesn't fix it. Until Apple
-notarization is paid for, release copy says "right-click → Open once" rather than
-implying a store-grade install.
+notarization is configured, release copy explains the per-app Gatekeeper approval
+flow in [RELEASE_MACOS.md](RELEASE_MACOS.md), rather than implying a store-grade install.
 
 Install story: download the `.dmg` from Releases → drag Galeon to Applications →
 **right-click → Open** the first time → replace the app for each new release.
@@ -144,7 +144,7 @@ and the repo states its install friction honestly.
 The public repo and CI releases already exist; what is left here is removing the
 install friction, not opening the doors.
 
-- **Developer ID** sign + **notarize** + staple macOS `.dmg` (Gatekeeper clean) — CI already picks this up when the secrets are present
+- **Developer ID** sign + **notarize** + staple macOS `.dmg` (Gatekeeper clean) — opt into `MACOS_SIGNING_MODE=developer-id` with the documented secrets
 - One stable public download name/link + short install copy (download → open → Applications → launch)
 - **Auto-updates** (`tauri-plugin-updater`) via **public** release assets *or* a private bucket/proxy — never a PAT baked into the app
 - Windows `.msi`, Linux AppImage/`.deb` if cross-platform still matters
@@ -184,7 +184,7 @@ install friction, not opening the doors.
 |----------|--------|-----------|
 | Audience | **Public** | Source repo, issues, and CI-built release artifacts are public; install friction is documented honestly rather than papered over |
 | Public installer releases | **Yes — built by CI on tag** | Supersedes the earlier "deferred" call. Artifacts come from `.github/workflows/release.yml`, never from a hand-run local script |
-| Apple paid program | Deferred, optional | Notarization is a CI secret, not a roadmap blocker. Unsigned/dev-signed builds still publish, labelled as what they are |
+| Apple paid program | Deferred, optional | Ad-hoc signed, unnotarized builds publish by default; verified Developer ID/notarization is opt-in |
 | Auto-update | Deferred | Needs trusted signatures + a feed; no update server planned. Manual download per release |
 | Update hosting later | Prefer public Releases *or* object storage | No GitHub PAT inside the app |
 | Bundle identifier | Keep `com.fizto.galeon` | It is also the keyring namespace and `app_config_dir`; renaming orphans existing users' credentials and profiles without a migration (AGENTS.md §6) |

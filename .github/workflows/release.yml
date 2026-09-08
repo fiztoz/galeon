@@ -1,199 +1,256 @@
 name: Release
 
-# Builds the macOS .dmg and publishes it to GitHub Releases.
-#
-# Tag-driven: pushing v<version> is the release action. The tag must match the
-# version in package.json / Cargo.toml / tauri.conf.json — that guard exists
-# because those three are already required to agree (AGENTS.md 3.7), and a release
-# built from a mismatched tree is a confusing artifact nobody can trace back.
-#
-# Signing is opportunistic, never assumed:
-#   APPLE_CERTIFICATE set  -> import Developer ID, sign (notarize if APPLE_ID set)
-#   APPLE_CERTIFICATE absent -> unsigned build, published and labelled unsigned
-# An unsigned macOS build still trips Gatekeeper on first open, so the release body
-# states the right-click -> Open step instead of letting users discover it, and an
-# unsigned build is never described as notarized.
-#
-# Secrets are mapped per-step via `env:` so they never land in $GITHUB_ENV or in a
-# later step's environment.
-
+# Tag-driven CI artifacts. Ad-hoc signing is the default and needs no Apple secrets.
+# Developer ID and notarization are opt-in; verify the artifact before labelling it.
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing tag to build and publish, e.g. v1.0.0-alpha.4'
+        description: 'Existing release tag, e.g. v1.0.0-alpha.3'
         required: true
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   release-macos:
     name: Build macOS .dmg
     runs-on: macos-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.value }}
+      commit: ${{ steps.metadata.outputs.commit }}
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
+      dmg: ${{ steps.bundle.outputs.dmg }}
+      signing: ${{ steps.verified.outputs.signing }}
+      notarized: ${{ steps.verified.outputs.notarized }}
+    env:
+      MACOS_SIGNING_MODE: ${{ vars.MACOS_SIGNING_MODE || 'adhoc' }}
     steps:
-      - name: Resolve the release tag
+      - name: Resolve the release tag safely
         id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_TAG: ${{ inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ inputs.tag }}"
+          set -euo pipefail
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            TAG="$DISPATCH_TAG"
           else
-            TAG="${GITHUB_REF_NAME}"
+            TAG="$GITHUB_REF_NAME"
           fi
-          case "$TAG" in
-            v*) echo "value=$TAG" >> "$GITHUB_OUTPUT" ;;
-            *) echo "::error::tag '$TAG' must start with v"; exit 1 ;;
-          esac
+          # Validate before checkout/output; never interpolate inputs into shell source.
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$ ]]; then
+            echo '::error::Invalid release tag.'
+            exit 1
+          fi
+          echo "value=$TAG" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          # A dispatch builds an *existing* tag, so check that out, not HEAD.
-          ref: ${{ steps.tag.outputs.value }}
+          ref: refs/tags/${{ steps.tag.outputs.value }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Assert the tag matches the declared versions
+      - name: Require an annotated tag on main before executing tagged code
         env:
           TAG: ${{ steps.tag.outputs.value }}
         run: |
           set -euo pipefail
-          WANT="${TAG#v}"
-          PKG=$(node -p "require('./package.json').version")
-          CARGO=$(grep -E '^version = ' src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-          CONF=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          if [ "$PKG" != "$WANT" ] || [ "$CARGO" != "$WANT" ] || [ "$CONF" != "$WANT" ]; then
-            echo "::error::tag $TAG does not match the tree (package.json=$PKG cargo=$CARGO tauri.conf=$CONF)"
-            exit 1
-          fi
-          echo "Version $WANT agrees across tag, package.json, Cargo.toml and tauri.conf.json."
+          [ "$(git cat-file -t "refs/tags/$TAG")" = tag ] || {
+            echo '::error::Release tags must be annotated.'; exit 1;
+          }
+          [ "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$(git rev-parse HEAD)" ] || {
+            echo '::error::Checkout does not match the release tag.'; exit 1;
+          }
+          git merge-base --is-ancestor HEAD refs/remotes/origin/main || {
+            echo '::error::Release commit must already be merged into main.'; exit 1;
+          }
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Validate versions and record the actual checked-out commit
+        id: metadata
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        run: python3 scripts/release-metadata.py "$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Install JS deps
+      - name: Validate signing mode
+        run: |
+          case "$MACOS_SIGNING_MODE" in
+            adhoc|developer-id) ;;
+            *) echo '::error::MACOS_SIGNING_MODE must be adhoc or developer-id.'; exit 1 ;;
+          esac
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Install JS dependencies
         run: bun install --frozen-lockfile
 
-      # Universal so a single DMG covers Apple Silicon and Intel, matching
-      # scripts/build-dmg.sh.
-      - name: Add Rust targets
+      - name: Release tooling and frontend regression tests
+        run: |
+          python3 -m unittest discover -s tests/release -v
+          bun run test:frontend
+
+      - name: Add universal Rust targets
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Unit tier must be green before bundling
-        run: cargo test --manifest-path src-tauri/Cargo.toml --lib -- --skip integrity_e2e
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- --skip integrity_e2e
 
-      - name: Import the Developer ID certificate (only when configured)
-        id: sign
+      - name: Import Developer ID certificate (opt-in only)
+        if: env.MACOS_SIGNING_MODE == 'developer-id'
+        id: signing
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [ -z "${APPLE_CERTIFICATE:-}" ]; then
-            echo "No certificate configured — this release will be UNSIGNED."
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "enabled=true" >> "$GITHUB_OUTPUT"
-          # Ephemeral, generated, throwaway keychain password: it protects nothing
-          # outside this job and is never reused or logged.
-          KC_PASS="$(openssl rand -hex 16)"
-          security create-keychain -p "$KC_PASS" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$KC_PASS" build.keychain
-          security set-keychain-settings -t 7200 build.keychain
-          printf '%s' "$APPLE_CERTIFICATE" | base64 -D -o cert.p12
-          security import cert.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASS" build.keychain
-          rm -f cert.p12
-
-      - name: Build
-        env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
-            # The same escape hatch scripts/macos-signing-preflight.sh documents.
-            APPLE_SIGNING_IDENTITY='-'
-            export APPLE_SIGNING_IDENTITY
-            echo "Building UNSIGNED (APPLE_SIGNING_IDENTITY=-)"
+          umask 077
+          [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_CERTIFICATE_PASSWORD" ] || {
+            echo '::error::Developer ID mode requires the certificate and its password.'; exit 1;
+          }
+          case "$APPLE_SIGNING_IDENTITY" in
+            'Developer ID Application: '*) ;;
+            *) echo '::error::Developer ID Application identity required.'; exit 1 ;;
+          esac
+          if [ -n "$APPLE_ID$APPLE_PASSWORD$APPLE_TEAM_ID" ]; then
+            [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ] || {
+              echo '::error::Configure all three notarization secrets or none.'; exit 1;
+            }
+            echo 'notarize=true' >> "$GITHUB_OUTPUT"
           else
-            echo "Building signed as $APPLE_SIGNING_IDENTITY"
-            [ -n "${APPLE_ID:-}" ] && echo "Notarization requested." || echo "Signed but NOT notarized."
+            echo 'notarize=false' >> "$GITHUB_OUTPUT"
           fi
-          bun run tauri build --target universal-apple-darwin
+          KEYCHAIN="$RUNNER_TEMP/galeon-build.keychain-db"
+          CERT="$RUNNER_TEMP/galeon-signing.p12"
+          trap 'rm -f "$CERT"' EXIT
+          KC_PASS="$(openssl rand -hex 32)"
+          security create-keychain -p "$KC_PASS" "$KEYCHAIN"
+          security unlock-keychain -p "$KC_PASS" "$KEYCHAIN"
+          security set-keychain-settings -t 7200 "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 -D -o "$CERT"
+          security import "$CERT" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security >/dev/null
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASS" "$KEYCHAIN" >/dev/null
 
-      - name: Collect artifacts and checksums
+      - name: Build ad-hoc signed app (default; no Apple secrets)
+        if: env.MACOS_SIGNING_MODE == 'adhoc'
+        env:
+          APPLE_SIGNING_IDENTITY: '-'
+        run: bun run tauri build --target universal-apple-darwin -- --locked
+
+      - name: Build Developer ID signed app (opt-in)
+        if: env.MACOS_SIGNING_MODE == 'developer-id'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bun run tauri build --target universal-apple-darwin -- --locked
+
+      - name: Verify artifact signature and requested notarization
+        id: verified
+        env:
+          NOTARIZE: ${{ steps.signing.outputs.notarize || 'false' }}
+        run: |
+          bash scripts/verify-macos-release.sh \
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/Galeon.app \
+            "$MACOS_SIGNING_MODE" "$NOTARIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Collect artifact and checksum
         id: bundle
         run: |
           set -euo pipefail
+          shopt -s nullglob
+          files=(src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          [ "${#files[@]}" -eq 1 ] || { echo '::error::Expected exactly one release DMG.'; exit 1; }
           mkdir -p out
-          DMG=$(find src-tauri/target -name '*.dmg' -path '*/bundle/dmg/*' | head -1)
-          [ -n "$DMG" ] || { echo "::error::the build produced no .dmg"; exit 1; }
-          cp "$DMG" out/
-          ( cd out && shasum -a 256 ./*.dmg > SHA256SUMS )
-          echo "dmg=$(basename "$DMG")" >> "$GITHUB_OUTPUT"
-          echo "Built $(basename "$DMG") — $(du -h out/*.dmg | cut -f1)"
+          cp "${files[0]}" out/
+          (cd out && shasum -a 256 ./*.dmg > SHA256SUMS)
+          echo "dmg=$(basename "${files[0]}")" >> "$GITHUB_OUTPUT"
 
-      - name: Publish the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.tag.outputs.value }}
-          DMG: ${{ steps.bundle.outputs.dmg }}
-          SIGNED: ${{ steps.sign.outputs.enabled }}
-        run: |
-          set -euo pipefail
-          if [ "$SIGNED" = "true" ]; then
-            STATUS="**Signed** with the maintainer's Apple Developer ID. Notarization is applied only when the notarization secrets are configured; if they are not, Gatekeeper can still prompt on first open."
-          else
-            STATUS="**Unsigned and not notarized** — no Apple Developer ID is configured for CI. Gatekeeper will block a normal first open, so use the right-click step below. Say so rather than letting people discover it."
-          fi
-          printf '%s\n' \
-            "## Galeon ${TAG}" \
-            "" \
-            "${STATUS}" \
-            "" \
-            "### Install (macOS)" \
-            "" \
-            "1. Download \`${DMG}\` below." \
-            "2. Open the DMG and drag **Galeon** into **Applications**." \
-            "3. First launch: **right-click Galeon → Open**, then confirm **Open**." \
-            "" \
-            "Every later launch is a normal double-click." \
-            "" \
-            "Verify the download with \`shasum -a 256 -c SHA256SUMS\`." \
-            "" \
-            "### Provenance" \
-            "" \
-            "- Commit: \`${GITHUB_SHA}\`" \
-            "- Build: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            "- Built by CI; no manual step produced this artifact." \
-            "" \
-            "### Feedback" \
-            "" \
-            "Bugs and requests go to [issues](${{ github.server_url }}/${{ github.repository }}/issues)." \
-            "" \
-            "Please report security problems privately — see [SECURITY.md](${{ github.server_url }}/${{ github.repository }}/blob/main/SECURITY.md)." \
-            > notes.md
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --notes-file notes.md
-            gh release upload "$TAG" out/* --clobber
-          else
-            gh release create "$TAG" out/* --title "Galeon ${TAG}" --notes-file notes.md
-          fi
-
-      - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: galeon-dmg-${{ steps.tag.outputs.value }}
           path: out/*
           if-no-files-found: error
+
+      - name: Remove temporary signing keychain
+        if: always() && env.MACOS_SIGNING_MODE == 'developer-id'
+        run: |
+          rm -f "$RUNNER_TEMP/galeon-signing.p12"
+          if [ -f "$RUNNER_TEMP/galeon-build.keychain-db" ]; then
+            security delete-keychain "$RUNNER_TEMP/galeon-build.keychain-db"
+          fi
+
+  publish:
+    name: Publish verified macOS artifact
+    needs: release-macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # No source checkout or dependency execution in the write-capable job.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: galeon-dmg-${{ needs.release-macos.outputs.tag }}
+          path: out
+
+      - name: Verify downloaded artifact checksum
+        working-directory: out
+        run: sha256sum -c SHA256SUMS
+
+      - name: Publish release with verified metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.release-macos.outputs.tag }}
+          COMMIT: ${{ needs.release-macos.outputs.commit }}
+          PRERELEASE: ${{ needs.release-macos.outputs.prerelease }}
+          DMG: ${{ needs.release-macos.outputs.dmg }}
+          SIGNING: ${{ needs.release-macos.outputs.signing }}
+          NOTARIZED: ${{ needs.release-macos.outputs.notarized }}
+        run: |
+          set -euo pipefail
+          if [ "$SIGNING" = adhoc ]; then
+            STATUS='**Ad-hoc signed, not notarized.** This signature does not establish a verified developer identity. Gatekeeper may block first launch.'
+          elif [ "$NOTARIZED" = true ]; then
+            STATUS='**Developer ID signed and notarized.** The app signature and stapled notarization ticket were verified by CI.'
+          else
+            STATUS='**Developer ID signed, not notarized.** Gatekeeper may still block first launch.'
+          fi
+          BASE="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          printf '%s\n' \
+            "## Galeon $TAG" '' "$STATUS" '' \
+            '### Install (macOS)' '' \
+            "1. Download \`$DMG\` below." \
+            '2. Open the DMG and drag **Galeon** into **Applications**.' \
+            '3. For an unnotarized build, try **right-click Galeon → Open** once. If macOS still blocks it, after the blocked attempt use **System Settings → Privacy & Security → Open Anyway**, only if you trust this download.' \
+            '4. Later launches of this approved build normally use double-click. A new build may require approval again.' '' \
+            'See [Apple’s guidance](https://support.apple.com/en-us/102445). Do not disable Gatekeeper or bypass a malware/damaged-app warning.' '' \
+            'Verify the download with `shasum -a 256 -c SHA256SUMS`.' '' \
+            '### Provenance' '' \
+            "- Commit: \`$COMMIT\`" \
+            "- Build: $BASE/actions/runs/$GITHUB_RUN_ID" \
+            '- Built by CI from the release tag.' '' \
+            "Report bugs through [issues]($BASE/issues); report vulnerabilities privately via [SECURITY.md]($BASE/blob/main/SECURITY.md)." \
+            > notes.md
+          args=()
+          if [ "$PRERELEASE" = true ]; then args+=(--latest=false); fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file notes.md --prerelease="$PRERELEASE" "${args[@]}"
+            gh release upload "$TAG" out/* --clobber
+          else
+            gh release create "$TAG" out/* --verify-tag --title "Galeon $TAG" \
+              --notes-file notes.md --prerelease="$PRERELEASE" "${args[@]}"
+          fi

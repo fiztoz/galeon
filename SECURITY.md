@@ -42,10 +42,10 @@ setting to live with.
 - Galeon is not a sandbox. It is a normal user-level desktop app: anything with your
   user permissions can read what you can read. It does not defend against a machine
   that is already compromised.
-- Distribution is by build-from-source or a downloaded `.dmg`. Builds that are only
-  signed with an *Apple Development* certificate are not notarized, so Gatekeeper
-  will prompt on first launch. That is a consequence of not paying for the Apple
-  Developer Program, not a vulnerability to report. See
+- Distribution is by build-from-source or a CI-built `.dmg`. The default is
+  **ad-hoc signed, not notarized**: no developer identity is authenticated, and
+  Gatekeeper may block first launch. CI verifies the artifact before describing
+  its signing status. Developer ID and notarization are optional; see
   [docs/RELEASE_MACOS.md](docs/RELEASE_MACOS.md).
 
 ## Reporting a vulnerability
@@ -63,6 +63,19 @@ Please do not open a public issue describing an exploitable secret-handling or
 path-traversal flaw. Path traversal in sync/import is covered by tests
 (`test_tier2_b14_path_traversal_safety`); if you find a way past it, that is worth a
 private report.
+
+## Dependency and secret scanning
+
+CI scans the fetched Git history with checksum-pinned Gitleaks and redacts matches.
+The separate **Dependency security** workflow runs weekly and on demand, with
+RustSec (`cargo audit`) and `bun audit`. It fails visibly on advisories; passing
+application tests is not a clean security audit, and no blanket ignore list is used.
+Dependabot proposes updates but never merges them automatically.
+
+The older OpenDAL/reqsign XML stack and Linux GTK dependencies still need upstream
+advisory review. Do not interpret platform-specific maintenance warnings as macOS
+exploits, or dismiss XML-parser findings merely because the application compiles.
+Review the latest advisory output and actual call paths before shipping a release.
 
 ## Expectations
 

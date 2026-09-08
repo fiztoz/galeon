@@ -36,7 +36,7 @@ case "${1:-}" in
     else
       docker rm "$NAME" >/dev/null 2>&1 || true
       docker run -d --name "$NAME" --network "$NET" \
-        -p 9000:9000 -p 9001:9001 \
+        -p 127.0.0.1:9000:9000 -p 127.0.0.1:9001:9001 \
         -e MINIO_ROOT_USER="$ACCESS_KEY" -e MINIO_ROOT_PASSWORD="$SECRET_KEY" \
         -v "$VOLUME":/data \
         "$MINIO_IMAGE" server /data --console-address ':9001' >/dev/null

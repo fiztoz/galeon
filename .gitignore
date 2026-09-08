@@ -26,3 +26,28 @@ dist-ssr
 reports
 # Local task/handoff notes — never publish (AGENTS.md §5 forbids task dumps in-repo)
 .handoff/
+
+# Local credentials and signing material (examples remain publishable).
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.p12
+*.pfx
+*.key
+*.pem
+id_rsa
+id_ed25519
+*.keychain
+*.keychain-db
+
+# Portable profile exports may contain explicitly exported secrets.
+*.galeon.profiles.json
+galeon-profiles*.json
+*.galeon.profiles
+
+# Local release artifacts and Python tooling caches.
+/out/
+/notes.md
+__pycache__/
+*.pyc

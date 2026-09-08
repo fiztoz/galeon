@@ -1,7 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-source "$(dirname "$0")/macos-signing-preflight.sh"
+# Ad-hoc signing needs no certificate or keychain changes.
+export APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
 
 PKG_VERSION=$(node -p "require('./package.json').version")
 CARGO_VERSION=$(grep -E '^version = ' src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
@@ -21,8 +22,5 @@ echo "Ensure you have the required targets installed via rustup:"
 echo "  rustup target add aarch64-apple-darwin x86_64-apple-darwin"
 echo ""
 
-ensure_macos_signing_chain
-
-bun install
-bun run build
-bun tauri build --target universal-apple-darwin
+bun install --frozen-lockfile
+bun tauri build --target universal-apple-darwin -- --locked
