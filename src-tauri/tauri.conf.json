@@ -45,7 +45,8 @@
   "bundle": {
     "active": true,
     "targets": [
-      "dmg"
+      "dmg",
+      "nsis"
     ],
     "category": "DeveloperTool",
     "copyright": "Copyright \u00a9 2026 Galeon Authors",

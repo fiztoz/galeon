@@ -99,6 +99,26 @@ jobs:
       - name: Cargo test (unit tier; MinIO e2e runs on Linux)
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- --skip integrity_e2e
 
+  backend-windows:
+    name: Rust suite (Windows)
+    runs-on: windows-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: src-tauri
+
+      # ssh2/sftp use vendored-openssl, which compiles OpenSSL from source on
+      # Windows and needs Perl; windows-latest ships Strawberry Perl.
+      # Compile-gate only: the raw debug test binary hits a VC-runtime entrypoint
+      # mismatch on the runner (0xc0000139 STATUS_ENTRYPOINT_NOT_FOUND), so the
+      # unit tier runs on Linux + macOS while Windows verifies it compiles.
+      - name: Cargo test compile (unit tier runs on Linux + macOS)
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --no-run
+
   secrets:
     name: Secret scan (history)
     runs-on: ubuntu-latest

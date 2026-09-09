@@ -18,7 +18,7 @@
 // private imports, which keeps 30 files from each repeating the same nine lines.
 // Trade-off: deleting one here breaks the crate somewhere else, not here.
 use futures_util::TryStreamExt;
-use opendal::{services::Sftp, Operator};
+use opendal::Operator;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};

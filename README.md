@@ -48,7 +48,7 @@ Rust + Tauri + React, built as a modern alternative to Cyberduck and Transmit.<b
 
 ## Platform support
 
-**macOS is the shipping, tested target** (Apple Silicon and universal `.dmg`). The code is cross-platform Rust + Tauri and Linux/Windows are not deliberately broken, but they are not built, signed, or regression-tested here — treat them as best-effort until someone steps up to own them. CI runs the Rust suite on both Linux and macOS.
+**macOS is the primary shipping target** (Apple Silicon + Intel universal `.dmg`; ad-hoc signed by default, Developer ID optional). **Windows** is built and unit-tested in CI and ships an **unsigned** NSIS `.exe` installer. **Linux** is compiled and runs the MinIO transfer-integrity e2e tier in CI but has no release package. CI runs the Rust unit tier on Linux, macOS, and Windows.
 
 ## Install (macOS)
 
@@ -58,11 +58,21 @@ not notarized**. Try **right-click → Open** once; if macOS still blocks the ap
 follow the [first-launch guidance](docs/RELEASE_MACOS.md#install-a-downloaded-release).
 No Apple account or Terminal workaround is required to install.
 
+## Install (Windows)
+
+Download the `.exe` installer from [Releases](https://github.com/fiztoz/galeon/releases)
+and run it. Windows builds are **unsigned**, so SmartScreen may warn on first run —
+choose **More info → Run anyway** only if you trust the download, and verify the
+`SHA256SUMS` file published alongside the installer.
+
 ## Development
 
-Install **Rust 1.94.1+ / Cargo**, **Bun**, **Node.js 22.12+** (or a compatible newer
-release), and macOS **Xcode Command Line Tools** first. Python 3.11+ runs the release
-tooling tests; Docker is only needed for MinIO integration tests. See
+Install **Rust 1.94.1+ / Cargo**, **Bun**, and **Node.js 22.12+** (or a compatible newer
+release) first. On macOS you also need **Xcode Command Line Tools**; on Windows use
+the **MSVC** Rust toolchain with **VS Build Tools**, the **WebView2 Runtime**, and
+**Strawberry Perl** (needed to compile the vendored OpenSSL in the SFTP/SSH stack).
+Python 3.11+ runs the release tooling tests; Docker is only needed for MinIO
+integration tests. See
 [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for OS setup.
 
 ```sh
@@ -70,7 +80,8 @@ git clone https://github.com/fiztoz/galeon.git
 cd galeon
 bun install --frozen-lockfile
 bun run tauri dev                 # run the app
-./scripts/build-dmg-silicon.sh     # local ad-hoc signed bundle
+./scripts/build-dmg-silicon.sh     # local ad-hoc signed macOS bundle
+bun run tauri build                # Windows: produces the NSIS .exe installer
 ```
 
 Checks and tests:
@@ -95,11 +106,12 @@ This is a hobby project on a hobby schedule. Open an issue before taking on anyt
 
 Galeon is [MIT licensed](LICENSE). It ships with no warranty and no telemetry.
 
-### macOS releases
+### Releases
 
-Pushing a matching `v*` tag builds the universal `.dmg` in CI. **Ad-hoc signing is
-the default and needs no Apple secrets**; Developer ID and notarization are optional.
-See [docs/RELEASE_MACOS.md](docs/RELEASE_MACOS.md) for the release checklist,
+Pushing a matching `v*` tag builds the universal `.dmg` and the Windows `.exe`
+installer in CI. macOS is **ad-hoc signed by default and needs no Apple secrets**;
+Developer ID and notarization are optional. Windows installers are **unsigned**.
+See [docs/RELEASE_MACOS.md](docs/RELEASE_MACOS.md) for the macOS release checklist,
 repository setup, and artifact verification.
 
 Stack: Tauri v2 · Rust (tokio + [OpenDAL](https://opendal.apache.org)) · React + TypeScript · TailwindCSS · Bun.

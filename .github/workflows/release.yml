@@ -193,12 +193,99 @@ jobs:
             security delete-keychain "$RUNNER_TEMP/galeon-build.keychain-db"
           fi
 
+  release-windows:
+    name: Build Windows NSIS installer
+    runs-on: windows-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.value }}
+      setup: ${{ steps.bundle.outputs.setup }}
+    steps:
+      - name: Resolve the release tag safely
+        id: tag
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            TAG="$DISPATCH_TAG"
+          else
+            TAG="$GITHUB_REF_NAME"
+          fi
+          # Validate before checkout/output; never interpolate inputs into shell source.
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$ ]]; then
+            echo '::error::Invalid release tag.'
+            exit 1
+          fi
+          echo "value=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ steps.tag.outputs.value }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Windows jobs default to PowerShell; the gesture checks below need bash.
+      - name: Require an annotated tag on main before executing tagged code
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          set -euo pipefail
+          [ "$(git cat-file -t "refs/tags/$TAG")" = tag ] || {
+            echo '::error::Release tags must be annotated.'; exit 1;
+          }
+          [ "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$(git rev-parse HEAD)" ] || {
+            echo '::error::Checkout does not match the release tag.'; exit 1;
+          }
+          git merge-base --is-ancestor HEAD refs/remotes/origin/main || {
+            echo '::error::Release commit must already be merged into main.'; exit 1;
+          }
+
+      - name: Validate versions against the release tag
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        run: python scripts/release-metadata.py "$TAG"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Compile unit tier before bundling
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib --no-run
+
+      - name: Build the unsigned Windows installer
+        run: bun run tauri build -- --locked
+
+      - name: Collect installer and checksum
+        id: bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(src-tauri/target/release/bundle/nsis/*.exe)
+          [ "${#files[@]}" -eq 1 ] || { echo '::error::Expected exactly one Windows installer.'; exit 1; }
+          mkdir -p out
+          cp "${files[0]}" out/
+          (cd out && sha256sum ./*.exe > SHA256SUMS)
+          echo "setup=$(basename "${files[0]}")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: galeon-windows-${{ steps.tag.outputs.value }}
+          path: out/*
+          if-no-files-found: error
+
   publish:
-    name: Publish verified macOS artifact
-    needs: release-macos
+    name: Publish verified release artifacts
+    needs: [release-macos, release-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
     steps:
       # No source checkout or dependency execution in the write-capable job.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -206,9 +293,46 @@ jobs:
           name: galeon-dmg-${{ needs.release-macos.outputs.tag }}
           path: out
 
-      - name: Verify downloaded artifact checksum
+      - name: Verify downloaded macOS artifact checksum
         working-directory: out
         run: sha256sum -c SHA256SUMS
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: galeon-windows-${{ needs.release-windows.outputs.tag }}
+          path: out-windows
+
+      - name: Verify downloaded Windows artifact checksum
+        working-directory: out-windows
+        run: sha256sum -c SHA256SUMS
+
+      # Keyless (Sigstore) signing happens once, here on a pinned linux binary,
+      # so the same identity signs both macOS and Windows artifacts and we don't
+      # hand-roll arch-detection on the macOS runner. id-token: write provides
+      # the ambient OIDC token that cosign uses to mint an ephemeral Fulcio cert.
+      - name: Install Cosign (checksum-pinned)
+        env:
+          COSIGN_VERSION: v3.1.3
+          COSIGN_SHA256: 4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64" -o "$RUNNER_TEMP/cosign"
+          echo "${COSIGN_SHA256}  $RUNNER_TEMP/cosign" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/cosign"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Sign artifacts with Sigstore (keyless)
+        env:
+          DMG: ${{ needs.release-macos.outputs.dmg }}
+          SETUP: ${{ needs.release-windows.outputs.setup }}
+        run: |
+          set -euo pipefail
+          cosign sign-blob --yes --bundle "out/$DMG.sigstore.json" "out/$DMG"
+          cosign sign-blob --yes --bundle "out-windows/$SETUP.sigstore.json" "out-windows/$SETUP"
+          # Release uploads are flat; merge both manifests so one SHA256SUMS at
+          # the release root covers the .dmg and the .exe without a name clash.
+          cat out-windows/SHA256SUMS >> out/SHA256SUMS
+          rm -f out-windows/SHA256SUMS
 
       - name: Publish release with verified metadata
         env:
@@ -218,6 +342,7 @@ jobs:
           COMMIT: ${{ needs.release-macos.outputs.commit }}
           PRERELEASE: ${{ needs.release-macos.outputs.prerelease }}
           DMG: ${{ needs.release-macos.outputs.dmg }}
+          SETUP: ${{ needs.release-windows.outputs.setup }}
           SIGNING: ${{ needs.release-macos.outputs.signing }}
           NOTARIZED: ${{ needs.release-macos.outputs.notarized }}
         run: |
@@ -238,7 +363,13 @@ jobs:
             '3. For an unnotarized build, try **right-click Galeon → Open** once. If macOS still blocks it, after the blocked attempt use **System Settings → Privacy & Security → Open Anyway**, only if you trust this download.' \
             '4. Later launches of this approved build normally use double-click. A new build may require approval again.' '' \
             'See [Apple’s guidance](https://support.apple.com/en-us/102445). Do not disable Gatekeeper or bypass a malware/damaged-app warning.' '' \
-            'Verify the download with `shasum -a 256 -c SHA256SUMS`.' '' \
+            '### Install (Windows)' '' \
+            "1. Download \`$SETUP\` below and run it." \
+            '2. The installer is **unsigned**; Windows SmartScreen may warn. Choose **More info → Run anyway** only if you trust this download.' '' \
+            'The release ships one `SHA256SUMS` covering every artifact; verify with `sha256sum -c SHA256SUMS`.' '' \
+            '### Verify with Sigstore' '' \
+            'Every artifact is keyless-signed through Sigstore. Each `.sigstore.json` bundle holds the signature, certificate, and Rekor transparency-log entry.' '' \
+            '  cosign verify-blob --bundle FILE.sigstore.json --certificate-identity-regexp "https://github.com/fiztoz/galeon/.github/workflows/release.yml@refs/.*" --certificate-oidc-issuer https://token.actions.githubusercontent.com FILE' '' \
             '### Provenance' '' \
             "- Commit: \`$COMMIT\`" \
             "- Build: $BASE/actions/runs/$GITHUB_RUN_ID" \
@@ -249,8 +380,8 @@ jobs:
           if [ "$PRERELEASE" = true ]; then args+=(--latest=false); fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --notes-file notes.md --prerelease="$PRERELEASE" "${args[@]}"
-            gh release upload "$TAG" out/* --clobber
+            gh release upload "$TAG" out/* out-windows/* --clobber
           else
-            gh release create "$TAG" out/* --verify-tag --title "Galeon $TAG" \
+            gh release create "$TAG" out/* out-windows/* --verify-tag --title "Galeon $TAG" \
               --notes-file notes.md --prerelease="$PRERELEASE" "${args[@]}"
           fi

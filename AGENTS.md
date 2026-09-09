@@ -204,9 +204,10 @@ release artifacts are all public. There is no private-distribution tier and no
 separate internal channel.
 
 **Releases are built in CI, not by hand.** Pushing a `v*` tag runs
-`.github/workflows/release.yml`, which builds the macOS `.dmg` bundle and attaches
-it to a GitHub Release. Don't ship by running a local script and pasting a file
-somewhere; tag it and let CI produce the artifact.
+`.github/workflows/release.yml`, which builds the macOS `.dmg` and an unsigned
+Windows `.exe` installer and attaches them to a GitHub Release. Don't ship by
+running a local script and pasting a file somewhere; tag it and let CI produce
+the artifact.
 
 ### Reality check (macOS)
 

@@ -232,6 +232,7 @@ mod tests {
         let real_file = root.join("real.txt");
         fs::write(&real_file, b"data").unwrap();
 
+        #[cfg(unix)]
         let link = root.join("link.txt");
         #[cfg(unix)]
         {

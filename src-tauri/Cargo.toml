@@ -23,14 +23,13 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["rt"] }
-opendal = { version = "0.59", features = ["services-s3", "services-sftp", "executors-tokio", "layers-throttle"] }
+opendal = { version = "0.59", features = ["services-s3", "executors-tokio", "layers-throttle"] }
 ssh2 = { version = "0.9", features = ["vendored-openssl"] }
 suppaftp = { version = "^11.0.0", features = ["native-tls"] }
 uuid = { version = "1.8", features = ["v4", "serde"] }
 futures-util = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 glob = "0.3"
-keyring = { version = "3", features = ["apple-native", "sync-secret-service"] }
 lazy_static = "1.5.0"
 md5 = "0.8"
 dirs = "5.0"
@@ -47,6 +46,19 @@ urlencoding = "2"
 # client converts into ReqwestTransport without a second HTTP stack.
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "stream", "charset"] }
 opendal-http-transport-reqwest = "0.59"
+
+# keyring enables exactly one native credential store per OS. Unconditionally
+# listing apple-native + sync-secret-service would drop Linux's dbus stack into
+# Windows builds and leave Windows with no store (keyring then falls back to its
+# in-memory mock, so saved credentials would silently vanish between runs).
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service"] }
 
 [dev-dependencies]
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
