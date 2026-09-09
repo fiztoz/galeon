@@ -5,13 +5,34 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
+    groups:
+      # Actions majors (e.g. checkout v4->v7) have been trivial bump-and-pass
+      # in this repo, so batch them into one PR instead of one per action.
+      actions:
+        patterns:
+          - "*"
   - package-ecosystem: cargo
     directory: /src-tauri
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
+    groups:
+      # Non-breaking Rust updates ride together; majors stay solo so one
+      # breaking bump can't hold the rest hostage.
+      rust-minor-patch:
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: bun
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
+    groups:
+      # Same shape as cargo; also keeps coupled bumps (e.g. tailwindcss +
+      # @tailwindcss/vite, which share bun.lock lines) in a single PR so
+      # they can't conflict with each other.
+      js-minor-patch:
+        update-types:
+          - minor
+          - patch
