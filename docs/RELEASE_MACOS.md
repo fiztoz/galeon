@@ -86,32 +86,29 @@ CLI command arguments or commit exported certificates.
 
 ## GitHub repository safeguards
 
-Before making the repository public:
+Completed when the repository went public (verified 2026-09-09):
 
-- Enable Dependabot alerts/security-fix PRs. `.github/dependabot.yml` also schedules
-  weekly Actions, Cargo, and Bun updates once merged into the default branch.
-- Keep default Actions token permissions **read-only** and disallow Actions from
-  approving PR reviews. Only the isolated publication job requests `contents: write`;
-  the build job has no repository write token.
-- Review the clean, redacted Gitleaks history scan in CI. `.gitignore` prevents
+- Dependabot alerts and security-fix PRs are on; `.github/dependabot.yml` schedules
+  weekly Actions, Cargo, and Bun updates on the default branch (minor/patch grouped,
+  majors solo).
+- Release workflow permissions default to `contents: read`. Only the isolated
+  publication job requests `contents: write`, with no source checkout or dependency
+  execution in the write-capable job.
+- CI runs the clean, redacted Gitleaks history scan. `.gitignore` prevents
   common accidental additions but is not a substitute for scanning/review.
-
-Some controls are unavailable on a free private repository. **After intentionally
-changing visibility**, enable and verify:
-
-- Private vulnerability reporting, as promised in `SECURITY.md`.
-- Secret scanning and push protection where available, without opting into paid
-  features unintentionally.
+- Private vulnerability reporting is on, as promised in `SECURITY.md`.
+- Secret scanning is on (zero open alerts); push protection where available, without
+  opting into paid features unintentionally.
 - Protection for `main`: required CI checks, no force pushes/deletion, and PR-based
   changes. A solo maintainer can require zero approving reviews while still requiring
   green checks. Required check names: `Lint (fmt + types)`, `Rust suite (Linux + MinIO
   e2e)`, `Rust suite (macOS)`, `Frontend build`, and `Secret scan (history)`.
-- Protect `v*` tags against unauthorized creation, updates, and deletion. The workflow
+- `v*` tags are protected against unauthorized creation, updates, and deletion. The workflow
   also requires annotated tags whose commits are already on `main`, but repository
   rules protect the workflow itself from modification by an untrusted tag writer.
 - Approval for **all external contributors'** fork workflows.
-- Full-SHA pinning enforcement **after** the pinned workflows are on `main`; enabling
-  it while older tag-based Actions references remain would block those runs.
+- Full-SHA pinning is enforced (`sha_pinning_required`); every workflow reference is
+  a pinned SHA, so no older tag-based reference remains to be blocked.
 
 These settings are repository administration, not files in Git. Changing the repo's
 visibility or transferring it is a separate, explicit action. Keep the bundle id

@@ -47,17 +47,17 @@ The smallest thing that floats. Already done:
 - Search, quick filters, column sorting
 - Verified: 60 fps under load, < 150 MB RAM, no binary data over IPC
 
-## v0.2 — Sloop · *Bulletproof transfers*
+## ✅ v0.2 — Sloop · *Bulletproof transfers*
 
-Make the transfer engine the best part of the product before widening anything.
+The transfer engine grew up before anything widened. All landed:
 
-- **Multipart / parallel-chunk** uploads & downloads (saturate the line on big files)
-- **Pause / resume / cancel** per transfer; auto-**retry with backoff** on network blips
-- **Persistent queue** — transfers survive app restart
-- Conflict policy on collision: overwrite / skip / rename, with "apply to all"
-- Copy & move objects between folders; single-file rename polish
-- Optional checksum verification after transfer
-- Bandwidth limit setting (per direction)
+- ✅ **Multipart / parallel-chunk** uploads & downloads (concurrent chunks)
+- ✅ **Pause / resume / cancel** per transfer; auto-**retry with backoff** on network blips
+- ✅ **Persistent queue** — transfers survive app restart
+- ✅ Conflict policy on collision: overwrite / skip / rename, with "apply to all"
+- ✅ Copy & move objects between folders; Move/Copy share one destination dialog
+- ✅ Checksum verification after transfer (MD5 + multipart ETag reconstruction)
+- ✅ Bandwidth rules, including off-peak schedules
 
 *Definition of done:* yank the Wi-Fi mid-100GB-upload, reconnect, and the queue finishes without user action.
 
@@ -65,30 +65,23 @@ Make the transfer engine the best part of the product before widening anything.
 
 Cash in the OpenDAL bet — generalize the connection model from "S3 profile" to "storage profile."
 
-- **SFTP** and **FTP/FTPS** (the Cyberduck-parity must-haves) — largely in tree; keep hardening
+- ✅ **SFTP** and **FTP/FTPS** (the Cyberduck-parity must-haves) — in tree, with native password/key session tests and `~/.ssh/config` import
 - **WebDAV**, **Azure Blob**, **Google Cloud Storage**, **Backblaze B2 native** — still open
-- **Provider presets**: AWS / Cloudflare R2 / MinIO / Wasabi / B2 pre-fill endpoint quirks
-- Protocol-agnostic capabilities model (e.g. presign hidden where unsupported)
+- **Provider presets**: AWS / Cloudflare R2 / MinIO / Wasabi / B2 pre-fill endpoint quirks — still open
+- ✅ Protocol-agnostic capabilities model (`ProtocolCapabilities` travels with the profile)
 
 *Definition of done:* a Cyberduck user can migrate their five most-used bookmarks in five minutes.
 
-## v0.4 — Frigate · *Power UX*
+## ✅ v0.4 — Frigate · *Power UX* *(complete except in-pane drag — see v0.9 notes)*
 
 The release that makes people switch and stay.
 
-- **Edit in external editor**: open remote file, watch for saves, auto re-upload
-- **Quick preview** pane: images, text/code, basic media metadata
-- **Command palette** (⌘K): jump to profile, path, or action
-- 🚧 **Dual-pane mode**: local ⇄ remote side by side — *first increment landed:*
-  `LocalPane` beside the remote Explorer (⌥⌘L / toolbar / ⌘K), local→remote
-  upload and remote→local "Download here", toggle + last directory persisted in
-  `app_settings.json`. Still open: resizable split, drag between panes.
+- ✅ **Edit in external editor**: open remote file, watch for saves, auto re-upload
+- ✅ **Quick preview** pane: images, text, PDFs inline, plus object metadata in the inspector
+- ✅ **Command palette** (⌘K): jump to profile, path, or action
+- ✅ **Dual-pane mode**: local ⇄ remote side by side — `LocalPane` beside the remote Explorer (⌥⌘L / toolbar / ⌘K), local→remote upload and remote→local "Download here", toggle + last directory persisted in `app_settings.json`, **resizable split** (`SplitPane`: pointer drag, keyboard-operable separator, snap-to-collapse, double-click reset, ratio persisted). Still open: drag *between* the panes (deliberately not built — see v0.9).
 - ✅ Light theme (System / Dark / Light, follows macOS live) — see DESIGN.md §2
-- Complete keyboard navigation; object properties inspector
-
-*(Much of this already landed; dual-pane is partially landed — the local pane, its
-layout toggle, and both transfer directions are in, the resizable split and
-drag-between-panes are not.)*
+- ✅ Keyboard navigation; object properties inspector
 
 ## ✅ v0.5 — Carrack · *Sync & integrity* *(Phases 11–12 complete)*
 
@@ -111,7 +104,7 @@ Stability and UX good enough to publish.
 - Transfer auto-retry + backoff; conflict skip/overwrite/rename; multipart concurrent chunks ✅
 - Explorer / connection polish: neutral S3 defaults, reliable double-click connect, empty-state CTAs, clearer errors ✅
 - **CI gate** — fmt, clippy `-D warnings`, the Rust suite, tsc, Vite build ✅
-- **Architecture pass** — `lib.rs` 7,176 → ~180 lines; commands split into 17 feature modules ✅
+- **Architecture pass** — `lib.rs` 7,176 → ~180 lines; commands split into 18 feature modules ✅
 - **Dual-pane browser** (local ⇄ remote) first increment ✅
 - **Light theme** (system / dark / light) ✅
 - **Resizable dual-pane split** (`SplitPane`) — pointer drag, keyboard-operable
@@ -133,8 +126,7 @@ Stability and UX good enough to publish.
   remote" in the local pane, "Download here" plus dialog-free batch download in the
   remote pane. Revisit only with a plan to keep OS drops (e.g. route internal drags
   through app state instead of HTML5 DnD).
-- Finish v0.4's dual-pane: the local pane, layout toggle, and both transfer
-  directions are in; the resizable split and drag-between-panes are not
+- Dual-pane is done except drag *between* the panes (see above). Revisit only with a plan to keep OS drops.
 
 *Definition of done:* a stranger can clone or download, use Galeon for real work,
 and the repo states its install friction honestly.

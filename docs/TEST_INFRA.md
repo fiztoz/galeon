@@ -68,7 +68,7 @@ High-complexity scenarios simulating production workloads.
 
 ## Running the Suite
 
-To run all 189 tests (125 unit + 64 integrity e2e):
+To run all 206 tests (142 unit + 64 integrity e2e):
 
 ```bash
 # Run all tests
