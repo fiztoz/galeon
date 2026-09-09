@@ -23,7 +23,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["rt"] }
-opendal = { version = "0.59", features = ["services-s3", "services-sftp", "executors-tokio", "layers-throttle"] }
+opendal = { version = "0.59", features = ["services-s3", "executors-tokio", "layers-throttle"] }
 ssh2 = { version = "0.9", features = ["vendored-openssl"] }
 suppaftp = { version = "^11.0.0", features = ["native-tls"] }
 uuid = { version = "1.8", features = ["v4", "serde"] }

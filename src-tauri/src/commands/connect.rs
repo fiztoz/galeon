@@ -141,44 +141,14 @@ pub async fn connect_storage(
             let tunneled_known_host_port =
                 ssh_tunnel.as_ref().map(|tunnel| tunnel.destination_port());
 
-            // A supplied password is authoritative even when an older profile still
-            // carries a key path. This makes password auth an explicit first-class path.
-            match (&password, &profile.key_path) {
-                // Password-based auth: use native ssh2.
-                (Some(pw), _) if !pw.is_empty() => {
-                    let config = sftp_native::NativeSftpConfig {
-                        host: host.to_string(),
-                        port,
-                        username: username.to_string(),
-                        credential: Some(pw.clone()),
-                        key_path: None,
-                        known_host: tunneled_known_host,
-                        known_host_port: tunneled_known_host_port,
-                    };
-
-                    let session = tokio::task::spawn_blocking(move || {
-                        sftp_native::NativeSftpSession::connect(&config)
-                    })
-                    .await
-                    .map_err(|e| format!("Task join error: {}", e))??;
-
-                    let session_uuid = Uuid::new_v4().to_string();
-                    let mut sessions = state.active_sessions.write().await;
-                    sessions.insert(
-                        session_uuid.clone(),
-                        StorageSession::NativeSFTP(Arc::new(std::sync::Mutex::new(session))),
-                    );
-                    drop(sessions);
-                    if let Some(tunnel) = ssh_tunnel {
-                        state
-                            .ssh_tunnels
-                            .write()
-                            .await
-                            .insert(session_uuid.clone(), tunnel);
-                    }
-                    Ok(session_uuid)
-                }
-                // Key-based auth: use OpenDAL.
+            // One native ssh2 path for both password and key auth. Key auth used to
+            // route through OpenDAL, but that pulled in the `openssh` crate, which
+            // has no Windows support and never verified host keys; the native path
+            // verifies ~/.ssh/known_hosts for both auth methods.
+            let (credential, key_path) = match (&password, &profile.key_path) {
+                // A supplied password is authoritative even when an older profile
+                // still carries a key path.
+                (Some(pw), _) if !pw.is_empty() => (Some(pw.clone()), None),
                 (_, Some(key_path)) => {
                     if !std::path::Path::new(key_path).exists() {
                         return Err(format!(
@@ -186,57 +156,50 @@ pub async fn connect_storage(
                             key_path
                         ));
                     }
-
-                    let mut builder = Sftp::default();
-                    builder = builder.endpoint(&format!("{}:{}", host, port));
-                    builder = builder.user(username);
-                    builder = builder.key(key_path);
-
-                    let op = Operator::new(builder)
-                        .map_err(|e| format!("Failed to create SFTP operator: {}", e))?;
-
-                    use opendal::layers::TimeoutLayer;
-                    let op = op.layer(
-                        TimeoutLayer::new()
-                            .with_timeout(std::time::Duration::from_secs(60))
-                            .with_io_timeout(std::time::Duration::from_secs(30)),
-                    );
-
-                    use opendal::layers::RetryLayer;
-                    let mut op = op.layer(RetryLayer::new().with_max_times(3));
-
-                    if let Some(limit) = resolve_bandwidth_limit_bytes_per_sec(&profile, now_ms()) {
-                        op = apply_throttle_layer(op, limit);
-                    }
-
-                    op.check().await.map_err(|e| {
-                        format!("SFTP connection check failed: {}. Verify key path and server accessibility.", e)
-                    })?;
-
-                    let session_uuid = Uuid::new_v4().to_string();
-                    let mut sessions = state.active_sessions.write().await;
-                    sessions.insert(session_uuid.clone(), StorageSession::OpenDAL(op));
-                    drop(sessions);
-                    if let Some(tunnel) = ssh_tunnel {
-                        state
-                            .ssh_tunnels
-                            .write()
-                            .await
-                            .insert(session_uuid.clone(), tunnel);
-                    }
-                    Ok(session_uuid)
+                    (None, Some(key_path.clone()))
                 }
-                // No credentials
-                _ => Err(
+                _ => return Err(
                     "SFTP requires either an SSH key path or password. Please provide credentials."
                         .to_string(),
                 ),
+            };
+
+            let config = sftp_native::NativeSftpConfig {
+                host: host.to_string(),
+                port,
+                username: username.to_string(),
+                credential,
+                key_path,
+                known_host: tunneled_known_host,
+                known_host_port: tunneled_known_host_port,
+            };
+
+            let session = tokio::task::spawn_blocking(move || {
+                sftp_native::NativeSftpSession::connect(&config)
+            })
+            .await
+            .map_err(|e| format!("Task join error: {}", e))??;
+
+            let session_uuid = Uuid::new_v4().to_string();
+            let mut sessions = state.active_sessions.write().await;
+            sessions.insert(
+                session_uuid.clone(),
+                StorageSession::NativeSFTP(Arc::new(std::sync::Mutex::new(session))),
+            );
+            drop(sessions);
+            if let Some(tunnel) = ssh_tunnel {
+                state
+                    .ssh_tunnels
+                    .write()
+                    .await
+                    .insert(session_uuid.clone(), tunnel);
             }
+            Ok(session_uuid)
         }
         "ftp" | "ftps" => {
             // NOTE: Bandwidth rules (throttling) are NOT applied to FTP/FTPS sessions
             // because FtpSession uses native Rust FTP, not OpenDAL's ThrottleLayer.
-            // Bandwidth rules only apply to S3 and OpenDAL-based (key-auth) SFTP.
+            // Bandwidth rules only apply to S3.
             let host = profile
                 .host
                 .as_deref()

@@ -1,7 +1,6 @@
-//! Scheduled bandwidth limits and the OpenDAL throttle layer that applies them.
+//! Scheduled bandwidth limit resolution for connections and transfers.
 
 use crate::*;
-use opendal::Operator;
 
 /// Return the `limit_kbps` of the first matching enabled bandwidth rule at
 /// `now_ms`, or `None` when no rule matches.
@@ -42,16 +41,4 @@ pub fn resolve_bandwidth_limit_bytes_per_sec(
         return Some(kbps.saturating_mul(1024));
     }
     profile.max_bandwidth.filter(|&limit| limit > 0)
-}
-
-/// Apply OpenDAL `ThrottleLayer` when `limit_bytes_per_sec > 0`.
-pub(crate) fn apply_throttle_layer(mut op: Operator, limit_bytes_per_sec: u64) -> Operator {
-    if limit_bytes_per_sec > 0 {
-        use opendal::layers::ThrottleLayer;
-        let burst = std::cmp::max(limit_bytes_per_sec, 8 * 1024 * 1024);
-        let limit_u32 = std::cmp::min(limit_bytes_per_sec, u32::MAX as u64) as u32;
-        let burst_u32 = std::cmp::min(burst, u32::MAX as u64) as u32;
-        op = op.layer(ThrottleLayer::new(limit_u32, burst_u32));
-    }
-    op
 }
