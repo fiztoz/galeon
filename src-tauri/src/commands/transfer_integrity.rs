@@ -20,7 +20,7 @@ pub async fn calculate_file_md5(local_path: &str) -> Result<String, String> {
         }
         context.consume(&buffer[..n]);
     }
-    let digest = context.compute();
+    let digest = context.finalize();
     Ok(format!("{:x}", digest))
 }
 
