@@ -57,7 +57,7 @@ pub async fn list_directory(
                     (None, None)
                 } else {
                     let size = meta.content_length();
-                    let last_mod = meta.last_modified().map(|t| t.to_rfc3339());
+                    let last_mod = meta.last_modified().map(|t| t.into_inner().to_string());
                     (Some(size), last_mod)
                 };
 

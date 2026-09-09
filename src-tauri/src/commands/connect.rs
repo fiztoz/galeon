@@ -193,8 +193,7 @@ pub async fn connect_storage(
                     builder = builder.key(key_path);
 
                     let op = Operator::new(builder)
-                        .map_err(|e| format!("Failed to create SFTP operator: {}", e))?
-                        .finish();
+                        .map_err(|e| format!("Failed to create SFTP operator: {}", e))?;
 
                     use opendal::layers::TimeoutLayer;
                     let op = op.layer(

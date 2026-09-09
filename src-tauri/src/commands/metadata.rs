@@ -38,13 +38,17 @@ pub async fn get_object_metadata(
             Ok(ObjectMetadataInfo {
                 content_type: meta.content_type().map(|s| s.to_string()),
                 content_length: Some(meta.content_length()),
-                last_modified: meta.last_modified().map(|d| d.to_rfc3339()),
+                last_modified: meta.last_modified().map(|d| d.into_inner().to_string()),
                 etag: meta.etag().map(|s| s.to_string()),
                 cache_control: meta.cache_control().map(|s| s.to_string()),
-                content_encoding: None, // not exposed by opendal 0.50 Metadata
+                content_encoding: None, // not exposed by opendal stat
                 content_disposition: meta.content_disposition().map(|s| s.to_string()),
                 storage_class: None, // not exposed by opendal stat
-                user_metadata: meta.user_metadata().cloned(),
+                user_metadata: meta.user_metadata().map(|m| {
+                    m.into_iter()
+                        .map(|(k, v)| (k.to_owned(), v.to_owned()))
+                        .collect()
+                }),
             })
         }
         StorageSession::NativeSFTP(sftp_arc) => {

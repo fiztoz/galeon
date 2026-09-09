@@ -1,7 +1,8 @@
 //! Directory walkers and path helpers shared by the sync planner.
 
 use crate::*;
-use opendal::{Operator, Scheme};
+use opendal::services::S3_SCHEME;
+use opendal::Operator;
 
 /// Normalize a path component to forward slashes and strip any leading slash so
 /// local and remote relative keys compare cleanly.
@@ -133,7 +134,7 @@ async fn walk_remote_tree_s3(op: &Operator, prefix: &str) -> Result<Vec<SyncFile
         let size = meta.content_length();
         let modified_ms = meta
             .last_modified()
-            .map(|t| t.timestamp_millis().max(0) as u64);
+            .map(|t| t.into_inner().as_millisecond().max(0) as u64);
         out.push((rel, size, modified_ms));
     }
     Ok(out)
@@ -180,7 +181,7 @@ pub async fn walk_remote_tree(
     prefix: &str,
 ) -> Result<Vec<SyncFileEntry>, String> {
     if let StorageSession::OpenDAL(op) = session {
-        if op.info().scheme() == Scheme::S3 {
+        if op.info().scheme() == S3_SCHEME {
             return walk_remote_tree_s3(op, prefix).await;
         }
     }

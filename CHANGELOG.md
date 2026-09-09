@@ -150,6 +150,14 @@ that snapshot fix.
 - `md5` 0.8 compatibility: `md5::Context::compute()` is deprecated in favour of
   `finalize()`, and CI denies warnings — the streaming file-hash helper now
   finalizes the context. Digest values are unchanged.
+- **OpenDAL 0.50 → 0.59.** Finished-operator construction (no `.finish()`),
+  batch deletes via `delete_iter`, recursive deletes via
+  `delete_with(..).recursive(true)`, string-based schemes (`S3_SCHEME`), and
+  jiff timestamps (RFC3339 wire strings unchanged). The explicit TLS bypass now
+  swaps the operator's HTTP transport (`with_context`, layers preserved) instead
+  of the removed builder hook, which also moved our reqwest to 0.13 to match
+  `opendal-http-transport-reqwest`. Covered by a new bypass-transport round-trip
+  e2e test; no behavior change intended.
 
 ## [1.0.0-alpha.3]
 
