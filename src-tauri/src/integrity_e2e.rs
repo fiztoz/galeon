@@ -68,7 +68,7 @@ impl Drop for TestGuard {
 
                     if let Some(StorageSession::OpenDAL(op)) = sftp_op {
                         let prefix = format!("{}/", test_name);
-                        let _ = op.remove_all(&prefix).await;
+                        let _ = op.delete_with(&prefix).recursive(true).await;
                     }
                 });
             });
@@ -194,7 +194,7 @@ impl TestContext {
         let sessions = state.active_sessions.read().await;
         if let Some(StorageSession::OpenDAL(ref op)) = sessions.get(&self.session_id) {
             let prefix = format!("{}/", self.test_name);
-            let _ = op.remove_all(&prefix).await;
+            let _ = op.delete_with(&prefix).recursive(true).await;
         }
 
         let _ = std::fs::remove_dir_all(self.temp_dir);
@@ -649,6 +649,56 @@ async fn test_tier1_f13_download_md5_calculation() {
     let computed_md5 = calculate_file_md5(&local_path).await.unwrap();
     let expected_md5 = format!("{:x}", md5::compute(content));
     assert_eq!(computed_md5, expected_md5);
+    ctx.cleanup().await;
+}
+
+#[tokio::test]
+async fn test_tier1_ssl_bypass_custom_transport_roundtrip() {
+    let _guard = TEST_SERIAL_MUTEX.lock().await;
+    let ctx = TestContext::setup("tier1_ssl_bypass").await;
+    let state = ctx.app.state::<GaleonEngine>();
+
+    // Same endpoint with the TLS bypass engaged: exercises the OpenDAL 0.59
+    // transport swap (`with_context` + layer replay) and the custom reqwest
+    // fetch path end to end. Plain-http MinIO accepts the connection either
+    // way; the point is the bypass operator itself round-trips bytes.
+    let bypass_session = connect_bucket(
+        state,
+        Some("http://localhost:9000".to_string()),
+        Some("us-east-1".to_string()),
+        Some("galeon".to_string()),
+        Some("galeon-dev-secret".to_string()),
+        "galeon-test".to_string(),
+        Some(true),
+        Some(false),
+        None,
+        None,
+    )
+    .await
+    .expect("bypass connect failed");
+
+    let state = ctx.app.state::<GaleonEngine>();
+    let op = {
+        let sessions = state.active_sessions.read().await;
+        match sessions
+            .get(&bypass_session)
+            .cloned()
+            .expect("bypass session missing")
+        {
+            StorageSession::OpenDAL(op) => op,
+            _ => panic!("expected OpenDAL session"),
+        }
+    };
+
+    let probe = "tier1_ssl_bypass/probe.bin";
+    let content = b"ssl bypass transport probe";
+    op.write(probe, content.to_vec()).await.unwrap();
+    let meta = op.stat(probe).await.unwrap();
+    assert_eq!(meta.content_length(), content.len() as u64);
+    op.delete(probe).await.unwrap();
+    assert!(op.stat(probe).await.is_err());
+
+    state.active_sessions.write().await.remove(&bypass_session);
     ctx.cleanup().await;
 }
 
@@ -1467,7 +1517,7 @@ async fn test_tier2_b12_file_deleted_on_remote_mid_transfer() {
     )
     .await
     .unwrap();
-    let _ = op.remove(vec![remote_key.to_string()]).await;
+    let _ = op.delete_iter(vec![remote_key.to_string()]).await;
 
     let entry = wait_for_transfer(&ctx.handle, &transfer_id, 15)
         .await
@@ -2624,7 +2674,7 @@ async fn test_bandwidth_throttling() {
 
     // Cleanup
     let _ = std::fs::remove_file(&local_path);
-    let _ = op.remove(vec![remote_key.to_string()]).await;
+    let _ = op.delete_iter(vec![remote_key.to_string()]).await;
 }
 
 #[tokio::test]

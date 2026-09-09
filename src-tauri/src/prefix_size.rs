@@ -1,7 +1,8 @@
 //! Bounded LRU cache and scanning machinery for recursive prefix sizes.
 
 use crate::*;
-use opendal::{Operator, Scheme};
+use opendal::services::S3_SCHEME;
+use opendal::Operator;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -204,7 +205,7 @@ pub(crate) async fn compute_prefix_size_inner(
     let StorageSession::OpenDAL(op) = session else {
         return Err("Prefix size calculation is only supported for S3.".to_string());
     };
-    if op.info().scheme() != Scheme::S3 {
+    if op.info().scheme() != S3_SCHEME {
         return Err("Prefix size calculation is only supported for S3.".to_string());
     }
     compute_prefix_size_s3(app_handle, job_id, prefix, op, cancel).await

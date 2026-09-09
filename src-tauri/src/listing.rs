@@ -65,7 +65,7 @@ pub(crate) async fn list_remote_dir(
                 } else {
                     (
                         Some(meta.content_length()),
-                        meta.last_modified().map(|t| t.to_rfc3339()),
+                        meta.last_modified().map(|t| t.into_inner().to_string()),
                     )
                 };
                 list.push(GaleonObject {

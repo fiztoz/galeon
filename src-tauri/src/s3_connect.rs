@@ -237,18 +237,30 @@ pub fn sanitize_profile_for_storage(profile: &mut crate::ConnectionProfile) {
     }
 }
 
-/// When `danger_disable_ssl` is true, attach a reqwest client that accepts
-/// self-signed / invalid TLS certificates (common on private MinIO endpoints).
-/// Matches boto3's `verify=False` / `S3_VERIFY_SSL=false`.
-pub fn apply_s3_ssl_settings(builder: S3, danger_disable_ssl: Option<bool>) -> Result<S3, String> {
+/// When `danger_disable_ssl` is true, swap the operator's HTTP transport for one
+/// backed by a reqwest client that accepts self-signed / invalid TLS certificates
+/// (common on private MinIO endpoints). Matches boto3's `verify=False`.
+///
+/// OpenDAL 0.56 removed the service-builder `http_client` hook, so the bypass now
+/// rides the layered transport API: the operator is rebuilt around a custom
+/// `OperationContext` with layers preserved (`with_context` replays them).
+/// Kept as a separate step after `apply_s3_operator_layers` so the transport swap
+/// never interferes with retry/throttle composition.
+pub fn apply_s3_ssl_settings(
+    op: Operator,
+    danger_disable_ssl: Option<bool>,
+) -> Result<Operator, String> {
     if danger_disable_ssl != Some(true) {
-        return Ok(builder);
+        return Ok(op);
     }
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .build()
         .map_err(|e| format!("Failed to build SSL-bypass HTTP client: {}", e))?;
-    Ok(builder.http_client(opendal::raw::HttpClient::with(client)))
+    let transport = opendal::HttpTransporter::new(
+        opendal_http_transport_reqwest::ReqwestTransport::new(client),
+    );
+    Ok(op.with_context(opendal::OperationContext::new().with_http_transport(transport)))
 }
 
 /// Humanize OpenDAL connection failures — TLS errors often look like generic
@@ -313,7 +325,8 @@ pub struct ConfiguredS3 {
     pub bucket: String,
 }
 
-/// Layer options applied after `Operator::new(...).finish()`.
+/// Layer options applied after `Operator::new(...)` (0.58+ returns a finished
+/// operator, so there is no `.finish()` step anymore).
 ///
 /// Retry is always applied (3 attempts). Bandwidth throttle is optional
 /// (`None` or `0` = unlimited).
@@ -353,7 +366,6 @@ pub fn configure_s3_service(params: S3ConnectParams) -> Result<(S3, ConfiguredS3
     if let Some(ref sc) = params.storage_class {
         builder = builder.default_storage_class(sc);
     }
-    builder = apply_s3_ssl_settings(builder, params.danger_disable_ssl_verification)?;
 
     Ok((
         builder,
@@ -391,13 +403,13 @@ pub async fn open_s3_operator(
     layers: S3LayerConfig,
     check_error_prefix: &str,
 ) -> Result<(Operator, ConfiguredS3), String> {
-    let (builder, configured) = configure_s3_service(params)?;
+    let (builder, configured) = configure_s3_service(params.clone())?;
 
-    let op = Operator::new(builder)
-        .map_err(|e| format!("Failed to create S3 builder: {}", e))?
-        .finish();
+    // OpenDAL 0.58+: `Operator::new` returns a finished operator directly.
+    let op = Operator::new(builder).map_err(|e| format!("Failed to create S3 builder: {}", e))?;
 
     let op = apply_s3_operator_layers(op, &layers);
+    let op = apply_s3_ssl_settings(op, params.danger_disable_ssl_verification)?;
 
     op.check()
         .await

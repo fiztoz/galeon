@@ -73,11 +73,12 @@ pub(crate) async fn perform_delete_object(
                 } else {
                     format!("{}/", key)
                 };
-                op.remove_all(&folder_key)
+                op.delete_with(&folder_key)
+                    .recursive(true)
                     .await
                     .map_err(|e| format!("Failed to delete folder: {}", e))?;
             } else {
-                op.remove(vec![key])
+                op.delete_iter(vec![key])
                     .await
                     .map_err(|e| format!("Failed to delete file: {}", e))?;
             }
@@ -332,16 +333,16 @@ pub async fn rename_object(
                 }
 
                 if !keys_to_copy.is_empty() {
-                    op.remove(keys_to_copy)
+                    op.delete_iter(keys_to_copy)
                         .await
                         .map_err(|e| format!("Failed to delete originals: {}", e))?;
                 }
-                let _ = op.remove(vec![source_prefix]).await;
+                let _ = op.delete_iter(vec![source_prefix]).await;
             } else {
                 op.copy(&old_key, &new_key)
                     .await
                     .map_err(|e| format!("Failed to copy: {}", e))?;
-                op.remove(vec![old_key])
+                op.delete_iter(vec![old_key])
                     .await
                     .map_err(|e| format!("Failed to remove original: {}", e))?;
             }
