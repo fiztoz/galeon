@@ -72,6 +72,17 @@ RustSec (`cargo audit`) and `bun audit`. It fails visibly on advisories; passing
 application tests is not a clean security audit, and no blanket ignore list is used.
 Dependabot proposes updates but never merges them automatically.
 
+### Dismissed: glib VariantStrIter unsoundness (2026-09-09, tolerable risk)
+
+Dependabot alert #1 (medium, no CVE): `glib` 0.18.5, vulnerable range
+`>=0.15, <0.20`. Dismissed because no version bump can fix it: glib arrives
+only transitively via `tauri -> wry -> webkit2gtk 2.0.2 -> gtk 0.18`, Galeon
+source has no direct `glib`/`webkit`/`gtk` use, and the newest upstream
+(tauri 2.11.5, wry 0.57.0) still pins `webkit2gtk =2.0.2`, so `glib >= 0.20`
+is unresolvable until Tauri/wry migrate the Linux webview stack. Those
+dependencies are target-gated to Linux/BSD and never compile on macOS.
+Re-evaluate when upstream moves; Dependabot re-alerts on new advisories.
+
 The older OpenDAL/reqsign XML stack and Linux GTK dependencies still need upstream
 advisory review. Do not interpret platform-specific maintenance warnings as macOS
 exploits, or dismiss XML-parser findings merely because the application compiles.
