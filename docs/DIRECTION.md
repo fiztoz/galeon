@@ -41,7 +41,7 @@ Saying no is the strategy for a hobby-scale project competing with funded ones:
 - **Not a sync service.** No accounts, no Galeon cloud, no background daemon (one-way sync as a *feature* comes in v0.5; Dropbox is not the mission).
 - **Not a drive mounter** (Mountain Duck's job) — until post-1.0, if ever. FUSE/WinFsp is a support-burden multiplier.
 - **No Electron, no JVM** — obviously.
-- **No protocol soup before the core is excellent.** S3 flows must be best-in-class before SFTP lands.
+- **No protocol soup before the core is excellent.** S3 flows had to be best-in-class before SFTP/FTP shipped; the same bar now gates WebDAV, Azure, GCS, and B2.
 - **Not a hosted service.** The source and CI-built releases are public, but there is no Galeon cloud, no account system, no update feed, and no support SLA. Publishing the code is not the same as promising availability. See [ROADMAP.md](ROADMAP.md) for what is deliberately still deferred (auto-update, paid notarization).
 
 ## Design principles

@@ -37,6 +37,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   The light scale is tuned rather than mirrored: its text tiers hold WCAG AA
   (4.63:1–19.06:1) on the light page.
 
+- **Resizable dual-pane split.** A new `SplitPane` component replaces the fixed 50/50
+  layout: drag the divider with the pointer, nudge it with the keyboard
+  (`←`/`→`, Shift for a bigger step, `Home`/`End` to fully collapse, `Enter` to
+  re-center), double-click to reset to 50/50, and drag firmly past the minimum to
+  snap a pane fully shut so either side can take the whole width without reaching
+  for the toggle. The separator is a real `role="separator"` with an accessible name
+  and `aria-valuenow/min/max`, and its arrow keys stop propagation so a focused
+  divider never drives the list behind it. The ratio persists in
+  `app_settings.json` next to the other layout preferences.
+- Drag *between* the panes was evaluated and deliberately not built: Tauri's
+  `dragDropEnabled` is on by default, its config docs state HTML5 drag and drop
+  needs it off, and it is the mechanism the Explorer uses to accept Finder drops
+  today. Both transfer directions are already available as explicit actions.
+- `AppSettings.split_ratio` (`Option<f64>`; absent means 50/50), so the split rides
+  the same backward-compatible settings path as the rest.
+
+- **Fonts are vendored; a launch now makes zero third-party requests.** Inter,
+  JetBrains Mono and Space Grotesk were fetched from Google Fonts on every start,
+  which leaked the user's IP to Google and made "offline by design" only partly
+  true. The roman variable faces now ship in `public/fonts/` with their SIL OFL
+  license and copyright texts (the license requires them to travel with the font),
+  plus a provenance/refresh note. Only the latin + latin-ext subsets are included —
+  the rest roughly tripled the payload for no UI string that needs them — and each
+  `@font-face` carries a `unicode-range`, so a browser reads only the file it
+  actually needs. 304 KB total, italic omitted because the UI has none.
+- `Content-Security-Policy` tightened accordingly: `style-src` and `font-src` no
+  longer name any external host, so the policy now allows nothing off-machine.
+
+- **Release CI** — `.github/workflows/release.yml`: pushing a `v<version>` tag builds
+  the universal macOS `.dmg` and publishes it to GitHub Releases with SHA-256
+  checksums and a provenance footer. The tag must match `package.json`,
+  `Cargo.toml`, and `tauri.conf.json` or the job fails, so a release can't be built
+  from a tree that disagrees with its own version. Signing is opportunistic: with
+  `APPLE_CERTIFICATE` configured CI imports a Developer ID and signs (and
+  notarizes when the notarization secrets are present); without it CI publishes an
+  unsigned build and the release notes say so and give the right-click → Open step.
+  An unsigned artifact is never described as notarized.
+- **Content Security Policy.** `app.security.csp` was `null`, i.e. no policy at all.
+  Now a least-privilege map: `default-src 'self'`, `script-src 'self'`, styles from
+  self + inline + Google Fonts, fonts from `fonts.gstatic.com`, images from self +
+  `data:` + `blob:` (the inspector previews object bytes via `createObjectURL`),
+  IPC-only `connect-src`, and `object-src 'none'` / `form-action 'none'`. Verified by
+  replaying the identical policy as a meta tag over the real built output in a headless
+  browser: zero CSP violations, zero failed requests, app rendered. Tauri's own
+  injected bootstrap and real IPC still want a `tauri dev` pass.
+
 ### Changed
 
 - **`Explorer.tsx` 1,866 → 1,610 lines** and its eight dialogs no longer repeat themselves.
@@ -70,60 +116,6 @@ Moves were verified by token-diffing the extracted code against the original: th
 modal's only differences are the two intended edits, and the hook's are renames plus
 that snapshot fix.
 
-### Added
-
-- **Resizable dual-pane split.** A new `SplitPane` component replaces the fixed 50/50
-  layout: drag the divider with the pointer, nudge it with the keyboard
-  (`←`/`→`, Shift for a bigger step, `Home`/`End` to fully collapse, `Enter` to
-  re-center), double-click to reset to 50/50, and drag firmly past the minimum to
-  snap a pane fully shut so either side can take the whole width without reaching
-  for the toggle. The separator is a real `role="separator"` with an accessible name
-  and `aria-valuenow/min/max`, and its arrow keys stop propagation so a focused
-  divider never drives the list behind it. The ratio persists in
-  `app_settings.json` next to the other layout preferences.
-- Drag *between* the panes was evaluated and deliberately not built: Tauri's
-  `dragDropEnabled` is on by default, its config docs state HTML5 drag and drop
-  needs it off, and it is the mechanism the Explorer uses to accept Finder drops
-  today. Both transfer directions are already available as explicit actions.
-- `AppSettings.split_ratio` (`Option<f64>`; absent means 50/50), so the split rides
-  the same backward-compatible settings path as the rest.
-
-### Added
-
-- **Fonts are vendored; a launch now makes zero third-party requests.** Inter,
-  JetBrains Mono and Space Grotesk were fetched from Google Fonts on every start,
-  which leaked the user's IP to Google and made "offline by design" only partly
-  true. The roman variable faces now ship in `public/fonts/` with their SIL OFL
-  license and copyright texts (the license requires them to travel with the font),
-  plus a provenance/refresh note. Only the latin + latin-ext subsets are included —
-  the rest roughly tripled the payload for no UI string that needs them — and each
-  `@font-face` carries a `unicode-range`, so a browser reads only the file it
-  actually needs. 304 KB total, italic omitted because the UI has none.
-- `Content-Security-Policy` tightened accordingly: `style-src` and `font-src` no
-  longer name any external host, so the policy now allows nothing off-machine.
-
-### Added
-
-- **Release CI** — `.github/workflows/release.yml`: pushing a `v<version>` tag builds
-  the universal macOS `.dmg` and publishes it to GitHub Releases with SHA-256
-  checksums and a provenance footer. The tag must match `package.json`,
-  `Cargo.toml`, and `tauri.conf.json` or the job fails, so a release can't be built
-  from a tree that disagrees with its own version. Signing is opportunistic: with
-  `APPLE_CERTIFICATE` configured CI imports a Developer ID and signs (and
-  notarizes when the notarization secrets are present); without it CI publishes an
-  unsigned build and the release notes say so and give the right-click → Open step.
-  An unsigned artifact is never described as notarized.
-- **Content Security Policy.** `app.security.csp` was `null`, i.e. no policy at all.
-  Now a least-privilege map: `default-src 'self'`, `script-src 'self'`, styles from
-  self + inline + Google Fonts, fonts from `fonts.gstatic.com`, images from self +
-  `data:` + `blob:` (the inspector previews object bytes via `createObjectURL`),
-  IPC-only `connect-src`, and `object-src 'none'` / `form-action 'none'`. Verified by
-  replaying the identical policy as a meta tag over the real built output in a headless
-  browser: zero CSP violations, zero failed requests, app rendered. Tauri's own
-  injected bootstrap and real IPC still want a `tauri dev` pass.
-
-### Changed
-
 - Replaced 37 `text-zinc-950` usages on accent-filled buttons with a
   `text-on-accent` token, and 5 `bg-zinc-700 hover:bg-zinc-600` secondary-button
   pairs with `bg-raised` / `hover:bg-raised-hover`. Both tokens are seeded with
@@ -131,15 +123,13 @@ that snapshot fix.
   screenshotting both themes over CDP.
 - The crate root was decomposed. `src-tauri/src/lib.rs` went from 7,176 lines to
   ~180 (module decls + `run()`); the 58 Tauri commands moved to
-  `src-tauri/src/commands/<feature>.rs` (17 files, largest 924 lines); shared
+  `src-tauri/src/commands/<feature>.rs` (18 files, largest 924 lines); shared
   state, wire contracts, and the sync domain became `engine`, `types`, `listing`,
   `editing`, `prefix_size`, `bandwidth`, `connect_config`, `sync_types`,
   `sync_tree`, `sync_plan`, `sync_store`, `schedule`, `tests`. Moves were verified
   byte-identical modulo indentation, comments, and `pub` → `pub(crate)`
   promotion; no behavior changed.
 - Cleared every clippy warning in the lib and test targets, so CI can deny them.
-
-### Changed
 
 - **Product posture is now public.** The repo publishes source and CI-built
   releases, so AGENTS.md §6/§8, DIRECTION.md, ROADMAP.md, RELEASE_MACOS.md,
@@ -157,6 +147,9 @@ that snapshot fix.
   used `zinc-850` / `zinc-750` — not real Tailwind steps, so v4 emitted zero CSS
   for all six usages. Mapped to the intended neighbours and confirmed the rules
   now appear in the built stylesheet.
+- `md5` 0.8 compatibility: `md5::Context::compute()` is deprecated in favour of
+  `finalize()`, and CI denies warnings — the streaming file-hash helper now
+  finalizes the context. Digest values are unchanged.
 
 ## [1.0.0-alpha.3]
 
