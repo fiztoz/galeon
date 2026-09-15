@@ -279,9 +279,103 @@ jobs:
           path: out/*
           if-no-files-found: error
 
+  release-linux:
+    name: Build Linux .deb / AppImage
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.value }}
+      deb: ${{ steps.bundle.outputs.deb }}
+      appimage: ${{ steps.bundle.outputs.appimage }}
+    steps:
+      - name: Resolve the release tag safely
+        id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            TAG="$DISPATCH_TAG"
+          else
+            TAG="$GITHUB_REF_NAME"
+          fi
+          # Validate before checkout/output; never interpolate inputs into shell source.
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$ ]]; then
+            echo '::error::Invalid release tag.'
+            exit 1
+          fi
+          echo "value=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ steps.tag.outputs.value }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require an annotated tag on main before executing tagged code
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          set -euo pipefail
+          [ "$(git cat-file -t "refs/tags/$TAG")" = tag ] || {
+            echo '::error::Release tags must be annotated.'; exit 1;
+          }
+          [ "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$(git rev-parse HEAD)" ] || {
+            echo '::error::Checkout does not match the release tag.'; exit 1;
+          }
+          git merge-base --is-ancestor HEAD refs/remotes/origin/main || {
+            echo '::error::Release commit must already be merged into main.'; exit 1;
+          }
+
+      - name: Validate versions against the release tag
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        run: python3 scripts/release-metadata.py "$TAG"
+
+      # Tauri v2 on Linux links against webkit2gtk/gtk; same set CI uses so a
+      # release build can never fail on a dependency CI already proved.
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -o Acquire::Retries=3 -y \
+            libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Unit tier must be green before bundling
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- --skip integrity_e2e
+
+      - name: Build the Linux bundles
+        run: bun run tauri build -- --locked
+
+      - name: Collect bundles and checksum
+        id: bundle
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          debs=(src-tauri/target/release/bundle/deb/*.deb)
+          images=(src-tauri/target/release/bundle/appimage/*.AppImage)
+          [ "${#debs[@]}" -eq 1 ] || { echo '::error::Expected exactly one .deb.'; exit 1; }
+          [ "${#images[@]}" -eq 1 ] || { echo '::error::Expected exactly one .AppImage.'; exit 1; }
+          mkdir -p out
+          cp "${debs[0]}" "${images[0]}" out/
+          (cd out && sha256sum ./*.deb ./*.AppImage > SHA256SUMS)
+          echo "deb=$(basename "${debs[0]}")" >> "$GITHUB_OUTPUT"
+          echo "appimage=$(basename "${images[0]}")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: galeon-linux-${{ steps.tag.outputs.value }}
+          path: out/*
+          if-no-files-found: error
+
   publish:
     name: Publish verified release artifacts
-    needs: [release-macos, release-windows]
+    needs: [release-macos, release-windows, release-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -306,6 +400,15 @@ jobs:
         working-directory: out-windows
         run: sha256sum -c SHA256SUMS
 
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: galeon-linux-${{ needs.release-linux.outputs.tag }}
+          path: out-linux
+
+      - name: Verify downloaded Linux artifact checksums
+        working-directory: out-linux
+        run: sha256sum -c SHA256SUMS
+
       # Keyless (Sigstore) signing happens once, here on a pinned linux binary,
       # so the same identity signs both macOS and Windows artifacts and we don't
       # hand-roll arch-detection on the macOS runner. id-token: write provides
@@ -325,14 +428,20 @@ jobs:
         env:
           DMG: ${{ needs.release-macos.outputs.dmg }}
           SETUP: ${{ needs.release-windows.outputs.setup }}
+          DEB: ${{ needs.release-linux.outputs.deb }}
+          APPIMAGE: ${{ needs.release-linux.outputs.appimage }}
         run: |
           set -euo pipefail
           cosign sign-blob --yes --bundle "out/$DMG.sigstore.json" "out/$DMG"
           cosign sign-blob --yes --bundle "out-windows/$SETUP.sigstore.json" "out-windows/$SETUP"
-          # Release uploads are flat; merge both manifests so one SHA256SUMS at
-          # the release root covers the .dmg and the .exe without a name clash.
+          cosign sign-blob --yes --bundle "out-linux/$DEB.sigstore.json" "out-linux/$DEB"
+          cosign sign-blob --yes --bundle "out-linux/$APPIMAGE.sigstore.json" "out-linux/$APPIMAGE"
+          # Release uploads are flat; merge every manifest so one SHA256SUMS at
+          # the release root covers the .dmg, the .exe, the .deb and the
+          # .AppImage without a name clash.
           cat out-windows/SHA256SUMS >> out/SHA256SUMS
-          rm -f out-windows/SHA256SUMS
+          cat out-linux/SHA256SUMS >> out/SHA256SUMS
+          rm -f out-windows/SHA256SUMS out-linux/SHA256SUMS
 
       - name: Publish release with verified metadata
         env:
@@ -343,6 +452,8 @@ jobs:
           PRERELEASE: ${{ needs.release-macos.outputs.prerelease }}
           DMG: ${{ needs.release-macos.outputs.dmg }}
           SETUP: ${{ needs.release-windows.outputs.setup }}
+          DEB: ${{ needs.release-linux.outputs.deb }}
+          APPIMAGE: ${{ needs.release-linux.outputs.appimage }}
           SIGNING: ${{ needs.release-macos.outputs.signing }}
           NOTARIZED: ${{ needs.release-macos.outputs.notarized }}
         run: |
@@ -366,6 +477,9 @@ jobs:
             '### Install (Windows)' '' \
             "1. Download \`$SETUP\` below and run it." \
             '2. The installer is **unsigned**; Windows SmartScreen may warn. Choose **More info → Run anyway** only if you trust this download.' '' \
+            '### Install (Linux)' '' \
+            "1. Download \`$DEB\` for Debian/Ubuntu (\`sudo apt install ./\`$DEB\`) or \`$APPIMAGE\` for other distros (\`chmod +x \`$APPIMAGE\` then run it)." \
+            '2. The Linux bundles are **unsigned**; your package manager / desktop may warn on first run.' '' \
             'The release ships one `SHA256SUMS` covering every artifact; verify with `sha256sum -c SHA256SUMS`.' '' \
             '### Verify with Sigstore' '' \
             'Every artifact is keyless-signed through Sigstore. Each `.sigstore.json` bundle holds the signature, certificate, and Rekor transparency-log entry.' '' \
@@ -380,8 +494,8 @@ jobs:
           if [ "$PRERELEASE" = true ]; then args+=(--latest=false); fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --notes-file notes.md --prerelease="$PRERELEASE" "${args[@]}"
-            gh release upload "$TAG" out/* out-windows/* --clobber
+            gh release upload "$TAG" out/* out-windows/* out-linux/* --clobber
           else
-            gh release create "$TAG" out/* out-windows/* --verify-tag --title "Galeon $TAG" \
+            gh release create "$TAG" out/* out-windows/* out-linux/* --verify-tag --title "Galeon $TAG" \
               --notes-file notes.md --prerelease="$PRERELEASE" "${args[@]}"
           fi

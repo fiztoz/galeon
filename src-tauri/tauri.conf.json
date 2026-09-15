@@ -47,7 +47,9 @@
     "targets": [
       "app",
       "dmg",
-      "nsis"
+      "nsis",
+      "deb",
+      "appimage"
     ],
     "category": "DeveloperTool",
     "copyright": "Copyright \u00a9 2026 Galeon Authors",
