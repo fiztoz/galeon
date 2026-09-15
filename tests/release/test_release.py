@@ -123,6 +123,8 @@ class ProvenanceTests(unittest.TestCase):
         self.assertNotIn("./\\`$APPIMAGE", workflow)
         self.assertIn("sudo apt install ./$DEB", workflow)
         self.assertIn("chmod +x $APPIMAGE", workflow)
+        self.assertIn("--bundles deb,appimage", workflow)
+        self.assertIn("APPIMAGE_EXTRACT_AND_RUN", workflow)
 
     def test_release_ref_guard(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
