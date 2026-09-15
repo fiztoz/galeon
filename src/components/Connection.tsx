@@ -1,4 +1,5 @@
 import { DEFAULT_S3_ENDPOINT, DEFAULT_S3_REGION, DEFAULT_SFTP_PORT, DEFAULT_FTP_PORT, defaultPortFor } from './connection/defaults';
+import { ProfileSidebar } from './connection/ProfileSidebar';
 import { SaveProfileDialog } from './connection/SaveProfileDialog';
 import { BandwidthRulesEditor, useBandwidthRuleDraft } from './connection/BandwidthRulesEditor';
 import { FIELD } from './connection/field';
@@ -8,7 +9,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { ConnectionProfile, BandwidthRule } from '../types';
 import { OnboardingProtocol } from './OnboardingWizard';
-import { ProfileImportExport } from './ProfileImportExport';
 import {
   EMPTY_SSH_TUNNEL,
   sshTunnelFormFromProfile,
@@ -18,7 +18,7 @@ import {
 } from './sshTunnel';
 import { SshTunnelProfiles } from './SshTunnelProfiles';
 import { SshConfigConnection } from './SshConfigImport';
-import { Server, Trash2, Pencil, Plus, Save, Database, Settings, Eraser } from 'lucide-react';
+import { Plus, Save, Settings, Eraser } from 'lucide-react';
 
 /** Friend-readable connect errors (strip noisy Rust/Tauri wrappers when present). */
 const formatConnectError = (err: unknown): string => {
@@ -724,96 +724,18 @@ export const Connection: React.FC<ConnectionProps> = ({
 
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden">
-      {/* Left Sidebar — single-line titlebar clears traffic lights; hint lives below */}
-      <div className="w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col shrink-0">
-        <div
-          data-tauri-drag-region
-          className="app-titlebar app-titlebar-traffic border-b border-zinc-800 pr-3"
-        >
-          <h2
-            data-tauri-drag-region
-            className="text-[13px] font-semibold tracking-tight text-zinc-100 truncate"
-          >
-            Saved Profiles
-          </h2>
-        </div>
-        <p className="px-3 pt-2 pb-1 text-[11px] text-zinc-500 leading-snug">
-          Click to load · double-click to connect
-        </p>
-
-        <div className="flex-1 overflow-y-auto p-2 pt-1 galeon-scrollbar">
-          {profiles.length === 0 ? (
-            <div className="text-center py-8 text-zinc-500 text-sm">
-              <Server className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p>No saved profiles</p>
-              <p className="text-xs mt-1">Save a connection to quickly access it later</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {profiles.map((profile) => (
-                <div
-                  key={profile.id}
-                  onClick={handleProfileRowClick(profile)}
-                  onDoubleClick={() => handleDoubleClickProfile(profile)}
-                  className={`p-3 rounded-lg cursor-pointer transition-all duration-150 relative group ${
-                    selectedProfileId === profile.id
-                      ? 'bg-abyss/40 border border-gale-teal/30 pl-4'
-                      : 'hover:bg-zinc-800/60 border border-transparent pl-3'
-                  }`}
-                >
-                  {selectedProfileId === profile.id && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded bg-gale-teal h-8" />
-                  )}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 min-w-0">
-                      {profile.protocol === 'sftp' || profile.protocol === 'ftp' || profile.protocol === 'ftps' ? (
-                        <Server className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      ) : (
-                        <Database className="w-4 h-4 text-gale-teal flex-shrink-0" />
-                      )}
-                      <span className="text-sm font-medium truncate">{profile.name}</span>
-                    </div>
-                    <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleEditProfile(profile); }}
-                        className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-200"
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteProfile(profile.id); }}
-                        className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-red-400"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mt-1 text-xs text-zinc-500 truncate">
-                    {profile.protocol === 'sftp' || profile.protocol === 'ftp' || profile.protocol === 'ftps'
-                      ? `${profile.username}@${profile.host}:${profile.port || defaultPortFor(profile.protocol)}${profile.sshTunnelProfileId ? ' • via saved tunnel' : profile.sshTunnel ? ` • via ${profile.sshTunnel.host}` : ''}`
-                      : `${profileEndpointLabel(profile.endpoint, profile.bucket)}${profile.sshTunnelProfileId ? ' • via saved tunnel' : profile.sshTunnel ? ` • via ${profile.sshTunnel.host}` : ''}`
-                    }
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="p-3 border-t border-zinc-800 space-y-2">
-          <ProfileImportExport
-            profiles={profiles}
-            selectedProfileId={selectedProfileId}
-            onReloadProfiles={onReloadProfiles}
-            onImportComplete={resetFormToDefaults}
-          />
-          {appVersion && (
-            <div className="text-xs text-zinc-500 metric-text pt-1">
-              Galeon v{appVersion}
-            </div>
-          )}
-        </div>
-      </div>
+      <ProfileSidebar
+        profiles={profiles}
+        selectedProfileId={selectedProfileId}
+        appVersion={appVersion}
+        profileEndpointLabel={profileEndpointLabel}
+        onRowClick={handleProfileRowClick}
+        onRowDoubleClick={handleDoubleClickProfile}
+        onEdit={handleEditProfile}
+        onDelete={handleDeleteProfile}
+        onReloadProfiles={onReloadProfiles}
+        onImportComplete={resetFormToDefaults}
+      />
 
       {/* Right Panel - Connection Form */}
       <div className="flex-1 flex flex-col min-w-0">
