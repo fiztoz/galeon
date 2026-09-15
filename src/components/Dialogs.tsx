@@ -210,6 +210,8 @@ export interface ShareLinkDialogProps {
   fileName: string;
   /** Generates the presigned URL; throws if the session or the key is bad. */
   onGenerate: (expiresInSeconds: number) => Promise<string>;
+  /** When set, the dialog offers a Download/Upload toggle for presigned PUT links. */
+  onGenerateUpload?: (expiresInSeconds: number) => Promise<string>;
   onError: (message: string) => void;
   onClose: () => void;
 }
@@ -221,16 +223,22 @@ export interface ShareLinkDialogProps {
 export const ShareLinkDialog: React.FC<ShareLinkDialogProps> = ({
   fileName,
   onGenerate,
+  onGenerateUpload,
   onError,
   onClose,
 }) => {
   const [expiration, setExpiration] = useState(3600);
+  const [mode, setMode] = useState<'download' | 'upload'>('download');
   const [url, setUrl] = useState('');
   const [copied, setCopied] = useState(false);
 
   const generate = async () => {
     try {
-      setUrl(await onGenerate(expiration));
+      setUrl(
+        mode === 'upload' && onGenerateUpload
+          ? await onGenerateUpload(expiration)
+          : await onGenerate(expiration),
+      );
     } catch (err: any) {
       onError(String(err));
     }
@@ -263,6 +271,31 @@ export const ShareLinkDialog: React.FC<ShareLinkDialogProps> = ({
       <p className="text-sm text-zinc-400 mb-4">
         Generate a temporary link for <span className="text-zinc-200 font-medium">"{fileName}"</span>
       </p>
+
+      {onGenerateUpload && (
+        <div className="mb-4">
+          <label className={eyebrowLabel}>Link Type</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => { setMode('download'); setUrl(''); }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${mode === 'download' ? 'bg-gale-teal text-on-accent font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+            >
+              Download
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('upload'); setUrl(''); }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${mode === 'upload' ? 'bg-gale-teal text-on-accent font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+            >
+              Upload
+            </button>
+          </div>
+          {mode === 'upload' && (
+            <p className="mt-1 text-xs text-zinc-500">Anyone with the link can PUT a file to this key (no login).</p>
+          )}
+        </div>
+      )}
 
       <div className="mb-4">
         <label className={eyebrowLabel}>Link Expiration</label>

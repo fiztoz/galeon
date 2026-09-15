@@ -37,6 +37,63 @@ pub async fn generate_presigned_url(
                 url: url.clone(),
                 expires_in_seconds,
                 created_at: chrono::Utc::now().to_rfc3339(),
+                operation: "download".to_string(),
+            };
+
+            let mut config = read_config(&app_handle)?;
+            config.presign_history.insert(0, history_entry);
+            if config.presign_history.len() > 50 {
+                config.presign_history.truncate(50);
+            }
+            write_config(&app_handle, &config)?;
+
+            Ok(url)
+        }
+        StorageSession::NativeSFTP(_) => {
+            Err("Presigned URLs are not supported for native SFTP sessions".to_string())
+        }
+        StorageSession::FTP(_) => {
+            Err("Presigned URLs are not supported for FTP/FTPS sessions".to_string())
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn generate_presigned_upload_url(
+    state: tauri::State<'_, GaleonEngine>,
+    app_handle: AppHandleType,
+    session_id: String,
+    key: String,
+    expires_in_seconds: u64,
+) -> Result<String, String> {
+    let sessions = state.active_sessions.read().await;
+    let session = sessions
+        .get(&session_id)
+        .ok_or_else(|| "Session not found".to_string())?
+        .clone();
+    drop(sessions);
+
+    match session {
+        StorageSession::OpenDAL(op) => {
+            use std::time::Duration;
+            let duration = Duration::from_secs(expires_in_seconds);
+
+            let signed_req = op
+                .presign_write(&key, duration)
+                .await
+                .map_err(|e| format!("Failed to presign upload: {}", e))?;
+
+            let url = signed_req.uri().to_string();
+
+            let file_name = key.split('/').next_back().unwrap_or(&key).to_string();
+            let history_entry = PresignHistoryEntry {
+                id: Uuid::new_v4().to_string(),
+                file_key: key,
+                file_name,
+                url: url.clone(),
+                expires_in_seconds,
+                created_at: chrono::Utc::now().to_rfc3339(),
+                operation: "upload".to_string(),
             };
 
             let mut config = read_config(&app_handle)?;

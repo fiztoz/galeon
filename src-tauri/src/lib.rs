@@ -125,6 +125,7 @@ pub fn run() {
             rename_object,
             copy_object,
             generate_presigned_url,
+            generate_presigned_upload_url,
             get_presign_history,
             clear_presign_history,
             delete_presign_history_entry,
