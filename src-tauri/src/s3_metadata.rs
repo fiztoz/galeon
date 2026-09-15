@@ -294,7 +294,7 @@ mod tests {
         use tokio::net::TcpListener;
         use tokio_rustls::TlsAcceptor;
 
-        let CertifiedKey { cert, key_pair } =
+        let CertifiedKey { cert, signing_key } =
             generate_simple_self_signed(vec!["localhost".to_string()]).expect("certificate");
         let provider = rustls::crypto::ring::default_provider();
         let server_config = rustls::ServerConfig::builder_with_provider(Arc::new(provider))
@@ -303,7 +303,7 @@ mod tests {
             .with_no_client_auth()
             .with_single_cert(
                 vec![cert.der().clone()],
-                PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key_pair.serialize_der())),
+                PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(signing_key.serialize_der())),
             )
             .expect("server certificate");
         let listener = TcpListener::bind(("127.0.0.1", 0))
