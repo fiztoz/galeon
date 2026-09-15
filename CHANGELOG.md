@@ -6,6 +6,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- JavaScript patch group: lucide-react 1.45, React 19.3, Vite 8.3, and matching
+  types.
+- Rust patch group in `Cargo.lock`; `dirs` 5.0.1 → 6.0.0; `rcgen` 0.13 → 0.14.10
+  (`CertifiedKey::signing_key` in the TLS test fixture).
+
+## [1.0.0-alpha.4]
+
+### Added
+
+- **S3 provider presets.** The connect form offers AWS, Cloudflare R2, Backblaze B2,
+  MinIO, Wasabi, DigitalOcean Spaces, and Custom. Picking a preset prefills endpoint,
+  region, and virtual-host vs path-style conventions (R2 also takes an account ID).
+  Saved profiles reopen on the matching preset via the stored endpoint.
+- **Presigned upload URLs.** Share dialog can mint a time-limited PUT grant as well
+  as a download link; history entries carry an `operation` badge so uploads are
+  distinguishable. Covered by `test_tier2_b26_presign_upload_url_roundtrip`.
+- **Cross-pane drag-and-drop.** Local → remote and remote → local drags use custom
+  MIME types so Tauri's native Finder/Explorer drop path is left alone.
+- **Linux release packages.** CI builds a `.deb` and an AppImage on tag, Sigstore
+  signs them with the macOS/Windows artifacts, and they land on the GitHub Release.
+- **Benchmark harness.** `scripts/benchmarks/` plus `docs/BENCHMARKS.md` for MinIO
+  throughput, 50k-key seed, cold-start, and RSS sampling. Public rival comparisons
+  still wait for v1.0.
+
+### Changed
+
+- Transfer-integrity e2e lives in `src-tauri/src/integrity_e2e/` (one module per
+  tier) so the 2,815-line file is under the size ceiling. 207 tests (141 unit + 66
+  e2e).
+- Windows CI runs the unit tier instead of compile-gating. The harness used to
+  die at process start (`STATUS_ENTRYPOINT_NOT_FOUND`) because Tauri stamps the
+  Common Controls v6 manifest on the app binary only; `build.rs` now embeds the
+  same manifest on test binaries.
+
+## [1.0.0-alpha.3]
+
+These notes lived under `[Unreleased]` when the tag was cut and are recorded here
+so the section matches what the `v1.0.0-alpha.3` tree actually shipped.
+
 ### Added
 
 - **Dual-pane browser (first increment)** — `src/components/LocalPane.tsx` shows the
@@ -46,9 +87,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `aria-valuenow/min/max`, and its arrow keys stop propagation so a focused
   divider never drives the list behind it. The ratio persists in
   `app_settings.json` next to the other layout preferences.
-- Drag *between* the panes originally stayed out so Finder drops could keep using
-  Tauri's native `dragDropEnabled` path. **1.0.0-alpha.4** adds in-app drag over
-  custom MIME types so OS drops still fall through unchanged.
+- Drag *between* the panes was evaluated and deliberately not built: Tauri's
+  `dragDropEnabled` is on by default, its config docs state HTML5 drag and drop
+  needs it off, and it is the mechanism the Explorer uses to accept Finder drops
+  today. Both transfer directions are already available as explicit actions.
+  (In-app drag landed later, in 1.0.0-alpha.4.)
 - `AppSettings.split_ratio` (`Option<f64>`; absent means 50/50), so the split rides
   the same backward-compatible settings path as the rest.
 
@@ -65,22 +108,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   longer name any external host, so the policy now allows nothing off-machine.
 
 - **Release CI** — `.github/workflows/release.yml`: pushing a `v<version>` tag builds
-  the universal macOS `.dmg` and publishes it to GitHub Releases with SHA-256
-  checksums and a provenance footer. The tag must match `package.json`,
-  `Cargo.toml`, and `tauri.conf.json` or the job fails, so a release can't be built
-  from a tree that disagrees with its own version. Signing is opportunistic: with
-  `APPLE_CERTIFICATE` configured CI imports a Developer ID and signs (and
-  notarizes when the notarization secrets are present); without it CI publishes an
-  unsigned build and the release notes say so and give the right-click → Open step.
-  An unsigned artifact is never described as notarized.
+  the universal macOS `.dmg` and an unsigned Windows NSIS `.exe` and publishes them
+  to GitHub Releases with SHA-256 checksums, Sigstore signatures, and a provenance
+  footer. The tag must match `package.json`, `Cargo.toml`, and `tauri.conf.json` or
+  the job fails, so a release can't be built from a tree that disagrees with its own
+  version. Signing is opportunistic: with `APPLE_CERTIFICATE` configured CI imports a
+  Developer ID and signs (and notarizes when the notarization secrets are present);
+  without it CI publishes an ad-hoc signed build and the release notes say so and
+  give the right-click → Open step. An unsigned artifact is never described as
+  notarized.
 - **Content Security Policy.** `app.security.csp` was `null`, i.e. no policy at all.
   Now a least-privilege map: `default-src 'self'`, `script-src 'self'`, styles from
-  self + inline + Google Fonts, fonts from `fonts.gstatic.com`, images from self +
-  `data:` + `blob:` (the inspector previews object bytes via `createObjectURL`),
-  IPC-only `connect-src`, and `object-src 'none'` / `form-action 'none'`. Verified by
-  replaying the identical policy as a meta tag over the real built output in a headless
-  browser: zero CSP violations, zero failed requests, app rendered. Tauri's own
-  injected bootstrap and real IPC still want a `tauri dev` pass.
+  self + inline (fonts later vendored; see above), images from self + `data:` +
+  `blob:` (the inspector previews object bytes via `createObjectURL`), IPC-only
+  `connect-src`, and `object-src 'none'` / `form-action 'none'`. Verified by
+  replaying the identical policy as a meta tag over the real built output in a
+  headless browser: zero CSP violations, zero failed requests, app rendered.
+  Tauri's own injected bootstrap and real IPC still want a `tauri dev` pass.
+
+- Optional **SSH tunnel** forwarding for S3 and SFTP connections
+- Password auth for SSH tunnels and SFTP
+- Reusable **SSH tunnel profiles**
+- Import of `~/.ssh/config` hosts for SFTP connections
+- Transfer **auto-retry with backoff** for reliability on network blips
+- Native macOS overlay titlebar and application menu
+- Profile export/import, S3 SSL bypass for self-signed endpoints, and credential sanitization
+- Centralized S3 connect path (`s3_connect::open_s3_operator`)
+- Bulk delete with progress tracking and cancellation
+- Explorer context menu; URL opening from history and Explorer
+- Background S3 prefix-size computation with caching
+- S3 metadata read/update via AWS SDK; inline preview in the properties inspector
+- Utility script to clean the Rust target directory
 
 ### Changed
 
@@ -157,67 +215,10 @@ that snapshot fix.
   of the removed builder hook, which also moved our reqwest to 0.13 to match
   `opendal-http-transport-reqwest`. Covered by a new bypass-transport round-trip
   e2e test; no behavior change intended.
-
-## [1.0.0-alpha.4]
-
-### Added
-
-- **S3 provider presets.** The connect form offers AWS, Cloudflare R2, Backblaze B2,
-  MinIO, Wasabi, DigitalOcean Spaces, and Custom. Picking a preset prefills endpoint,
-  region, and virtual-host vs path-style conventions (R2 also takes an account ID).
-  Saved profiles reopen on the matching preset via the stored endpoint.
-- **Presigned upload URLs.** Share dialog can mint a time-limited PUT grant as well
-  as a download link; history entries carry an `operation` badge so uploads are
-  distinguishable. Covered by `test_tier2_b26_presign_upload_url_roundtrip`.
-- **Cross-pane drag-and-drop.** Local → remote and remote → local drags use custom
-  MIME types so Tauri's native Finder/Explorer drop path is left alone.
-- **Linux release packages.** CI builds a `.deb` and an AppImage on tag, Sigstore
-  signs them with the macOS/Windows artifacts, and they land on the GitHub Release.
-- **Benchmark harness.** `scripts/benchmarks/` plus `docs/BENCHMARKS.md` for MinIO
-  throughput, 50k-key seed, cold-start, and RSS sampling. Public rival comparisons
-  still wait for v1.0.
-
-### Changed
-
-- Transfer-integrity e2e lives in `src-tauri/src/integrity_e2e/` (one module per
-  tier) so the 2,815-line file is under the size ceiling. 207 tests (141 unit + 66
-  e2e).
-- Windows CI runs the unit tier instead of compile-gating. The harness used to
-  die at process start (`STATUS_ENTRYPOINT_NOT_FOUND`) because Tauri stamps the
-  Common Controls v6 manifest on the app binary only; `build.rs` now embeds the
-  same manifest on test binaries.
-
-## [1.0.0-alpha.3]
-
-Shipped without entries at the time; reconstructed from history.
-
-### Added
-
-- Optional **SSH tunnel** forwarding for S3 and SFTP connections
-- Password auth for SSH tunnels and SFTP
-- Reusable **SSH tunnel profiles**
-- Import of `~/.ssh/config` hosts for SFTP connections
-- Transfer **auto-retry with backoff** for reliability on network blips
-- Native macOS overlay titlebar and application menu
-- Profile export/import, S3 SSL bypass for self-signed endpoints, and credential sanitization
-- Centralized S3 connect path (`s3_connect::open_s3_operator`)
-- Bulk delete with progress tracking and cancellation
-- Explorer context menu; URL opening from history and Explorer
-- Background S3 prefix-size computation with caching
-- S3 metadata read/update via AWS SDK; inline preview in the properties inspector
-- Utility script to clean the Rust target directory
-
-### Fixed
-
 - FTPS default port and credential resolution
 - Connection/explorer race conditions, with clearer error states
 - Underscores allowed in S3 bucket names for legacy compatibility
 - Scheduler spawn and sync apply error handling
-
-### Docs
-
-- `AGENTS.md` agent conventions; roadmap reframed to friend-circle distribution
-  with the public ship deferred
 
 ## [1.0.0-alpha.1]
 
