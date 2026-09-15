@@ -46,10 +46,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `aria-valuenow/min/max`, and its arrow keys stop propagation so a focused
   divider never drives the list behind it. The ratio persists in
   `app_settings.json` next to the other layout preferences.
-- Drag *between* the panes was evaluated and deliberately not built: Tauri's
-  `dragDropEnabled` is on by default, its config docs state HTML5 drag and drop
-  needs it off, and it is the mechanism the Explorer uses to accept Finder drops
-  today. Both transfer directions are already available as explicit actions.
+- Drag *between* the panes originally stayed out so Finder drops could keep using
+  Tauri's native `dragDropEnabled` path. **1.0.0-alpha.4** adds in-app drag over
+  custom MIME types so OS drops still fall through unchanged.
 - `AppSettings.split_ratio` (`Option<f64>`; absent means 50/50), so the split rides
   the same backward-compatible settings path as the rest.
 
@@ -158,6 +157,34 @@ that snapshot fix.
   of the removed builder hook, which also moved our reqwest to 0.13 to match
   `opendal-http-transport-reqwest`. Covered by a new bypass-transport round-trip
   e2e test; no behavior change intended.
+
+## [1.0.0-alpha.4]
+
+### Added
+
+- **S3 provider presets.** The connect form offers AWS, Cloudflare R2, Backblaze B2,
+  MinIO, Wasabi, DigitalOcean Spaces, and Custom. Picking a preset prefills endpoint,
+  region, and virtual-host vs path-style conventions (R2 also takes an account ID).
+  Saved profiles reopen on the matching preset via the stored endpoint.
+- **Presigned upload URLs.** Share dialog can mint a time-limited PUT grant as well
+  as a download link; history entries carry an `operation` badge so uploads are
+  distinguishable. Covered by `test_tier2_b26_presign_upload_url_roundtrip`.
+- **Cross-pane drag-and-drop.** Local → remote and remote → local drags use custom
+  MIME types so Tauri's native Finder/Explorer drop path is left alone.
+- **Linux release packages.** CI builds a `.deb` and an AppImage on tag, Sigstore
+  signs them with the macOS/Windows artifacts, and they land on the GitHub Release.
+- **Benchmark harness.** `scripts/benchmarks/` plus `docs/BENCHMARKS.md` for MinIO
+  throughput, 50k-key seed, cold-start, and RSS sampling. Public rival comparisons
+  still wait for v1.0.
+
+### Changed
+
+- Transfer-integrity e2e lives in `src-tauri/src/integrity_e2e/` (one module per
+  tier) so the 2,815-line file is under the size ceiling. 207 tests (141 unit + 66
+  e2e).
+- Windows CI runs the unit tier from a **release** test binary. The debug binary
+  crashed on `windows-latest` with `STATUS_ENTRYPOINT_NOT_FOUND`, so that job was
+  only compile-gating.
 
 ## [1.0.0-alpha.3]
 

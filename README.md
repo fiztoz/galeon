@@ -26,7 +26,7 @@ Rust + Tauri + React, built as a modern alternative to Cyberduck and Transmit.<b
 
 **Protocols**
 
-- 🪣 Any S3-compatible storage — AWS, MinIO, Cloudflare R2, Wasabi, B2 (path-style & virtual-host, custom endpoints, storage classes, server-side metadata)
+- 🪣 Any S3-compatible storage — AWS, MinIO, Cloudflare R2, Wasabi, B2, DigitalOcean Spaces (provider presets pre-fill endpoint quirks; path-style & virtual-host, custom endpoints, storage classes, server-side metadata)
 - 📁 SFTP, FTP and FTPS — including password auth and importing hosts straight from `~/.ssh/config`
 - 🔌 Optional **SSH tunnel** forwarding for S3 and SFTP, with reusable tunnel profiles
 
@@ -43,12 +43,12 @@ Rust + Tauri + React, built as a modern alternative to Cyberduck and Transmit.<b
 - ☀️ Light, dark, or follow-macOS theme
 - ✏️ Open a remote file in your external editor and re-upload on save; preview images, text and PDFs inline
 - 🔄 One-way sync between a local folder and a remote prefix, on a schedule or on demand
-- 🔗 Presigned URL sharing with expiry control and history
+- 🔗 Presigned URL sharing (download and upload grants) with expiry control and history
 - 🔐 Connection profiles with secrets in the **OS keychain** — never in config files; export/import profiles with an explicit, hash-confirmed opt-in for secrets
 
 ## Platform support
 
-**macOS is the primary shipping target** (Apple Silicon + Intel universal `.dmg`; ad-hoc signed by default, Developer ID optional). **Windows** is built and unit-tested in CI and ships an **unsigned** NSIS `.exe` installer. **Linux** is compiled and runs the MinIO transfer-integrity e2e tier in CI but has no release package. CI runs the Rust unit tier on Linux, macOS, and Windows.
+**macOS is the primary shipping target** (Apple Silicon + Intel universal `.dmg`; ad-hoc signed by default, Developer ID optional). **Windows** ships an **unsigned** NSIS `.exe` installer. **Linux** ships an **unsigned** `.deb` and AppImage. CI runs the Rust unit tier on all three; Linux also runs the MinIO transfer-integrity e2e tier.
 
 ## Install (macOS)
 
@@ -64,6 +64,13 @@ Download the `.exe` installer from [Releases](https://github.com/fiztoz/galeon/r
 and run it. Windows builds are **unsigned**, so SmartScreen may warn on first run —
 choose **More info → Run anyway** only if you trust the download, and verify the
 `SHA256SUMS` file published alongside the installer.
+
+## Install (Linux)
+
+Download the `.deb` (Debian/Ubuntu: `sudo apt install ./Galeon_*.deb`) or the
+AppImage (`chmod +x` then run) from [Releases](https://github.com/fiztoz/galeon/releases).
+Linux bundles are **unsigned**. Verify `SHA256SUMS` the same way as the other
+artifacts.
 
 ## Development
 
@@ -94,7 +101,7 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- --skip integri
 cargo clippy --locked --manifest-path src-tauri/Cargo.toml --lib --tests -- -D warnings
 ```
 
-The transfer-integrity tier (64 tests) needs a local MinIO — `./scripts/dev-minio.sh up && ./scripts/dev-minio.sh seed`, then drop the `--skip`. See [docs/TEST_INFRA.md](docs/TEST_INFRA.md).
+The transfer-integrity tier (66 tests) needs a local MinIO — `./scripts/dev-minio.sh up && ./scripts/dev-minio.sh seed`, then drop the `--skip`. See [docs/TEST_INFRA.md](docs/TEST_INFRA.md).
 
 ## Contributing
 
@@ -108,10 +115,11 @@ Galeon is [MIT licensed](LICENSE). It ships with no warranty and no telemetry.
 
 ### Releases
 
-Pushing a matching `v*` tag builds the universal `.dmg` and the Windows `.exe`
-installer in CI. macOS is **ad-hoc signed by default and needs no Apple secrets**;
-Developer ID and notarization are optional. Windows installers are **unsigned**.
-See [docs/RELEASE_MACOS.md](docs/RELEASE_MACOS.md) for the macOS release checklist,
+Pushing a matching `v*` tag builds the universal `.dmg`, the Windows `.exe`
+installer, and the Linux `.deb` / AppImage in CI. macOS is **ad-hoc signed by
+default and needs no Apple secrets**; Developer ID and notarization are optional.
+Windows and Linux installers are **unsigned**. See
+[docs/RELEASE_MACOS.md](docs/RELEASE_MACOS.md) for the macOS release checklist,
 repository setup, and artifact verification.
 
 Stack: Tauri v2 · Rust (tokio + [OpenDAL](https://opendal.apache.org)) · React + TypeScript · TailwindCSS · Bun.

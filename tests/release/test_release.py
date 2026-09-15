@@ -113,6 +113,17 @@ class SigningTests(unittest.TestCase):
 
 
 class ProvenanceTests(unittest.TestCase):
+    def test_linux_install_notes_keep_filenames_inside_code_spans(self):
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        self.assertIn("### Install (Linux)", workflow)
+        self.assertIn("release-linux", workflow)
+        # Nested `./`$DEB`` closed the code span before the filename and shipped
+        # broken apt/chmod copy. The command must expand inside one span.
+        self.assertNotIn("./\\`$DEB", workflow)
+        self.assertNotIn("./\\`$APPIMAGE", workflow)
+        self.assertIn("sudo apt install ./$DEB", workflow)
+        self.assertIn("chmod +x $APPIMAGE", workflow)
+
     def test_release_ref_guard(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
         guard_start = workflow.index("      - name: Require an annotated tag on main")

@@ -16,7 +16,7 @@ Every published number must disclose:
 | Field | Example |
 |---|---|
 | Machine | MacBook Pro M3, 18 GB RAM, macOS 15.x |
-| Build | `v1.0.0-alpha.3`, release profile, commit SHA |
+| Build | `v1.0.0-alpha.4`, release profile, commit SHA |
 | MinIO | `quay.io/minio/minio` digest or version, local loop |
 | Fixtures | 100 MiB / 1 GiB `/dev/urandom`, 50k × ~30 B keys |
 | Date | 2026-09-15 |

@@ -6,7 +6,7 @@
     "type": "git",
     "url": "git+https://github.com/fiztoz/galeon.git"
   },
-  "version": "1.0.0-alpha.3",
+  "version": "1.0.0-alpha.4",
   "type": "module",
   "scripts": {
     "dev": "vite",

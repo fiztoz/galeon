@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing release tag, e.g. v1.0.0-alpha.3'
+        description: 'Existing release tag, e.g. v1.0.0-alpha.4'
         required: true
         type: string
 
@@ -478,7 +478,7 @@ jobs:
             "1. Download \`$SETUP\` below and run it." \
             '2. The installer is **unsigned**; Windows SmartScreen may warn. Choose **More info → Run anyway** only if you trust this download.' '' \
             '### Install (Linux)' '' \
-            "1. Download \`$DEB\` for Debian/Ubuntu (\`sudo apt install ./\`$DEB\`) or \`$APPIMAGE\` for other distros (\`chmod +x \`$APPIMAGE\` then run it)." \
+            "1. Download \`$DEB\` for Debian/Ubuntu (\`sudo apt install ./$DEB\`) or \`$APPIMAGE\` for other distros (\`chmod +x $APPIMAGE\`, then run it)." \
             '2. The Linux bundles are **unsigned**; your package manager / desktop may warn on first run.' '' \
             'The release ships one `SHA256SUMS` covering every artifact; verify with `sha256sum -c SHA256SUMS`.' '' \
             '### Verify with Sigstore' '' \
