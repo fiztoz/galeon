@@ -113,12 +113,12 @@ jobs:
 
       # ssh2/sftp use vendored-openssl, which compiles OpenSSL from source on
       # Windows and needs Perl; windows-latest ships Strawberry Perl.
-      # Release-mode run: the raw *debug* test binary hits a VC-runtime
-      # entrypoint mismatch on the runner (0xc0000139
-      # STATUS_ENTRYPOINT_NOT_FOUND), so Windows runs the unit tier (MinIO e2e
-      # stays Linux-only) from a release binary instead of compile-gating.
-      - name: Cargo test (unit tier, release binary)
-        run: cargo test --locked --release --manifest-path src-tauri/Cargo.toml --lib -- --skip integrity_e2e
+      # build.rs embeds the Common Controls v6 manifest on test binaries so the
+      # harness can start (Tauri otherwise only stamps the app bin, and Windows
+      # then exits 0xc0000139 STATUS_ENTRYPOINT_NOT_FOUND). MinIO e2e stays
+      # Linux-only.
+      - name: Cargo test (unit tier)
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- --skip integrity_e2e
 
   secrets:
     name: Secret scan (history)

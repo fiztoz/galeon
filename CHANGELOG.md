@@ -182,9 +182,10 @@ that snapshot fix.
 - Transfer-integrity e2e lives in `src-tauri/src/integrity_e2e/` (one module per
   tier) so the 2,815-line file is under the size ceiling. 207 tests (141 unit + 66
   e2e).
-- Windows CI runs the unit tier from a **release** test binary. The debug binary
-  crashed on `windows-latest` with `STATUS_ENTRYPOINT_NOT_FOUND`, so that job was
-  only compile-gating.
+- Windows CI runs the unit tier instead of compile-gating. The harness used to
+  die at process start (`STATUS_ENTRYPOINT_NOT_FOUND`) because Tauri stamps the
+  Common Controls v6 manifest on the app binary only; `build.rs` now embeds the
+  same manifest on test binaries.
 
 ## [1.0.0-alpha.3]
 

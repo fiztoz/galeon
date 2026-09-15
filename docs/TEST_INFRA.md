@@ -13,8 +13,8 @@ Galeon uses **opaque-box, requirement-driven testing**. We test the storage and 
 *   **Test Runner**: Driven by cargo (`cargo test --lib --manifest-path src-tauri/Cargo.toml`).
 *   **CI**: `.github/workflows/ci.yml` starts the loop with `scripts/dev-minio.sh`
     and runs the full suite on Linux; macOS and Windows run the unit tier only
-    (Windows uses a `--release` test binary to dodge a debug VC-runtime
-    entrypoint crash on the runner). Clippy runs
+    (`build.rs` embeds the Common Controls v6 manifest on Windows test binaries
+    so the harness can start). Clippy runs
     with `-D warnings`, so new lints fail the build.
 *   **Test Modules**:
     *   **Core Lib Tests**: Unit tests for utility math, path safety guards, and scheduling logic.
