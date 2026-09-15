@@ -62,6 +62,6 @@ keyring = { version = "3", features = ["sync-secret-service"] }
 
 [dev-dependencies]
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-rcgen = "0.13"
+rcgen = "0.14"
 tauri = { version = "2", features = ["test"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
