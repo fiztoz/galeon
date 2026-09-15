@@ -11,6 +11,9 @@ fn main() {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("windows-app-manifest.xml");
         println!("cargo:rerun-if-changed={}", manifest.display());
         println!("cargo:rustc-link-arg-tests=/MANIFEST:EMBED");
-        println!("cargo:rustc-link-arg-tests=/MANIFESTINPUT:{}", manifest.display());
+        println!(
+            "cargo:rustc-link-arg-tests=/MANIFESTINPUT:{}",
+            manifest.display()
+        );
     }
 }
