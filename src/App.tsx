@@ -368,6 +368,18 @@ function App() {
     });
   };
 
+  const handleGeneratePresignedUploadUrl = async (key: string, expiresInSeconds: number): Promise<string> => {
+    if (!session) throw new Error('No active session');
+    const url = await invoke<string>('generate_presigned_upload_url', {
+      sessionId: session.sessionId,
+      key,
+      expiresInSeconds,
+    });
+    // History modal reads from the backend on open; refresh the badge eagerly.
+    loadPresignHistory();
+    return url;
+  };
+
   // Phase 9 — Power UX handlers
 
   // Track visited folders for the Command Palette "Recent Paths" section.
@@ -768,6 +780,13 @@ function App() {
                     handleInitiateUpload(localPath, remoteKey);
                   }
                 }}
+                onDownloadToLocal={(remoteKeys, targetDir) => {
+                  for (const remoteKey of remoteKeys) {
+                    const fileName = remoteKey.split('/').pop() || 'file';
+                    const sep = targetDir.endsWith('/') ? '' : '/';
+                    handleInitiateDownload(remoteKey, `${targetDir}${sep}${fileName}`);
+                  }
+                }}
                 onRegisterCommands={(cmds) => { localPaneCmdsRef.current = cmds; }}
                 onPathChange={setLocalPanePath}
               />
@@ -787,6 +806,7 @@ function App() {
                 onDeleteObjects={handleDeleteObjects}
                 onRenameObject={handleRenameObject}
                 onGeneratePresignedUrl={handleGeneratePresignedUrl}
+                onGeneratePresignedUploadUrl={handleGeneratePresignedUploadUrl}
                 onEditRemoteFile={handleEditRemoteFile}
                 onShowProperties={handleShowProperties}
                 onShowPreview={handleShowPreview}
@@ -811,6 +831,7 @@ function App() {
             onDeleteObjects={handleDeleteObjects}
             onRenameObject={handleRenameObject}
             onGeneratePresignedUrl={handleGeneratePresignedUrl}
+            onGeneratePresignedUploadUrl={handleGeneratePresignedUploadUrl}
             onEditRemoteFile={handleEditRemoteFile}
             onShowProperties={handleShowProperties}
             onShowPreview={handleShowPreview}

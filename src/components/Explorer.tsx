@@ -3,7 +3,7 @@ import { useMultiSelect } from '../hooks/useMultiSelect';
 import React, { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useFolderSizes } from '../hooks/useFolderSizes';
-import { save } from '@tauri-apps/plugin-dialog';
+import { save, open } from '@tauri-apps/plugin-dialog';
 import { useUploadPipeline, type PendingConflict } from '../hooks/useUploadPipeline';
 import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, MoreVertical, Loader2, AlertTriangle } from 'lucide-react';
 import { ProtocolCapabilities, GaleonObject } from '../types';
@@ -15,6 +15,12 @@ import {
   TextPromptDialog,
 } from './Dialogs';
 import { ObjectContextMenu, useObjectContextMenu, type ObjectMenuAction } from './ObjectContextMenu';
+import {
+  GALEON_LOCAL_PATHS_MIME,
+  GALEON_REMOTE_KEYS_MIME,
+  dragHasType,
+  readDragJson,
+} from './paneDrag';
 
 /** Format byte count to human-readable size string. Reused by LocalPane. */
 export const formatSize = (bytes: number | null) => {
@@ -37,6 +43,7 @@ interface ExplorerProps {
   onDeleteObjects: (items: { key: string; isFolder: boolean }[]) => Promise<void>;
   onRenameObject: (oldKey: string, newKey: string, isFolder: boolean) => Promise<void>;
   onGeneratePresignedUrl: (key: string, expiresInSeconds: number) => Promise<string>;
+  onGeneratePresignedUploadUrl?: (key: string, expiresInSeconds: number) => Promise<string>;
   onEditRemoteFile?: (remoteKey: string) => void;
   onShowProperties?: (obj: GaleonObject) => void;
   onShowPreview?: (obj: GaleonObject) => void;
@@ -58,6 +65,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
   onDeleteObjects,
   onRenameObject,
   onGeneratePresignedUrl,
+  onGeneratePresignedUploadUrl,
   onEditRemoteFile,
   onShowProperties,
   onShowPreview,
@@ -98,6 +106,15 @@ export const Explorer: React.FC<ExplorerProps> = ({
   const { selectedItems, setSelectedItems, setLastSelectedIndex, handleSelectItem, handleSelectAll, clearSelection } =
     useMultiSelect(filteredObjects);
 
+  // In-app drag state (local → remote). HTML5 only, additive over the native
+  // OS drop overlay (`isDragging`): we only preventDefault for our own MIME.
+  const [dragOverLocal, setDragOverLocal] = useState(false);
+
+  const remoteDragKeys = (obj: GaleonObject): string[] => {
+    if (selectedItems.has(obj.fullKey) && selectedItems.size > 0) return [...selectedItems];
+    return [obj.fullKey];
+  };
+
   const { activeMenu, setActiveMenu, menuPosition, openItemMenu, handleRowContextMenu } =
     useObjectContextMenu(selectedItems, setSelectedItems, setLastSelectedIndex);
 
@@ -123,7 +140,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
     if (downloadDestination) {
       localPath = downloadDestination;
     } else {
-      const { open } = await import('@tauri-apps/plugin-dialog');
       const selected = await open({
         title: 'Select download folder',
         directory: true,
@@ -479,7 +495,28 @@ export const Explorer: React.FC<ExplorerProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 text-zinc-100">
+    <div
+      className="flex flex-col h-full bg-zinc-950 text-zinc-100"
+      onDragOver={(e) => {
+        if (dragHasType(e, GALEON_LOCAL_PATHS_MIME)) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          setDragOverLocal(true);
+        }
+      }}
+      onDragLeave={() => setDragOverLocal(false)}
+      onDrop={(e) => {
+        if (!dragHasType(e, GALEON_LOCAL_PATHS_MIME)) return;
+        e.preventDefault();
+        setDragOverLocal(false);
+        const paths = readDragJson<string[]>(e, GALEON_LOCAL_PATHS_MIME);
+        if (!paths || paths.length === 0) return;
+        for (const localPath of paths) {
+          const fileName = localPath.split(/[/\\]/).pop() || 'file';
+          onInitiateUpload(localPath, prefix ? `${prefix}${fileName}` : fileName);
+        }
+      }}
+    >
       {renderBreadcrumbs()}
       
       {/* Drag & Drop Visual Overlay */}
@@ -490,6 +527,11 @@ export const Explorer: React.FC<ExplorerProps> = ({
             <span className="text-sm font-semibold">Drop files here to upload</span>
             <span className="text-xs text-zinc-500">Uploading to {prefix || '/'}</span>
           </div>
+        </div>
+      )}
+      {dragOverLocal && !isDragging && (
+        <div className="mx-6 mt-2 px-3 py-1.5 rounded-lg border border-dashed border-gale-teal/60 bg-gale-teal/5 text-xs text-gale-teal font-medium">
+          Drop to upload here ({prefix || '/'})
         </div>
       )}
 
@@ -688,6 +730,12 @@ export const Explorer: React.FC<ExplorerProps> = ({
                   filteredObjects.map((obj, index) => (
                     <tr
                       key={obj.fullKey}
+                      draggable={obj.objectType === 'file'}
+                      onDragStart={(e) => {
+                        if (obj.objectType !== 'file') { e.preventDefault(); return; }
+                        e.dataTransfer.setData(GALEON_REMOTE_KEYS_MIME, JSON.stringify(remoteDragKeys(obj)));
+                        e.dataTransfer.effectAllowed = 'copy';
+                      }}
                       onDoubleClick={() => handleDoubleClick(obj)}
                       onContextMenu={(e) => handleRowContextMenu(e, obj, index)}
                       className={`hover:bg-zinc-800/40 cursor-pointer transition-colors ${
@@ -819,6 +867,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
         <ShareLinkDialog
           fileName={shareTarget.name}
           onGenerate={(seconds) => onGeneratePresignedUrl(shareTarget.fullKey, seconds)}
+          onGenerateUpload={onGeneratePresignedUploadUrl ? (seconds) => onGeneratePresignedUploadUrl(shareTarget.fullKey, seconds) : undefined}
           onError={(message) => setError(message)}
           onClose={() => { setShowShareModal(false); setShareTarget(null); }}
         />

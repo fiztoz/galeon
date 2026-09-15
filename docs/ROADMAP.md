@@ -17,10 +17,10 @@ macOS `.dmg` artifacts produced by `.github/workflows/release.yml` are all publi
 
 | Do now | Still deferred |
 |--------|----------------|
-| Public repo; CI builds `.dmg` on a `v*` tag → GitHub Release | Auto-update (`tauri-plugin-updater`) — needs a trusted signing story and an availability commitment |
+| Public repo; CI builds macOS `.dmg`, Windows `.exe`, Linux `.deb`/AppImage on a `v*` tag → GitHub Release | Auto-update (`tauri-plugin-updater`) — needs a trusted signing story and an availability commitment |
 | Ad-hoc signed builds, explicitly labelled **not notarized** | Paid **Developer ID** + **notarization** — optional, enabled by signing mode and CI secrets |
 | One-time Gatekeeper step documented: right-click → **Open** | "Double-click and it just works" for strangers |
-| Product polish users actually feel | Windows/Linux public installers, docs site, benchmark PR |
+| Product polish users actually feel | Docs site, published Cyberduck/FileZilla benchmark comparison |
 
 **The honest constraint:** a build that is not notarized still trips Gatekeeper on
 first launch for anyone who didn't build it themselves. Publishing the source and
@@ -67,19 +67,19 @@ Cash in the OpenDAL bet — generalize the connection model from "S3 profile" to
 
 - ✅ **SFTP** and **FTP/FTPS** (the Cyberduck-parity must-haves) — in tree, with native password/key session tests and `~/.ssh/config` import
 - **WebDAV**, **Azure Blob**, **Google Cloud Storage**, **Backblaze B2 native** — still open
-- **Provider presets**: AWS / Cloudflare R2 / MinIO / Wasabi / B2 pre-fill endpoint quirks — still open
+- ✅ **Provider presets**: AWS / Cloudflare R2 / MinIO / Wasabi / B2 / DigitalOcean Spaces pre-fill endpoint quirks (`src/components/connection/presets.ts`)
 - ✅ Protocol-agnostic capabilities model (`ProtocolCapabilities` travels with the profile)
 
 *Definition of done:* a Cyberduck user can migrate their five most-used bookmarks in five minutes.
 
-## ✅ v0.4 — Frigate · *Power UX* *(complete except in-pane drag — see v0.9 notes)*
+## ✅ v0.4 — Frigate · *Power UX*
 
 The release that makes people switch and stay.
 
 - ✅ **Edit in external editor**: open remote file, watch for saves, auto re-upload
 - ✅ **Quick preview** pane: images, text, PDFs inline, plus object metadata in the inspector
 - ✅ **Command palette** (⌘K): jump to profile, path, or action
-- ✅ **Dual-pane mode**: local ⇄ remote side by side — `LocalPane` beside the remote Explorer (⌥⌘L / toolbar / ⌘K), local→remote upload and remote→local "Download here", toggle + last directory persisted in `app_settings.json`, **resizable split** (`SplitPane`: pointer drag, keyboard-operable separator, snap-to-collapse, double-click reset, ratio persisted). Still open: drag *between* the panes (deliberately not built — see v0.9).
+- ✅ **Dual-pane mode**: local ⇄ remote side by side — `LocalPane` beside the remote Explorer (⌥⌘L / toolbar / ⌘K), local→remote upload and remote→local "Download here", toggle + last directory persisted in `app_settings.json`, **resizable split** (`SplitPane`: pointer drag, keyboard-operable separator, snap-to-collapse, double-click reset, ratio persisted). ✅ **Drag between the panes** via custom MIME types so Finder/Explorer OS drops keep using Tauri's native path.
 - ✅ Light theme (System / Dark / Light, follows macOS live) — see DESIGN.md §2
 - ✅ Keyboard navigation; object properties inspector
 
@@ -118,15 +118,11 @@ Stability and UX good enough to publish.
   under OFL in `public/fonts/`; CSP now allows no external host at all
 - CSP is set and verified against the built assets, but still wants a `tauri dev`
   pass to confirm Tauri's injected bootstrap and real IPC
-- Drag **between** the panes. Deliberately not built: Tauri's
-  `dragDropEnabled` defaults to true and its own config docs say HTML5 drag and
-  drop requires turning it off, which is exactly how the Explorer receives drops
-  from Finder today. In-app drag would trade a working feature for a convenience.
-  Both directions already have explicit, keyboard-reachable actions — "Upload to
-  remote" in the local pane, "Download here" plus dialog-free batch download in the
-  remote pane. Revisit only with a plan to keep OS drops (e.g. route internal drags
-  through app state instead of HTML5 DnD).
-- Dual-pane is done except drag *between* the panes (see above). Revisit only with a plan to keep OS drops.
+- ✅ Drag **between** the panes (1.0.0-alpha.4). In-app drags use custom MIME types
+  (`application/x-galeon-local-paths` / `application/x-galeon-remote-keys`); drop
+  targets only `preventDefault` when that MIME is present, so Finder/Explorer OS
+  drops still reach Tauri's native `dragDropEnabled` handler. Explicit
+  keyboard-reachable actions remain ("Upload to remote", "Download here").
 
 *Definition of done:* a stranger can clone or download, use Galeon for real work,
 and the repo states its install friction honestly.
@@ -139,9 +135,9 @@ install friction, not opening the doors.
 - **Developer ID** sign + **notarize** + staple macOS `.dmg` (Gatekeeper clean) — opt into `MACOS_SIGNING_MODE=developer-id` with the documented secrets
 - One stable public download name/link + short install copy (download → open → Applications → launch)
 - **Auto-updates** (`tauri-plugin-updater`) via **public** release assets *or* a private bucket/proxy — never a PAT baked into the app
-- Windows `.msi`, Linux AppImage/`.deb` if cross-platform still matters
+- Windows `.msi` if an MSI is still wanted (NSIS `.exe` already ships); Linux `.deb` / AppImage already ship from CI as of 1.0.0-alpha.4
 - Docs site; i18n scaffolding
-- Published **benchmark suite** vs Cyberduck & FileZilla
+- Published **benchmark comparison** vs Cyberduck & FileZilla (the harness exists; public rival numbers wait for this milestone)
 
 *Definition of done:* a stranger downloads Galeon and installs without Terminal folklore.
 

@@ -366,17 +366,23 @@ mod tests {
 
     #[tokio::test]
     async fn metadata_adapter_does_not_follow_redirects() {
-        use tokio::io::AsyncWriteExt;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
         use tokio::net::TcpListener;
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.expect("bind");
         let address = listener.local_addr().expect("address");
         let server = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.expect("accept");
+            // Drain the request before closing. On Windows, dropping the
+            // socket with unread request bytes sends RST (WSAECONNABORTED)
+            // instead of delivering the 302.
+            let mut request = [0_u8; 4096];
+            assert!(stream.read(&mut request).await.expect("request") > 0);
             stream
                 .write_all(b"HTTP/1.1 302 Found\r\nlocation: http://127.0.0.1:1/\r\ncontent-length: 0\r\n\r\n")
                 .await
                 .expect("response");
+            let _ = stream.shutdown().await;
         });
 
         let connector = build_reqwest_metadata_connector(false).expect("connector");

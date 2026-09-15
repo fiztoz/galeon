@@ -79,6 +79,8 @@ export interface PresignHistoryEntry {
   url: string;
   expiresInSeconds: number;
   createdAt: string;
+  /** "download" for GET links, "upload" for PUT links. Absent on pre-1.0 entries. */
+  operation?: string;
 }
 
 export interface GaleonObject {

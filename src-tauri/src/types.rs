@@ -107,6 +107,14 @@ pub struct PresignHistoryEntry {
     pub url: String,
     pub expires_in_seconds: u64,
     pub created_at: String,
+    /// "download" (presign_read) or "upload" (presign_write). Older entries
+    /// predate the field and deserialize as "download" via the default.
+    #[serde(default = "default_presign_operation")]
+    pub operation: String,
+}
+
+fn default_presign_operation() -> String {
+    "download".to_string()
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

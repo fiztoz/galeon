@@ -43,6 +43,9 @@ const HistoryItem: React.FC<{
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2 min-w-0">
           <span className="text-sm font-medium truncate">{entry.fileName}</span>
+          {(entry.operation === 'upload') && (
+            <span className="text-[10px] uppercase tracking-wider bg-amber-900/50 text-amber-300 px-1.5 py-0.5 rounded font-semibold">Upload</span>
+          )}
           {isExpired && <span className="text-xs text-red-400">Expired</span>}
         </div>
         <div className="flex items-center space-x-1">

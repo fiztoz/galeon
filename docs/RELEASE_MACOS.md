@@ -29,16 +29,18 @@ Gatekeeper or bypass a malware/damaged-app warning. See
 3. Create and push an annotated tag matching the version, for example:
 
    ```sh
-   git tag -a v1.0.0-alpha.3 -m 'Galeon 1.0.0-alpha.3'
-   git push origin v1.0.0-alpha.3
+   git tag -a v1.0.0-alpha.4 -m 'Galeon 1.0.0-alpha.4'
+   git push origin v1.0.0-alpha.4
    ```
 
    Use a new version for a new release; do not move an existing release tag.
 4. `.github/workflows/release.yml` checks out that exact tag, validates all three
-   versions, runs unit/frontend/tooling tests, and builds a universal macOS DMG.
-5. CI verifies the app's signature, publishes the DMG plus `SHA256SUMS`, and records
-   the **checked-out commit**, not the workflow dispatch commit. Alpha/beta/RC tags
-   become GitHub prereleases and do not replace the latest stable release.
+   versions, runs unit/frontend/tooling tests, and builds a universal macOS DMG
+   plus the Windows NSIS installer and Linux `.deb` / AppImage.
+5. CI verifies the macOS app's signature, publishes every artifact plus one
+   `SHA256SUMS`, and records the **checked-out commit**, not the workflow dispatch
+   commit. Alpha/beta/RC tags become GitHub prereleases and do not replace the
+   latest stable release.
 6. Test the downloaded installer on a clean Mac. CI signature verification is not
    a substitute for testing Gatekeeper and the first-connect experience.
 

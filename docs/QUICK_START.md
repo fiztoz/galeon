@@ -16,6 +16,9 @@ Default builds are **ad-hoc signed, not notarized**, so Gatekeeper can block fir
 
 When a new version arrives, replace the app the same way (no automatic updater yet).
 
+Windows and Linux installers are on the same [Releases](https://github.com/fiztoz/galeon/releases)
+page (unsigned NSIS `.exe`, `.deb`, AppImage). See the README install sections.
+
 ## First launch
 
 On a fresh install, Galeon shows a short onboarding wizard:
@@ -33,7 +36,9 @@ Existing users who already have saved profiles skip onboarding automatically on 
 ## Create a storage profile
 
 1. Open the connection screen (shown when disconnected).
-2. Select a protocol and fill in host/bucket details.
+2. Select a protocol and fill in host/bucket details. For S3, pick a provider
+   preset (AWS, R2, B2, MinIO, Wasabi, Spaces, or Custom) so endpoint / region /
+   URL-style conventions fill in.
 3. Enter credentials. SFTP, FTP/FTPS, and SSH tunnels use password authentication by default; SFTP can also use an SSH key.
 4. Click the save icon or **Save as new profile** to persist the connection.
 

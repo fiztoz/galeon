@@ -12,13 +12,20 @@ Galeon uses **opaque-box, requirement-driven testing**. We test the storage and 
 
 *   **Test Runner**: Driven by cargo (`cargo test --lib --manifest-path src-tauri/Cargo.toml`).
 *   **CI**: `.github/workflows/ci.yml` starts the loop with `scripts/dev-minio.sh`
-    and runs the full suite on Linux; macOS runs the unit tier only. Clippy runs
+    and runs the full suite on Linux; macOS and Windows run the unit tier only
+    (`build.rs` embeds the Common Controls v6 manifest on Windows test binaries
+    so the harness can start). Clippy runs
     with `-D warnings`, so new lints fail the build.
 *   **Test Modules**:
     *   **Core Lib Tests**: Unit tests for utility math, path safety guards, and scheduling logic.
     *   **SFTP Native Tests**: Unit and mock session tests for password-based and key-based SFTP.
     *   **FTP Native Tests**: Protocol configurations and session handling.
-    *   **Integrity & E2E Tests**: Defined in `src-tauri/src/integrity_e2e.rs`, which runs full transfers against a running local MinIO server to verify size checks, single-file/multipart checksum matches, resume offsets, and bandwidth rules.
+    *   **Integrity & E2E Tests**: Defined in `src-tauri/src/integrity_e2e/`
+    (`mod.rs` harness plus one module per tier: `transfer_sizes`,
+    `transfer_integrity`, `profiles`, `boundaries`, `resume_conflicts`,
+    `sync_scale`), which run full transfers against a running local MinIO
+    server to verify size checks, single-file/multipart checksum matches,
+    resume offsets, and bandwidth rules.
 
 ### Requirements & Local Services
 E2E integration tests require a running MinIO server:
@@ -68,7 +75,7 @@ High-complexity scenarios simulating production workloads.
 
 ## Running the Suite
 
-To run all 206 tests (141 unit + 65 integrity e2e):
+To run all 207 tests (141 unit + 66 integrity e2e):
 
 ```bash
 # Run all tests
@@ -78,7 +85,7 @@ cargo test --lib --manifest-path src-tauri/Cargo.toml
 cargo test --lib integrity_e2e
 
 # Run everything EXCEPT the e2e tier (no MinIO needed — this is what the
-# macOS CI job runs, since the e2e tier requires a live S3 endpoint)
+# macOS and Windows CI jobs run, since the e2e tier requires a live S3 endpoint)
 cargo test --lib -- --skip integrity_e2e
 
 # Run native protocol tests only

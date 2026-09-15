@@ -1,5 +1,6 @@
-import React, { type Dispatch, type SetStateAction } from 'react';
+import React, { useState, type Dispatch, type SetStateAction } from 'react';
 import { FIELD } from './field';
+import { S3_PRESETS, endpointForPreset, guessPreset, type S3ProviderId } from './presets';
 export interface S3FieldsProps {
   bucket: string;
   setBucket: Dispatch<SetStateAction<string>>;
@@ -25,8 +26,59 @@ export interface S3FieldsProps {
 }
 
 export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey, setSecretKey, endpoint, setEndpoint, region, setRegion, dangerDisableSsl, setDangerDisableSsl, showAdvanced, setShowAdvanced, useVirtualHostStyle, setUseVirtualHostStyle, storageClass, setStorageClass, maxBandwidth, setMaxBandwidth, bandwidthRules }: S3FieldsProps) {
+  const [provider, setProvider] = useState<S3ProviderId>(() => guessPreset(endpoint));
+  const [accountId, setAccountId] = useState('');
+  const active = S3_PRESETS.find((p) => p.id === provider) ?? S3_PRESETS[0];
+
+  const pickProvider = (id: S3ProviderId) => {
+    const preset = S3_PRESETS.find((p) => p.id === id) ?? S3_PRESETS[0];
+    setProvider(id);
+    // Custom never clobbers what the user typed; every other preset applies
+    // its conventions (endpoint template, region, URL style) in one move.
+    if (preset.id === 'custom') return;
+    setRegion(preset.defaultRegion);
+    setUseVirtualHostStyle(preset.useVirtualHostStyle);
+    if (preset.id === 'r2') {
+      setEndpoint(accountId ? endpointForPreset(preset, { accountId }) : '');
+    } else {
+      const built = endpointForPreset(preset, { region: preset.defaultRegion });
+      // AWS uses an empty endpoint (SDK default); others prefill the template.
+      setEndpoint(preset.id === 'aws' ? '' : built || preset.defaultEndpoint);
+    }
+  };
+
+  const onAccountId = (value: string) => {
+    setAccountId(value);
+    if (active.id === 'r2') {
+      setEndpoint(endpointForPreset(active, { accountId: value }));
+    }
+  };
+
+  const onPresetRegion = (value: string) => {
+    setRegion(value);
+    // Keep derived endpoints in sync when the region drives the hostname.
+    if (active.id === 'b2' || active.id === 'wasabi' || active.id === 'spaces') {
+      setEndpoint(endpointForPreset(active, { region: value }));
+    }
+  };
+
   return (
 <>
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Provider</label>
+                  <select value={provider} onChange={(e) => pickProvider(e.target.value as S3ProviderId)} className={FIELD}>
+                    {S3_PRESETS.map((p) => (
+                      <option key={p.id} value={p.id}>{p.label}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-zinc-500">{active.help}</p>
+                </div>
+                {active.needsAccountId && (
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Account ID</label>
+                    <input type="text" value={accountId} onChange={(e) => onAccountId(e.target.value)} placeholder="R2 account ID" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Bucket Name</label>
                   <input type="text" value={bucket} onChange={(e) => setBucket(e.target.value)} required placeholder="e.g. my-bucket" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
@@ -42,13 +94,21 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Custom Endpoint</label>
-                  <input type="text" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="Leave empty for AWS, or https://minio.example.com:9000" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+                  <input type="text" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder={active.endpointPlaceholder} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
                   <p className="mt-1 text-xs text-zinc-500">MinIO / R2 / Wasabi: paste the API endpoint URL</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Region</label>
-                    <input type="text" value={region} onChange={(e) => setRegion(e.target.value)} placeholder="us-east-1 (optional for MinIO)" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+                    {active.regionOptions ? (
+                      <select value={region || active.defaultRegion} onChange={(e) => onPresetRegion(e.target.value)} className={FIELD}>
+                        {active.regionOptions.map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input type="text" value={region} onChange={(e) => setRegion(e.target.value)} placeholder={active.regionPlaceholder} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+                    )}
                   </div>
                   <div className="flex items-end pb-2">
                     <div className="flex items-center space-x-2">

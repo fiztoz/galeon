@@ -14,6 +14,12 @@ import {
   ArrowUpToLine,
 } from 'lucide-react';
 import { formatSize } from './Explorer';
+import {
+  GALEON_LOCAL_PATHS_MIME,
+  GALEON_REMOTE_KEYS_MIME,
+  dragHasType,
+  readDragJson,
+} from './paneDrag';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,6 +39,8 @@ export interface LocalPaneProps {
   /** The remote pane's current prefix, used as the upload destination hint. */
   remotePrefix: string;
   onUploadToRemote: (paths: string[], targetPrefix: string) => void;
+  /** In-app drag from the remote pane: download these keys into `targetDir`. */
+  onDownloadToLocal?: (remoteKeys: string[], targetDir: string) => void;
   onRegisterCommands?: (cmds: { refresh: () => void; newFolder: () => void }) => void;
   active?: boolean;
   /** Called when the local pane navigates to a new directory. */
@@ -76,6 +84,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
   initialPath,
   remotePrefix,
   onUploadToRemote,
+  onDownloadToLocal,
   onRegisterCommands,
   onPathChange,
 }) => {
@@ -104,7 +113,17 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
+  // ── In-app drag state (remote → local) ───────────────────────────────────
+  // HTML5 only, additive over Tauri's native OS drop: we only preventDefault
+  // when the remote pane's MIME is present, so OS file drags still reach the
+  // window-level `tauri://drag-drop` listener untouched.
+  const [dragOverRemote, setDragOverRemote] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const localDragPaths = (entry: LocalEntry): string[] => {
+    if (selectedItems.has(entry.path) && selectedItems.size > 0) return [...selectedItems];
+    return [entry.path];
+  };
   const listNonceRef = useRef(0);
 
   // ── Fetch directory ────────────────────────────────────────────────────────
@@ -279,7 +298,24 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
   const hasSelection = selectedItems.size > 0;
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 text-zinc-100">
+    <div
+      className="flex flex-col h-full bg-zinc-950 text-zinc-100"
+      onDragOver={(e) => {
+        if (dragHasType(e, GALEON_REMOTE_KEYS_MIME)) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          setDragOverRemote(true);
+        }
+      }}
+      onDragLeave={() => setDragOverRemote(false)}
+      onDrop={(e) => {
+        if (!dragHasType(e, GALEON_REMOTE_KEYS_MIME)) return;
+        e.preventDefault();
+        setDragOverRemote(false);
+        const keys = readDragJson<string[]>(e, GALEON_REMOTE_KEYS_MIME);
+        if (keys && keys.length > 0) onDownloadToLocal?.(keys, currentPath);
+      }}
+    >
       {/* Path bar */}
       <div className="flex items-center justify-between gap-3 py-3 px-4 bg-zinc-900 border-b border-zinc-800 text-sm overflow-x-auto">
         <div className="flex items-center space-x-1 min-w-0">
@@ -389,7 +425,10 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
       </div>
 
       {/* Content area */}
-      <div className="flex-1 overflow-auto p-4 galeon-scrollbar">
+      <div className={`flex-1 overflow-auto p-4 galeon-scrollbar ${dragOverRemote ? 'ring-2 ring-inset ring-gale-teal/60 bg-gale-teal/5' : ''}`}>
+        {dragOverRemote && (
+          <div className="mb-2 text-xs text-gale-teal font-medium px-1">Drop to download here</div>
+        )}
         {error && (
           <div className="p-3 mb-4 text-sm bg-red-950/50 border border-red-800 text-red-200 rounded-lg flex items-start justify-between gap-3">
             <span className="min-w-0 break-words">{error}</span>
@@ -490,6 +529,12 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                   filteredEntries.map((entry, index) => (
                     <tr
                       key={entry.path}
+                      draggable={!entry.isDir}
+                      onDragStart={(e) => {
+                        if (entry.isDir) { e.preventDefault(); return; }
+                        e.dataTransfer.setData(GALEON_LOCAL_PATHS_MIME, JSON.stringify(localDragPaths(entry)));
+                        e.dataTransfer.effectAllowed = 'copy';
+                      }}
                       onDoubleClick={() => handleDoubleClick(entry)}
                       className={`hover:bg-zinc-800/40 cursor-pointer transition-colors ${
                         selectedItems.has(entry.path) ? 'bg-gale-teal/10 border-l-2 border-gale-teal' : ''
