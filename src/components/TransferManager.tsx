@@ -50,13 +50,13 @@ const statusChip = (status: TransferState['status']) => {
     case 'active':
       return <span className="px-2 py-0.5 rounded-full text-[10px] bg-doubloon/15 text-doubloon border border-doubloon/20">Active</span>;
     case 'retrying':
-      return <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-900/40 text-amber-300 border border-amber-700/30">Retrying</span>;
+      return <span className="px-2 py-0.5 rounded-full text-[10px] bg-status-warning/10 text-status-warning border border-status-warning/30">Retrying</span>;
     case 'paused':
       return <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-800/50 text-zinc-500 border border-zinc-700/20">Paused</span>;
     case 'completed':
       return <span className="px-2 py-0.5 rounded-full text-[10px] bg-gale-teal/15 text-gale-teal border border-gale-teal/20">Completed</span>;
     case 'failed':
-      return <span className="px-2 py-0.5 rounded-full text-[10px] bg-red-950/50 text-red-400 border border-red-900/30">Failed</span>;
+      return <span className="px-2 py-0.5 rounded-full text-[10px] bg-status-danger/10 text-status-danger border border-status-danger/30">Failed</span>;
     case 'cancelled':
       return <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-800/50 text-zinc-500 border border-zinc-700/20">Cancelled</span>;
     case 'verifying':
@@ -402,13 +402,13 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
     <div className={`relative shrink-0 max-h-[45dvh] bg-zinc-900 border-t border-zinc-800 flex flex-col ${isOpen ? 'h-80' : 'h-[42px]'}`}>
       {/* Restored transfers banner */}
       {restoredCount > 0 && (
-        <div className="bg-amber-900/30 border-b border-amber-800/50 px-6 py-1.5 flex items-center justify-between shrink-0">
-          <span className="text-xs text-amber-400 font-mono metric-text">
+        <div className="bg-status-warning/10 border-b border-status-warning/30 px-6 py-1.5 flex items-center justify-between shrink-0">
+          <span className="text-xs text-status-warning font-mono metric-text">
             {restoredCount} interrupted transfer{restoredCount > 1 ? 's' : ''} restored from previous session
           </span>
           <button
             onClick={() => setRestoredCount(0)}
-            className="text-xs text-amber-400 hover:text-amber-300"
+            className="text-xs text-status-warning hover:text-status-warning"
           >
             Dismiss
           </button>
@@ -474,7 +474,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
                     </>
                   )}
                   {transfer.status === 'retrying' && (
-                    <span className="text-amber-300 text-[10px] max-w-[10rem] truncate" title={transfer.error}>
+                    <span className="text-status-warning text-[10px] max-w-[10rem] truncate" title={transfer.error}>
                       Retry {transfer.retryAttempt ?? '?'}/{transfer.retryMax ?? '?'}…
                     </span>
                   )}
@@ -485,12 +485,12 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
                     <span className="text-zinc-400">Paused</span>
                   )}
                   {transfer.status === 'completed' && (
-                    <span className="text-teal-400 flex items-center space-x-1">
+                    <span className="text-status-success flex items-center space-x-1">
                       <CheckCircle className="w-3.5 h-3.5" />
                     </span>
                   )}
                   {transfer.status === 'failed' && (
-                    <span className="text-red-400 flex items-center space-x-1" title={transfer.error}>
+                    <span className="text-status-danger flex items-center space-x-1" title={transfer.error}>
                       <XCircle className="w-3.5 h-3.5" />
                     </span>
                   )}
@@ -512,7 +512,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
                       )}
                       <button
                         onClick={(e) => { e.stopPropagation(); handleCancel(transfer); }}
-                        className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-red-400"
+                        className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-status-danger"
                         title="Cancel"
                       >
                         <X className="w-3 h-3" />
@@ -532,7 +532,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleCancel(transfer); }}
-                        className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-red-400"
+                        className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-status-danger"
                         title="Cancel"
                       >
                         <X className="w-3 h-3" />
@@ -551,7 +551,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
                           return rest;
                         });
                       }}
-                      className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-amber-400"
+                      className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-status-warning"
                       title="Retry"
                     >
                       <RotateCcw className="w-3 h-3" />
@@ -571,7 +571,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
                 <span>{transfer.percentage.toFixed(1)}%</span>
                 <span>
                   {transfer.status === 'failed' && transfer.error ? (
-                    <span className="text-red-400 truncate max-w-xs font-sans" title={transfer.error}>
+                    <span className="text-status-danger truncate max-w-xs font-sans" title={transfer.error}>
                       {transfer.error}
                     </span>
                   ) : (

@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Unify status colors in both themes, radio and time controls, focus outlines, disclosure/close icons, and older dialog size limits.
+
 - Theme Region autocomplete suggestions while preserving custom regions and keyboard selection.
 
 - Replace native dropdown menus with themed, keyboard-accessible controls throughout the app and unify checkbox styling.

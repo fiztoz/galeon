@@ -342,7 +342,7 @@ export const ShareLinkDialog: React.FC<ShareLinkDialogProps> = ({
               className="px-3 py-2 bg-raised hover:bg-raised-hover rounded-lg text-sm"
               title="Copy link"
             >
-              {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+              {copied ? <Check className="w-4 h-4 text-status-success" /> : <Copy className="w-4 h-4" />}
             </button>
             <button
               onClick={open}
@@ -352,7 +352,7 @@ export const ShareLinkDialog: React.FC<ShareLinkDialogProps> = ({
               <ExternalLink className="w-4 h-4" />
             </button>
           </div>
-          {copied && <p className="text-xs text-green-400 mt-1">Copied to clipboard!</p>}
+          {copied && <p className="text-xs text-status-success mt-1">Copied to clipboard!</p>}
         </div>
       )}
     </Dialog>
@@ -396,7 +396,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({
         </button>
         <button
           onClick={() => onResolve('overwrite')}
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-medium"
+          className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-on-accent rounded-lg text-sm font-medium"
         >
           Overwrite
         </button>

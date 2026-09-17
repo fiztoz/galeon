@@ -165,7 +165,7 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
                     aria-label={`Delete ${profile.name}`}
                     title="Delete profile"
                     onClick={() => onDelete(profile.id)}
-                    className="p-1.5 hover:bg-zinc-700 rounded text-zinc-400 hover:text-red-400"
+                    className="p-1.5 hover:bg-zinc-700 rounded text-zinc-400 hover:text-status-danger"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

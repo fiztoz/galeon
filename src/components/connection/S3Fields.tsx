@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react';
 import { Autocomplete } from '../Autocomplete';
 import { Select } from '../Select';
 import React, { useState, type Dispatch, type SetStateAction } from 'react';
@@ -135,12 +136,12 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                         id="disable-ssl"
                         checked={dangerDisableSsl}
                         onChange={(e) => setDangerDisableSsl(e.target.checked)}
-                        className="w-4 h-4 text-yellow-500 bg-zinc-800 border-zinc-600 rounded focus:ring-yellow-500"
+                        className="w-4 h-4 text-status-warning bg-zinc-800 border-zinc-600 rounded focus:ring-yellow-500"
                       />
                       <label htmlFor="disable-ssl" className="text-xs text-zinc-400">
                         Disable SSL Verify
                         {dangerDisableSsl && (
-                          <span className="ml-1 text-yellow-500">(self-signed OK)</span>
+                          <span className="ml-1 text-status-warning">(self-signed OK)</span>
                         )}
                       </label>
                     </div>
@@ -154,7 +155,7 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                   aria-expanded={showAdvanced}
                   className="flex items-center space-x-2 text-xs text-zinc-400 hover:text-zinc-200"
                 >
-                  <span>{showAdvanced ? '▼' : '▶'}</span>
+                  <ChevronRight size={14} aria-hidden="true" className={`shrink-0 transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
                   <span>Advanced S3 Options</span>
                 </button>
 

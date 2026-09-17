@@ -145,6 +145,8 @@ Styling intent, not a component API dump. Implement with Tailwind + tokens in `s
 - Zinc-900/800 fields, zinc-800 borders, teal focus ring.
 - Use the shared `Select` for choice menus: zinc surface, teal checkmark, keyboard arrows/Home/End, typeahead, Enter to commit, Escape to dismiss. Menus stay within the viewport and portal into the active dialog when needed.
 - Use `Autocomplete` for editable suggestions such as Region; custom values must remain valid, and Tab/Escape must never silently replace typed text.
+- Status messages use `text-status-danger`, `text-status-warning`, and `text-status-success`, with matching tinted surfaces. These tokens use darker inks in light mode; gold metric text uses `--metric-ink`.
+- Use `TimeField` for 24-hour time choices. Radio controls share native semantics with a themed appearance, and keyboard focus uses one outline rather than stacked rings.
 - Checkboxes retain native input semantics with a shared 16px zinc/teal appearance and visible keyboard focus.
 - **Progressive disclosure:** default connection forms stay short; advanced protocol options expand on demand.
 - Validation: danger text + border; no rainbow error themes.

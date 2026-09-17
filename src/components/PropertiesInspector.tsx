@@ -182,7 +182,7 @@ const Row: React.FC<RowProps> = ({ label, value, mono = false }) => {
             title="Copy to clipboard"
           >
             {copied ? (
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <Check className="w-3.5 h-3.5 text-status-success" />
             ) : (
               <Copy className="w-3.5 h-3.5" />
             )}
@@ -243,7 +243,7 @@ const PreviewBlock: React.FC<PreviewBlockProps> = ({
     );
   } else if (error) {
     body = (
-      <div className="flex items-start gap-2 py-3 text-red-400 text-sm">
+      <div className="flex items-start gap-2 py-3 text-status-danger text-sm">
         <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
         <span>{error}</span>
       </div>
@@ -714,7 +714,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       <span>Loading metadata…</span>
                     </div>
                   ) : fetchError ? (
-                    <div className="flex items-start gap-2 py-3 text-red-400 text-sm">
+                    <div className="flex items-start gap-2 py-3 text-status-danger text-sm">
                       <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                       <span>{fetchError}</span>
                     </div>
@@ -751,10 +751,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                             </button>
                           </div>
                           {contentTypeSaveSuccess && (
-                            <p className="text-green-400 text-xs mt-1.5">Content type updated.</p>
+                            <p className="text-status-success text-xs mt-1.5">Content type updated.</p>
                           )}
                           {contentTypeSaveError && (
-                            <p className="text-red-400 text-xs mt-1.5">{contentTypeSaveError}</p>
+                            <p className="text-status-danger text-xs mt-1.5">{contentTypeSaveError}</p>
                           )}
                         </div>
                       ) : (
@@ -801,7 +801,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       <span>{verifying ? 'Verifying…' : 'Verify against local file…'}</span>
                     </button>
                     {verifyError && (
-                      <div className="flex items-start gap-2 mt-2 text-red-400 text-xs">
+                      <div className="flex items-start gap-2 mt-2 text-status-danger text-xs">
                         <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                         <span>{verifyError}</span>
                       </div>
@@ -809,7 +809,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     {verifyResult && (
                       <div
                         className={`flex items-start gap-2 mt-2 text-xs ${
-                          verifyResult.matches ? 'text-emerald-400' : 'text-amber-400'
+                          verifyResult.matches ? 'text-status-success' : 'text-status-warning'
                         }`}
                       >
                         {verifyResult.matches ? (
@@ -868,10 +868,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                           </button>
                         </div>
                         {saveSuccess && (
-                          <p className="text-green-400 text-xs mt-1.5">Storage class updated.</p>
+                          <p className="text-status-success text-xs mt-1.5">Storage class updated.</p>
                         )}
                         {saveError && (
-                          <p className="text-red-400 text-xs mt-1.5">{saveError}</p>
+                          <p className="text-status-danger text-xs mt-1.5">{saveError}</p>
                         )}
                       </div>
                     ) : (

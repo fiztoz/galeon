@@ -66,6 +66,7 @@ export const ActiveEditors: React.FC<ActiveEditorsProps> = ({ sessions, onStop, 
       <button
         onClick={() => setOpen((o) => !o)}
         title="Active external editors"
+        aria-expanded={open}
         className="inline-flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 px-2 py-1 rounded-md font-medium transition-colors"
       >
         <Pencil className="w-3 h-3 text-gale-teal" />
@@ -73,7 +74,7 @@ export const ActiveEditors: React.FC<ActiveEditorsProps> = ({ sessions, onStop, 
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-50 overflow-hidden">
+        <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-32px)] bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
             <span className="text-sm font-semibold flex items-center space-x-2">
               <FileClock className="w-4 h-4 text-gale-teal" />
@@ -82,7 +83,7 @@ export const ActiveEditors: React.FC<ActiveEditorsProps> = ({ sessions, onStop, 
             {sessions.length > 1 && (
               <button
                 onClick={() => { onStopAll(); setOpen(false); }}
-                className="text-xs text-red-400 hover:text-red-300"
+                className="text-xs text-status-danger hover:text-status-danger"
               >
                 Stop all
               </button>
@@ -103,7 +104,7 @@ export const ActiveEditors: React.FC<ActiveEditorsProps> = ({ sessions, onStop, 
                 <button
                   onClick={() => onStop(s.editorId)}
                   title="Stop editing & clean up temp copy"
-                  className="flex items-center space-x-1 text-xs px-2 py-1 rounded-md bg-zinc-800 hover:bg-red-500/20 hover:text-red-300 text-zinc-300 transition-colors shrink-0"
+                  className="flex items-center space-x-1 text-xs px-2 py-1 rounded-md bg-zinc-800 hover:bg-red-500/20 hover:text-status-danger text-zinc-300 transition-colors shrink-0"
                 >
                   <Square className="w-3 h-3" />
                   <span>Stop</span>
@@ -112,7 +113,7 @@ export const ActiveEditors: React.FC<ActiveEditorsProps> = ({ sessions, onStop, 
             ))}
           </div>
 
-          <div className="px-4 py-2 text-[11px] text-zinc-600 border-t border-zinc-800">
+          <div className="px-4 py-2 text-[11px] text-zinc-500 border-t border-zinc-800">
             Saving in your editor re-uploads automatically. <X className="inline w-3 h-3 align-text-bottom" /> on disconnect or after 2h idle.
           </div>
         </div>

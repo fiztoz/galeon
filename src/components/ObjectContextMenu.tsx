@@ -139,7 +139,7 @@ export function ObjectContextMenu({ obj, menuPosition, protocol, capabilities, d
                 </button>
                 <button
                   onClick={() => onAction('delete', obj)}
-                  className={menuBtn('text-red-400')}
+                  className={menuBtn('text-status-danger')}
                 >
                   <Trash2 className="w-4 h-4 shrink-0" />
                   <span>Delete</span>

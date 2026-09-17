@@ -85,7 +85,7 @@ export const SshKeyHelper: React.FC<SshKeyHelperProps> = ({ onKeyGenerated, onCl
             {step === 'complete' && (
                 <>
                     <div className="flex items-center space-x-2 mb-3">
-                        <Check className="w-5 h-5 text-green-400" />
+                        <Check className="w-5 h-5 text-status-success" />
                         <h4 className="text-sm font-semibold text-zinc-200">Key Generated!</h4>
                     </div>
                     <div className="mb-3">
@@ -100,7 +100,7 @@ export const SshKeyHelper: React.FC<SshKeyHelperProps> = ({ onKeyGenerated, onCl
                                 onClick={handleCopyPublicKey}
                                 className="absolute top-2 right-2 p-1 hover:bg-zinc-800 rounded"
                             >
-                                {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-zinc-400" />}
+                                {copied ? <Check className="w-4 h-4 text-status-success" /> : <Copy className="w-4 h-4 text-zinc-400" />}
                             </button>
                         </div>
                     </div>
@@ -132,10 +132,10 @@ export const SshKeyHelper: React.FC<SshKeyHelperProps> = ({ onKeyGenerated, onCl
             {step === 'error' && (
                 <>
                     <div className="flex items-center space-x-2 mb-3">
-                        <AlertTriangle className="w-5 h-5 text-red-400" />
+                        <AlertTriangle className="w-5 h-5 text-status-danger" />
                         <h4 className="text-sm font-semibold text-zinc-200">Error</h4>
                     </div>
-                    <p className="text-xs text-red-400 mb-3">{error}</p>
+                    <p className="text-xs text-status-danger mb-3">{error}</p>
                     <div className="flex space-x-2">
                         <button
                             onClick={() => setStep('intro')}

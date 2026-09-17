@@ -85,10 +85,10 @@ function actionLabel(action: SyncPlanEntry['action']): string {
 function actionIcon(action: SyncPlanEntry['action']) {
   switch (action) {
     case 'upload': return <ArrowUpFromLine className="w-3.5 h-3.5 text-gale-teal" />;
-    case 'download': return <ArrowDownToLine className="w-3.5 h-3.5 text-emerald-400" />;
+    case 'download': return <ArrowDownToLine className="w-3.5 h-3.5 text-status-success" />;
     case 'skip': return <Minus className="w-3.5 h-3.5 text-zinc-500" />;
-    case 'deleteRemote': return <Trash2 className="w-3.5 h-3.5 text-red-500" />;
-    case 'deleteLocal': return <Trash2 className="w-3.5 h-3.5 text-red-500" />;
+    case 'deleteRemote': return <Trash2 className="w-3.5 h-3.5 text-status-danger" />;
+    case 'deleteLocal': return <Trash2 className="w-3.5 h-3.5 text-status-danger" />;
   }
 }
 
@@ -379,7 +379,7 @@ export function SyncPanel({
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl flex flex-col w-[720px] max-h-[88vh]">
+      <div className="bg-zinc-900 border border-zinc-800 galeon-modal-panel rounded-xl shadow-2xl flex flex-col w-[720px] max-h-[88vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
           <div className="flex items-center space-x-3">
@@ -441,7 +441,7 @@ export function SyncPanel({
                     value={localPath}
                     onChange={(e) => setLocalPath(e.target.value)}
                     placeholder="/path/to/local/folder"
-                    className="flex-1 bg-zinc-800 border border-zinc-700 focus:border-gale-teal focus:ring-1 focus:ring-gale-teal rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none transition-all placeholder:text-zinc-600 font-mono"
+                    className="flex-1 bg-zinc-800 border border-zinc-700 focus:border-gale-teal focus:ring-1 focus:ring-gale-teal rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none transition-all placeholder:text-zinc-500 font-mono"
                   />
                   <button
                     onClick={handlePickLocalFolder}
@@ -461,7 +461,7 @@ export function SyncPanel({
                   value={remotePrefix}
                   onChange={(e) => setRemotePrefix(e.target.value)}
                   placeholder="prefix/path/"
-                  className="w-full bg-zinc-800 border border-zinc-700 focus:border-gale-teal focus:ring-1 focus:ring-gale-teal rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none transition-all placeholder:text-zinc-600 font-mono"
+                  className="w-full bg-zinc-800 border border-zinc-700 focus:border-gale-teal focus:ring-1 focus:ring-gale-teal rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none transition-all placeholder:text-zinc-500 font-mono"
                 />
               </div>
 
@@ -512,7 +512,7 @@ export function SyncPanel({
                   <span className="text-sm text-zinc-300 group-hover:text-zinc-100 transition-colors">
                     Delete extraneous at destination{' '}
                     {deleteExtraneous && (
-                      <span className="text-amber-400 text-xs font-medium">— will delete files not in source</span>
+                      <span className="text-status-warning text-xs font-medium">— will delete files not in source</span>
                     )}
                   </span>
                 </label>
@@ -520,7 +520,7 @@ export function SyncPanel({
 
               {/* Error */}
               {diffError && (
-                <div className="flex items-start space-x-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                <div className="flex items-start space-x-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-status-danger text-sm">
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                   <span>{diffError}</span>
                 </div>
@@ -554,7 +554,7 @@ export function SyncPanel({
                   </span>
                 )}
                 {(counts.download ?? 0) > 0 && (
-                  <span className="flex items-center space-x-1 text-emerald-400">
+                  <span className="flex items-center space-x-1 text-status-success">
                     <ArrowDownToLine className="w-3.5 h-3.5" />
                     <span className="tabular-nums">{counts.download}</span>
                   </span>
@@ -566,13 +566,13 @@ export function SyncPanel({
                   </span>
                 )}
                 {deleteCount > 0 && (
-                  <span className="flex items-center space-x-1 text-red-500">
+                  <span className="flex items-center space-x-1 text-status-danger">
                     <Trash2 className="w-3.5 h-3.5" />
                     <span className="tabular-nums">{deleteCount}</span>
                   </span>
                 )}
                 {deleteCount > 0 && (
-                  <span className="flex items-center space-x-1.5 text-amber-400 text-xs bg-amber-400/10 border border-amber-400/30 rounded px-2 py-0.5">
+                  <span className="flex items-center space-x-1.5 text-status-warning text-xs bg-amber-400/10 border border-amber-400/30 rounded px-2 py-0.5">
                     <AlertTriangle className="w-3 h-3" />
                     <span>{deleteCount} file{deleteCount !== 1 ? 's' : ''} will be deleted</span>
                   </span>
@@ -588,8 +588,8 @@ export function SyncPanel({
                       {actionIcon(action as SyncPlanEntry['action'])}
                       <span className={`text-xs font-semibold uppercase tracking-widest
                         ${action === 'upload' ? 'text-gale-teal'
-                          : action === 'download' ? 'text-emerald-400'
-                          : isDeleteAction(action as SyncPlanEntry['action']) ? 'text-red-500'
+                          : action === 'download' ? 'text-status-success'
+                          : isDeleteAction(action as SyncPlanEntry['action']) ? 'text-status-danger'
                           : 'text-zinc-500'}`}>
                         {actionLabel(action as SyncPlanEntry['action'])} ({entries.length})
                       </span>
@@ -600,7 +600,7 @@ export function SyncPanel({
                           key={idx}
                           className={`flex items-center px-3 py-2 text-sm
                             ${isDeleteAction(entry.action)
-                              ? 'bg-red-950/20 border-l-2 border-red-500'
+                              ? 'bg-status-danger/10 border-l-2 border-red-500'
                               : entry.action === 'skip'
                               ? 'bg-zinc-900/50'
                               : 'bg-zinc-800/30'}
@@ -633,7 +633,7 @@ export function SyncPanel({
                   </div>
                 )}
                 {applyError && (
-                  <div className="flex items-start space-x-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                  <div className="flex items-start space-x-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-status-danger text-sm">
                     <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                     <span>{applyError}</span>
                   </div>
@@ -642,12 +642,12 @@ export function SyncPanel({
                 {/* Delete confirmation */}
                 {confirmDeleteOpen && (
                   <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/40">
-                    <p className="text-sm text-amber-300 font-medium mb-1 flex items-center space-x-2">
+                    <p className="text-sm text-status-warning font-medium mb-1 flex items-center space-x-2">
                       <AlertTriangle className="w-4 h-4 shrink-0" />
                       <span>Confirm deletion</span>
                     </p>
                     <p className="text-xs text-zinc-400 mb-3">
-                      This plan includes deleting <strong className="text-amber-400">{deleteCount} file{deleteCount !== 1 ? 's' : ''}</strong> at the destination. This cannot be undone.
+                      This plan includes deleting <strong className="text-status-warning">{deleteCount} file{deleteCount !== 1 ? 's' : ''}</strong> at the destination. This cannot be undone.
                     </p>
                     <div className="flex items-center space-x-2">
                       <button
@@ -700,7 +700,7 @@ export function SyncPanel({
                           value={saveProfileName}
                           onChange={(e) => setSaveProfileName(e.target.value)}
                           placeholder="Profile name…"
-                          className="bg-zinc-800 border border-zinc-700 focus:border-gale-teal rounded-lg px-3 py-1.5 text-xs text-zinc-200 outline-none transition-all w-36 placeholder:text-zinc-600"
+                          className="bg-zinc-800 border border-zinc-700 focus:border-gale-teal rounded-lg px-3 py-1.5 text-xs text-zinc-200 outline-none transition-all w-36 placeholder:text-zinc-500"
                           onKeyDown={(e) => { if (e.key === 'Enter') handleSaveProfile(); }}
                         />
                         <button
@@ -752,11 +752,11 @@ export function SyncPanel({
                               <span className={`text-xs px-1.5 py-0.5 rounded font-mono
                                 ${sp.direction === 'localToRemote'
                                   ? 'bg-gale-teal/15 text-gale-teal'
-                                  : 'bg-emerald-400/15 text-emerald-400'}`}>
+                                  : 'bg-emerald-400/15 text-status-success'}`}>
                                 {sp.direction === 'localToRemote' ? '→ remote' : '← local'}
                               </span>
                               {sp.deleteExtraneous && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-400 font-mono">
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-amber-400/15 text-status-warning font-mono">
                                   delete extra
                                 </span>
                               )}
@@ -769,11 +769,11 @@ export function SyncPanel({
                             </div>
                             <div className="text-xs text-zinc-500 truncate font-mono">
                               <span>{sp.localPath}</span>
-                              <span className="mx-1 text-zinc-600">↔</span>
+                              <span className="mx-1 text-zinc-500">↔</span>
                               <span>{connProfile?.name ?? 'Unknown'}: {sp.remotePrefix || '/'}</span>
                             </div>
                             {sp.lastRunMs && (
-                              <div className="text-xs text-zinc-600 mt-0.5 font-mono">
+                              <div className="text-xs text-zinc-500 mt-0.5 font-mono">
                                 Last run: {new Date(sp.lastRunMs).toLocaleString()}
                               </div>
                             )}
@@ -798,7 +798,7 @@ export function SyncPanel({
                             </button>
                             <button
                               onClick={() => onDeleteSyncProfile(sp.id)}
-                              className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors rounded"
+                              className="p-1.5 text-zinc-500 hover:text-status-danger transition-colors rounded"
                               title="Delete profile"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -819,7 +819,7 @@ export function SyncPanel({
                             <Clock className="w-3.5 h-3.5 shrink-0 text-gale-teal" />
                             <span className="font-medium">Schedule</span>
                             {sp.schedule?.enabled && !scheduleExpanded && (
-                              <span className="text-zinc-600 font-mono">
+                              <span className="text-zinc-500 font-mono">
                                 · {sp.schedule.frequency}
                                 {sp.schedule.nextRunMs != null && (
                                   <> · next {new Date(sp.schedule.nextRunMs).toLocaleString()}</>
@@ -866,7 +866,7 @@ export function SyncPanel({
                                       className="w-14 bg-zinc-800 border border-zinc-700 focus:border-gale-teal rounded px-2 py-1 text-xs text-zinc-200 font-mono outline-none"
                                       title="Hour (0–23)"
                                     />
-                                    <span className="text-xs text-zinc-600">:</span>
+                                    <span className="text-xs text-zinc-500">:</span>
                                     <input
                                       type="number"
                                       min={0}

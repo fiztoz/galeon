@@ -88,6 +88,10 @@
   --color-raised: #3f3f46;        /* == zinc-700 in dark */
   --color-raised-hover: #52525b;  /* == zinc-600 in dark */
 
+  --color-status-danger: #f87171;
+  --color-status-warning: #fbbf24;
+  --color-status-success: #34d399;
+
   /* Fonts */
   --font-sans: "Inter", sans-serif;
   --font-display: "Space Grotesk", sans-serif;
@@ -99,6 +103,7 @@
   --color-zinc-500: #91919b;
   --accent-ink: #2dd4bf;
   --focus-ring: #2dd4bf;
+  --metric-ink: #f5a524;
 
   /*
    * Theme-flippable page base. Components use Tailwind utilities (which resolve
@@ -244,9 +249,13 @@ html.platform-other .app-titlebar-traffic {
  * 12 would see dark-tinted panels over a light page — degraded, not broken.
  */
 html[data-theme='light'] {
+  --color-status-danger: #b91c1c;
+  --color-status-warning: #854d0e;
+  --color-status-success: #047857;
   color-scheme: light;
   --accent-ink: #076c60;
   --focus-ring: #0e7490;
+  --metric-ink: #895508;
 
   --app-bg: #fafafa;
   --app-fg: #18181b;
@@ -276,6 +285,7 @@ html[data-theme='light'] {
 
 /* Accent text needs a darker ink on light surfaces; accent fills stay teal. */
 .text-gale-teal { color: var(--accent-ink); }
+.text-doubloon { color: var(--metric-ink); }
 
 :where(button, a, input, select, textarea, [tabindex]):focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -421,4 +431,37 @@ input[type='checkbox']:disabled { opacity: .45; cursor: not-allowed; }
   input[type='checkbox']::after { display: none; }
   .galeon-select-menu { border: 1px solid CanvasText; }
   .galeon-select-option[data-active='true'] { outline: 1px solid Highlight; }
+}
+
+/* One focus treatment, including controls whose legacy utilities add a ring. */
+:where(button, input, textarea, select, [tabindex]):focus-visible {
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+input[type='radio'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-zinc-500);
+  border-radius: 50%;
+  background: var(--color-zinc-900);
+  display: inline-grid;
+  place-content: center;
+  vertical-align: middle;
+  cursor: pointer;
+}
+input[type='radio']:checked { border-color: var(--accent-ink); }
+input[type='radio']:checked::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-ink); }
+input[type='radio']:disabled { opacity: .45; cursor: not-allowed; }
+input[type='number'] { appearance: textfield; -moz-appearance: textfield; }
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.galeon-modal-panel { max-width: calc(100vw - 32px); max-height: calc(100dvh - 104px); overflow-y: auto; }
+@media (forced-colors: active) {
+  input[type='radio'] { appearance: auto; -webkit-appearance: auto; }
+  input[type='radio']::after { display: none; }
 }

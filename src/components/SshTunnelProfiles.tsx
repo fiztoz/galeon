@@ -295,7 +295,7 @@ export const SshTunnelProfiles: React.FC<SshTunnelProfilesProps> = ({
             </span>
             <div className="min-w-0">
               <p className="text-sm font-medium text-zinc-200">SSH tunnel</p>
-              <p className={`mt-0.5 truncate text-xs ${selectedProfileId && !loading && !selected ? 'text-red-300' : 'text-zinc-500'}`}>
+              <p className={`mt-0.5 truncate text-xs ${selectedProfileId && !loading && !selected ? 'text-status-danger' : 'text-zinc-500'}`}>
                 {connectionSummary}
               </p>
             </div>
@@ -356,8 +356,8 @@ export const SshTunnelProfiles: React.FC<SshTunnelProfilesProps> = ({
           {!editor && (
             <>
               {legacyTunnel && (
-                <div className="flex items-start gap-2 rounded-lg border border-amber-900/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
-                  <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                <div className="flex items-start gap-2 rounded-lg border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
+                  <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-status-warning" />
                   <p>This connection uses an older embedded tunnel. Pick or create a reusable profile below to separate it.</p>
                 </div>
               )}
@@ -397,7 +397,7 @@ export const SshTunnelProfiles: React.FC<SshTunnelProfilesProps> = ({
                     <span className="min-w-0">
                       <span className="flex items-center gap-2 text-sm font-medium text-zinc-100">
                         Embedded tunnel
-                        <span className="rounded-full bg-amber-950/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">Legacy</span>
+                        <span className="rounded-full bg-status-warning/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-status-warning">Legacy</span>
                       </span>
                       <span className="mt-0.5 block truncate text-xs text-zinc-500">{legacyTunnel.username}@{legacyTunnel.host}:{legacyTunnel.port}</span>
                     </span>
@@ -422,7 +422,7 @@ export const SshTunnelProfiles: React.FC<SshTunnelProfilesProps> = ({
                           <span className="block truncate text-sm font-medium text-zinc-100">{profile.name}</span>
                           <span className="mt-0.5 block truncate text-xs text-zinc-400">{profile.username}@{profile.host}:{profile.port}</span>
                           <span className="mt-1 flex items-center gap-1.5 truncate text-xs text-zinc-500">
-                            {profile.hasSavedPassword ? <KeyRound className="h-3.5 w-3.5 shrink-0 text-emerald-400" /> : <Network className="h-3.5 w-3.5 shrink-0" />}
+                            {profile.hasSavedPassword ? <KeyRound className="h-3.5 w-3.5 shrink-0 text-status-success" /> : <Network className="h-3.5 w-3.5 shrink-0" />}
                             <span className="truncate">{profile.hasSavedPassword ? 'Password in OS keyring' : profile.keyPath ? `Key: ${profile.keyPath}` : 'Uses ssh-agent'}</span>
                           </span>
                         </span>
@@ -439,7 +439,7 @@ export const SshTunnelProfiles: React.FC<SshTunnelProfilesProps> = ({
                         <button
                           type="button"
                           onClick={() => void deleteProfile(profile)}
-                          className={`rounded-lg px-2 py-2 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 ${deleteArmedId === profile.id ? 'bg-red-950/60 font-medium text-red-200' : 'text-red-400/70 hover:bg-red-950/40 hover:text-red-300'}`}
+                          className={`rounded-lg px-2 py-2 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 ${deleteArmedId === profile.id ? 'bg-status-danger/10 font-medium text-status-danger' : 'text-status-danger hover:bg-status-danger/10 hover:text-status-danger'}`}
                           aria-label={deleteArmedId === profile.id ? `Confirm delete ${profile.name}` : `Delete ${profile.name}`}
                         >
                           {deleteArmedId === profile.id ? 'Confirm' : <Trash2 className="h-4 w-4" />}
@@ -617,7 +617,7 @@ export const SshTunnelProfiles: React.FC<SshTunnelProfilesProps> = ({
           )}
 
           {error && (
-            <p className="text-xs leading-relaxed text-red-300" role="alert">{error}</p>
+            <p className="text-xs leading-relaxed text-status-danger" role="alert">{error}</p>
           )}
           <p className="text-xs leading-relaxed text-zinc-500">
             A tunnel profile is a reusable SSH server for one or more storage connections. Its password is saved

@@ -1,3 +1,5 @@
+import { X as CloseIcon } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { Select } from './Select';
 import { DEFAULT_S3_ENDPOINT, DEFAULT_S3_REGION, DEFAULT_SFTP_PORT, DEFAULT_FTP_PORT, defaultPortFor } from './connection/defaults';
 import { ProfileSidebar } from './connection/ProfileSidebar';
@@ -762,15 +764,15 @@ export const Connection: React.FC<ConnectionProps> = ({
             Connect Storage
           </h2>
           {error && (
-            <div className="p-3 mb-4 text-sm bg-red-950/50 border border-red-800 text-red-200 rounded-lg flex items-start justify-between gap-3">
+            <div className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg flex items-start justify-between gap-3">
               <span className="min-w-0 break-words">{error}</span>
               <button
                 type="button"
                 onClick={() => setError('')}
-                className="shrink-0 text-red-400/80 hover:text-red-200 text-lg leading-none"
+                className="shrink-0 text-status-danger hover:text-status-danger text-lg leading-none"
                 aria-label="Dismiss error"
               >
-                ×
+                <CloseIcon size={16} aria-hidden="true" />
               </button>
             </div>
           )}
@@ -840,7 +842,7 @@ export const Connection: React.FC<ConnectionProps> = ({
                   aria-expanded={showBandwidthAdvanced}
                   className="flex items-center space-x-2 text-xs text-zinc-400 hover:text-zinc-200"
                 >
-                  <span>{showBandwidthAdvanced ? '▼' : '▶'}</span>
+                  <ChevronRight size={14} aria-hidden="true" className={`shrink-0 transition-transform ${showBandwidthAdvanced ? 'rotate-90' : ''}`} />
                   <span>Advanced Bandwidth Rules</span>
                 </button>
                 {showBandwidthAdvanced && (

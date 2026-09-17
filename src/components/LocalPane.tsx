@@ -1,3 +1,4 @@
+import { X as CloseIcon } from 'lucide-react';
 import { Dialog } from './Dialogs';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -433,15 +434,15 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
           <div className="mb-2 text-xs text-gale-teal font-medium px-1">Drop to download here</div>
         )}
         {error && (
-          <div className="p-3 mb-4 text-sm bg-red-950/50 border border-red-800 text-red-200 rounded-lg flex items-start justify-between gap-3">
+          <div className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg flex items-start justify-between gap-3">
             <span className="min-w-0 break-words">{error}</span>
             <button
               type="button"
               onClick={() => setError('')}
-              className="shrink-0 text-red-400/80 hover:text-red-200 text-lg leading-none"
+              className="shrink-0 text-status-danger hover:text-status-danger text-lg leading-none"
               aria-label="Dismiss error"
             >
-              ×
+              <CloseIcon size={16} aria-hidden="true" />
             </button>
           </div>
         )}
@@ -452,7 +453,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
             <span className="text-zinc-400 text-sm">Loading…</span>
           </div>
         ) : (
-          <div className="border border-zinc-800 rounded-xl bg-zinc-900/40 backdrop-blur-md">
+          <div className="border border-zinc-800 rounded-xl bg-zinc-900/40">
             <table className="file-table text-left border-collapse">
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-900/70 text-zinc-400 text-xs uppercase tracking-wider font-semibold">
@@ -492,7 +493,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                       <div className="flex flex-col items-center gap-3 max-w-sm mx-auto">
                         {listFailed ? (
                           <>
-                            <AlertTriangle className="w-10 h-10 text-red-500/70" />
+                            <AlertTriangle className="w-10 h-10 text-status-danger" />
                             <p className="text-sm text-zinc-300">Couldn&apos;t load this folder</p>
                             <p className="text-xs text-zinc-500">
                               Its contents are unknown — this is not an empty folder.

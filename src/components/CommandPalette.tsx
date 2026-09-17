@@ -221,7 +221,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       }}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-[560px] max-h-[60vh] flex flex-col overflow-hidden"
+        className="bg-zinc-900 border border-zinc-800 galeon-modal-panel rounded-xl shadow-2xl w-[560px] max-h-[60vh] flex flex-col overflow-hidden"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Search input */}
@@ -238,7 +238,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             autoComplete="off"
             spellCheck={false}
           />
-          <div className="flex items-center gap-1 text-[10px] text-zinc-600 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700 shrink-0">
+          <div className="flex items-center gap-1 text-[10px] text-zinc-500 bg-zinc-800/50 px-1.5 py-0.5 rounded border border-zinc-700 shrink-0">
             <Command className="w-3.5 h-3.5" />
             <span>K</span>
           </div>
@@ -374,7 +374,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         </div>
 
         {/* Footer hint */}
-        <div className="border-t border-zinc-800 px-4 py-2 flex items-center gap-4 text-[10px] text-zinc-600">
+        <div className="border-t border-zinc-800 px-4 py-2 flex items-center gap-4 text-[10px] text-zinc-500">
           <span className="flex items-center gap-1">
             <kbd className="bg-zinc-800 px-1 rounded text-zinc-500">↑↓</kbd> navigate
           </span>

@@ -106,7 +106,7 @@ export const SshConfigImport = ({ onSelect, mode = 'sftp' }: SshConfigImportProp
           Reading SSH config…
         </p>
       )}
-      {!loading && error && <p className="text-xs text-red-300" role="alert">{error}</p>}
+      {!loading && error && <p className="text-xs text-status-danger" role="alert">{error}</p>}
       {!loading && connections?.length === 0 && (
         <p className="text-xs text-zinc-400">
           {tunnelImport

@@ -153,7 +153,7 @@ export function SettingsPanel({ open, onClose, onShowOnboarding, themeMode, onTh
           {/* Privacy */}
           <section className="p-4 rounded-lg bg-zinc-950/50 border border-zinc-800">
             <div className="flex items-center gap-2 mb-2">
-              <Shield className="w-4 h-4 text-doubloon" />
+              <Shield className="w-4 h-4 text-zinc-400" />
               <h3 className="text-sm font-semibold text-zinc-200">Privacy</h3>
             </div>
             <p className="text-sm text-zinc-400 leading-relaxed">
@@ -228,7 +228,7 @@ export function SettingsPanel({ open, onClose, onShowOnboarding, themeMode, onTh
                 </div>
               )}
               {migrationError && (
-                <div className="mt-3 text-xs text-red-300 leading-relaxed">{migrationError}</div>
+                <div className="mt-3 text-xs text-status-danger leading-relaxed">{migrationError}</div>
               )}
             </div>
           </section>

@@ -21,7 +21,7 @@ export function SftpFields({ remote, ssh }: { remote: RemoteFieldsProps; ssh: Sf
     beforeFields={(<>
                     <SshConfigImport onSelect={handleSshConfigSelect} />
                     {sshConfigNotice && (
-                      <div className="p-3 bg-amber-950/30 border border-amber-800/50 rounded-lg text-xs text-amber-200">
+                      <div className="p-3 bg-status-warning/10 border border-status-warning/30 rounded-lg text-xs text-status-warning">
                         {sshConfigNotice}
                       </div>
                     )}
@@ -69,12 +69,12 @@ export function SftpFields({ remote, ssh }: { remote: RemoteFieldsProps; ssh: Sf
                     </>)}
     afterFields={<>
                 {!keyPath && !sftpPassword && !credsLoading && (
-                    <div className="p-3 bg-amber-950/30 border border-amber-800/50 rounded-lg">
+                    <div className="p-3 bg-status-warning/10 border border-status-warning/30 rounded-lg">
                         <div className="flex items-start space-x-2">
-                            <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5" />
+                            <AlertTriangle className="w-4 h-4 text-status-warning mt-0.5" />
                             <div>
-                                <p className="text-xs text-amber-200 font-medium">Authentication Required</p>
-                                <p className="text-xs text-amber-400/80 mt-1">
+                                <p className="text-xs text-status-warning font-medium">Authentication Required</p>
+                                <p className="text-xs text-status-warning mt-1">
                                     Enter a password, or choose an SSH key if this server does not allow password login.
                                 </p>
                             </div>

@@ -272,7 +272,7 @@ export const ProfileImportExport: React.FC<ProfileImportExportProps> = ({
         </div>
         {banner && (
           <div className="space-y-1">
-            <p className="text-[11px] text-emerald-400/90 leading-snug">{banner.message}</p>
+            <p className="text-[11px] text-status-success leading-snug">{banner.message}</p>
             {banner.details.length > 0 && (
               <ul className="text-[10px] text-zinc-500 space-y-0.5 max-h-20 overflow-y-auto">
                 {banner.details.map((msg, i) => (
@@ -289,14 +289,14 @@ export const ProfileImportExport: React.FC<ProfileImportExportProps> = ({
       {/* Export Profiles Modal */}
       {io.kind === 'export' && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-[26rem] max-w-[95vw] shadow-2xl">
+          <div className="bg-zinc-900 border border-zinc-800 galeon-modal-panel rounded-xl p-6 w-[26rem] max-w-[95vw] shadow-2xl">
             <h3 className="text-lg font-semibold mb-1">Export profiles</h3>
             <p className="text-xs text-zinc-500 mb-4">
               Share connection settings across machines. Secrets are omitted by default.
             </p>
 
             {io.error && (
-              <div className="p-3 mb-4 text-sm bg-red-950/50 border border-red-800 text-red-200 rounded-lg">
+              <div className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg">
                 {io.error}
               </div>
             )}
@@ -345,7 +345,7 @@ export const ProfileImportExport: React.FC<ProfileImportExportProps> = ({
                 />
                 <span>
                   Include secrets (access keys / passwords)
-                  <span className="block text-xs text-amber-400/90 mt-1">
+                  <span className="block text-xs text-status-warning mt-1">
                     Warning: the file will contain plaintext credentials. Only share it over a
                     trusted channel and delete it when done.
                   </span>
@@ -378,7 +378,7 @@ export const ProfileImportExport: React.FC<ProfileImportExportProps> = ({
       {/* Import Profiles Modal */}
       {io.kind === 'import' && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-[26rem] max-w-[95vw] shadow-2xl">
+          <div className="bg-zinc-900 border border-zinc-800 galeon-modal-panel rounded-xl p-6 w-[26rem] max-w-[95vw] shadow-2xl">
             <h3 className="text-lg font-semibold mb-1">
               {secretsPhase ? 'Confirm secret import' : 'Import profiles'}
             </h3>
@@ -389,18 +389,18 @@ export const ProfileImportExport: React.FC<ProfileImportExportProps> = ({
             </p>
 
             {io.error && (
-              <div className="p-3 mb-4 text-sm bg-red-950/50 border border-red-800 text-red-200 rounded-lg">
+              <div className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg">
                 {io.error}
               </div>
             )}
 
             {secretsPhase && io.preview ? (
               <div className="mb-4 space-y-3">
-                <div className="p-3 bg-amber-950/30 border border-amber-800/50 rounded-lg">
+                <div className="p-3 bg-status-warning/10 border border-status-warning/30 rounded-lg">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
-                    <div className="text-xs text-amber-200/90 space-y-1">
-                      <p className="font-medium text-amber-200">
+                    <AlertTriangle className="w-4 h-4 text-status-warning mt-0.5 flex-shrink-0" />
+                    <div className="text-xs text-status-warning space-y-1">
+                      <p className="font-medium text-status-warning">
                         {io.preview.profilesWithSecrets} of {io.preview.total} profile
                         {io.preview.total === 1 ? '' : 's'} include secrets
                       </p>
@@ -452,7 +452,7 @@ export const ProfileImportExport: React.FC<ProfileImportExportProps> = ({
                   </Select>
                 </div>
                 {io.strategy === 'overwrite' && (
-                  <div className="p-3 bg-amber-950/30 border border-amber-800/50 rounded-lg text-xs text-amber-200/90">
+                  <div className="p-3 bg-status-warning/10 border border-status-warning/30 rounded-lg text-xs text-status-warning">
                     Overwrite keeps the existing profile id. If the file has no secrets and the
                     connection target (host/endpoint/bucket/protocol) changes, saved credentials
                     for that profile are cleared so they are not reused against a new target.

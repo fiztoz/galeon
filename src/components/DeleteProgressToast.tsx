@@ -37,12 +37,12 @@ export const DeleteProgressToast: React.FC<DeleteProgressToastProps> = ({
   }
 
   return (
-    <div className="fixed bottom-14 right-6 z-50 w-80 rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden">
+    <div className="fixed bottom-14 right-6 z-50 w-80 max-w-[calc(100vw-48px)] rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden">
       <div className="flex items-start gap-3 p-4">
         <div className="mt-0.5 shrink-0">
           {complete ? (
             failed || cancelled ? (
-              <XCircle className="w-5 h-5 text-amber-400" />
+              <XCircle className="w-5 h-5 text-status-warning" />
             ) : (
               <CheckCircle className="w-5 h-5 text-gale-teal" />
             )
@@ -93,7 +93,7 @@ export const DeleteProgressToast: React.FC<DeleteProgressToastProps> = ({
             {!complete && ` (${pct}%)`}
           </p>
           {complete && failures.length > 0 && (
-            <ul className="mt-2 max-h-24 overflow-y-auto text-[11px] text-red-400/90 space-y-0.5">
+            <ul className="mt-2 max-h-24 overflow-y-auto text-[11px] text-status-danger space-y-0.5">
               {failures.slice(0, 5).map((f) => (
                 <li key={f} className="truncate" title={f}>{f}</li>
               ))}
@@ -103,7 +103,7 @@ export const DeleteProgressToast: React.FC<DeleteProgressToastProps> = ({
             </ul>
           )}
           {complete && error && (
-            <p className="mt-2 text-[11px] text-red-400 truncate" title={error}>{error}</p>
+            <p className="mt-2 text-[11px] text-status-danger truncate" title={error}>{error}</p>
           )}
         </div>
       </div>

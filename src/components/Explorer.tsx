@@ -1,3 +1,4 @@
+import { X as CloseIcon } from 'lucide-react';
 import { Select } from './Select';
 import { createPortal } from 'react-dom';
 import { useObjectListing, useObjectSorting } from '../hooks/useObjectListing';
@@ -392,7 +393,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
     const label = prefix ? 'Folder total' : 'Bucket total';
     if (prefixSizeError) {
       return (
-        <span className="text-xs text-red-400/80 whitespace-nowrap" title={prefixSizeError}>
+        <span className="text-xs text-status-danger whitespace-nowrap" title={prefixSizeError}>
           {label}: unavailable
         </span>
       );
@@ -462,17 +463,17 @@ export const Explorer: React.FC<ExplorerProps> = ({
       <div className="pane-path flex items-center justify-between gap-3 py-3 px-4 bg-zinc-900 border-b border-zinc-800 text-sm">
         <nav aria-label="Remote path" className="flex items-center space-x-1 min-w-0 galeon-scrollbar">
         {protocol === 'sftp' && (
-          <span className="text-xs bg-green-900/50 text-green-400 px-2 py-0.5 rounded-full font-medium mr-1">
+          <span className="text-xs bg-status-success/10 text-status-success px-2 py-0.5 rounded-full font-medium mr-1">
             SFTP
           </span>
         )}
         {protocol === 'ftp' && (
-          <span className="text-xs bg-blue-900/50 text-blue-400 px-2 py-0.5 rounded-full font-medium mr-1">
+          <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full font-medium mr-1">
             FTP
           </span>
         )}
         {protocol === 'ftps' && (
-          <span className="text-xs bg-blue-900/50 text-blue-400 px-2 py-0.5 rounded-full font-medium mr-1">
+          <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full font-medium mr-1">
             FTPS
           </span>
         )}
@@ -634,15 +635,15 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
       <div className="pane-content flex-1 overflow-auto galeon-scrollbar">
         {error && (
-          <div className="p-3 mb-4 text-sm bg-red-950/50 border border-red-800 text-red-200 rounded-lg flex items-start justify-between gap-3">
+          <div className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg flex items-start justify-between gap-3">
             <span className="min-w-0 break-words">{error}</span>
             <button
               type="button"
               onClick={() => setError('')}
-              className="shrink-0 text-red-400/80 hover:text-red-200 text-lg leading-none"
+              className="shrink-0 text-status-danger hover:text-status-danger text-lg leading-none"
               aria-label="Dismiss error"
             >
-              ×
+              <CloseIcon size={16} aria-hidden="true" />
             </button>
           </div>
         )}
@@ -652,7 +653,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
             <span className="text-zinc-400 text-sm">Loading…</span>
           </div>
         ) : (
-          <div className="border border-zinc-800 rounded-xl bg-zinc-900/40 backdrop-blur-md">
+          <div className="border border-zinc-800 rounded-xl bg-zinc-900/40">
             <table className="file-table text-left border-collapse">
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-900/70 text-zinc-400 text-xs uppercase tracking-wider font-semibold">
@@ -693,7 +694,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
                       <div className="flex flex-col items-center gap-3 max-w-sm mx-auto">
                         {listFailed ? (
                           <>
-                            <AlertTriangle className="w-10 h-10 text-red-500/70" />
+                            <AlertTriangle className="w-10 h-10 text-status-danger" />
                             <p className="text-sm text-zinc-300">Couldn&apos;t load this folder</p>
                             <p className="text-xs text-zinc-500">
                               Its contents are unknown — this is not an empty folder.
@@ -867,7 +868,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
           <p className="text-zinc-400 text-sm mb-4">
             Are you sure you want to delete <span className="text-zinc-200 font-medium">"{deleteTarget.name}"</span>?
             {deleteTarget.objectType === 'folder' && (
-              <span className="block mt-1 text-yellow-400">This will delete all contents inside the folder.</span>
+              <span className="block mt-1 text-status-warning">This will delete all contents inside the folder.</span>
             )}
           </p>
         </ConfirmDialog>
@@ -913,7 +914,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
         >
           <p className="text-zinc-400 text-sm mb-4">
             Are you sure you want to delete {selectedItems.size} selected items?
-            <span className="block mt-1 text-yellow-400">This action cannot be undone.</span>
+            <span className="block mt-1 text-status-warning">This action cannot be undone.</span>
           </p>
         </ConfirmDialog>
       )}
