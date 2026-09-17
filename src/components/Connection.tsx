@@ -1,3 +1,6 @@
+import { X as CloseIcon } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
+import { Select } from './Select';
 import { DEFAULT_S3_ENDPOINT, DEFAULT_S3_REGION, DEFAULT_SFTP_PORT, DEFAULT_FTP_PORT, defaultPortFor } from './connection/defaults';
 import { ProfileSidebar } from './connection/ProfileSidebar';
 import { SaveProfileDialog } from './connection/SaveProfileDialog';
@@ -738,7 +741,7 @@ export const Connection: React.FC<ConnectionProps> = ({
       />
 
       {/* Right Panel - Connection Form */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <div
           data-tauri-drag-region
           className="app-titlebar justify-end gap-2 pr-4 pl-4 border-b border-zinc-800/60 bg-zinc-950"
@@ -755,34 +758,35 @@ export const Connection: React.FC<ConnectionProps> = ({
             </button>
           )}
         </div>
-        <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto galeon-scrollbar">
-        <div className="w-full max-w-md p-8 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl backdrop-blur-md">
-          <h2 className="text-3xl font-display font-medium mb-6 tracking-[0.06em] text-zinc-100">
+        <div className="flex-1 min-h-0 flex flex-col p-4 xl:p-8 overflow-y-auto galeon-scrollbar">
+        <div className="w-full max-w-md mx-auto my-auto shrink-0 p-6 bg-zinc-900 border border-zinc-800 rounded-xl">
+          <h2 className="text-2xl font-display font-medium mb-6 tracking-tight text-zinc-100">
             Connect Storage
           </h2>
           {error && (
-            <div className="p-3 mb-4 text-sm bg-red-950/50 border border-red-800 text-red-200 rounded-lg flex items-start justify-between gap-3">
+            <div className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg flex items-start justify-between gap-3">
               <span className="min-w-0 break-words">{error}</span>
               <button
                 type="button"
                 onClick={() => setError('')}
-                className="shrink-0 text-red-400/80 hover:text-red-200 text-lg leading-none"
+                className="shrink-0 text-status-danger hover:text-status-danger text-lg leading-none"
                 aria-label="Dismiss error"
               >
-                ×
+                <CloseIcon size={16} aria-hidden="true" />
               </button>
             </div>
           )}
           <form onSubmit={handleConnect} className="space-y-4">
             {/* Protocol Selector */}
             <div>
-              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+              <label htmlFor="connection-protocol" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
                 Protocol
               </label>
-              <select
+              <Select
+                id="connection-protocol"
                 value={protocol}
-                onChange={(e) => {
-                  const newProto = e.target.value as 's3' | 'sftp' | 'ftp' | 'ftps';
+                onValueChange={(value) => {
+                  const newProto = value as 's3' | 'sftp' | 'ftp' | 'ftps';
                   const currentPort = port;
                   setProtocol(newProto);
                   setSshConfigNotice('');
@@ -810,7 +814,7 @@ export const Connection: React.FC<ConnectionProps> = ({
                 <option value="sftp">SFTP / SSH</option>
                 <option value="ftp">FTP</option>
                 <option value="ftps">FTPS (FTP over TLS)</option>
-              </select>
+              </Select>
             </div>
             
             <ProtocolFields
@@ -835,9 +839,10 @@ export const Connection: React.FC<ConnectionProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowBandwidthAdvanced(!showBandwidthAdvanced)}
+                  aria-expanded={showBandwidthAdvanced}
                   className="flex items-center space-x-2 text-xs text-zinc-400 hover:text-zinc-200"
                 >
-                  <span>{showBandwidthAdvanced ? '▼' : '▶'}</span>
+                  <ChevronRight size={14} aria-hidden="true" className={`shrink-0 transition-transform ${showBandwidthAdvanced ? 'rotate-90' : ''}`} />
                   <span>Advanced Bandwidth Rules</span>
                 </button>
                 {showBandwidthAdvanced && (

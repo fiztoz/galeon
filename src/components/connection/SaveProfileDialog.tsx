@@ -1,3 +1,4 @@
+import { Dialog } from '../Dialogs';
 import type { Dispatch, SetStateAction } from 'react';
 
 interface SaveProfileDialogProps {
@@ -10,13 +11,10 @@ interface SaveProfileDialogProps {
 
 export function SaveProfileDialog({ editingProfile, profileName, setProfileName, handleSaveProfile, onCancel }: SaveProfileDialogProps) {
   return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-96 shadow-2xl">
-            <h3 className="text-lg font-semibold mb-4">
-              {editingProfile ? 'Edit Profile' : 'Save Profile'}
-            </h3>
+        <Dialog title={editingProfile ? 'Edit Profile' : 'Save Profile'} onClose={onCancel}>
             <input
               type="text"
+              aria-label="Profile name"
               value={profileName}
               onChange={(e) => setProfileName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSaveProfile()}
@@ -43,7 +41,6 @@ export function SaveProfileDialog({ editingProfile, profileName, setProfileName,
                 {editingProfile ? 'Update' : 'Save'}
               </button>
             </div>
-          </div>
-        </div>
+        </Dialog>
   );
 }

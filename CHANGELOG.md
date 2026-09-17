@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Unify status colors in both themes, radio and time controls, focus outlines, disclosure/close icons, and older dialog size limits.
+
+- Theme Region autocomplete suggestions while preserving custom regions and keyboard selection.
+
+- Replace native dropdown menus with themed, keyboard-accessible controls throughout the app and unify checkbox styling.
+- Connection forms scroll safely in short windows. File-pane toolbars and tables
+  adapt to pane width, selection bars stay within their pane, and the transfer
+  drawer no longer covers the listing. Resizing preserves usable split widths.
+- Saved profiles, form fields, sorting, and file actions have keyboard-accessible
+  controls and labels. Shared dialogs contain focus and support Escape; hidden
+  panes and the closed inspector cannot receive keyboard focus.
+- Improved light-theme accent contrast, dark secondary-text contrast, focus
+  indicators, and reduced-motion behavior.
+
+- Loading an S3 profile refreshes its provider selection and R2 account field
+  without overwriting saved connection settings. A previously selected provider
+  no longer rewrites another profile's endpoint when its region is edited.
+- S3 region presets now offer suggestions while allowing free-text entry, so
+  saved and newly entered regions outside the suggestion list remain usable.
+
 ### Changed
 
 - JavaScript patch group: lucide-react 1.45, React 19.3, Vite 8.3, and matching

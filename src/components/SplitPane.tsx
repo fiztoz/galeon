@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import { visibleSplitRatio } from './splitPaneLayout';
 
 /**
  * Resizable two-pane split used by the dual-pane browser.
@@ -19,6 +20,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 
 const NUDGE = 0.02;
 const NUDGE_BIG = 0.1;
+const HANDLE_WIDTH = 8;
 
 export interface SplitPaneProps {
   left: ReactNode;
@@ -45,6 +47,18 @@ export const SplitPane: React.FC<SplitPaneProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const capturedId = useRef<number | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [availableWidth, setAvailableWidth] = useState(0);
+  const displayedRatio = visibleSplitRatio(ratio, availableWidth, minPx);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setAvailableWidth(Math.max(0, entry.contentRect.width - HANDLE_WIDTH));
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   /** Map a pointer x position to a ratio, applying the clamp + snap rules. */
   const ratioFromClientX = useCallback(
@@ -66,6 +80,7 @@ export const SplitPane: React.FC<SplitPaneProps> = ({
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
+    e.currentTarget.focus();
     // Capture is a nice-to-have: it keeps events coming when the pointer leaves
     // the handle. It is NOT load-bearing, because the move/up listeners below
     // live on `window`. Some environments reject capture for synthesized or
@@ -116,8 +131,8 @@ export const SplitPane: React.FC<SplitPaneProps> = ({
   const handleKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     const step = e.shiftKey ? NUDGE_BIG : NUDGE;
     let next: number | null = null;
-    if (e.key === 'ArrowLeft') next = ratio - step;
-    else if (e.key === 'ArrowRight') next = ratio + step;
+    if (e.key === 'ArrowLeft') next = displayedRatio - step;
+    else if (e.key === 'ArrowRight') next = displayedRatio + step;
     else if (e.key === 'Home') next = 0;
     else if (e.key === 'End') next = 1;
     else if (e.key === 'Enter' || e.key === ' ') next = 0.5;
@@ -127,11 +142,11 @@ export const SplitPane: React.FC<SplitPaneProps> = ({
     onRatioChange(clamp01(next));
   };
 
-  const pct = Math.round(clamp01(ratio) * 100);
+  const pct = Math.round(displayedRatio * 100);
 
   return (
-    <div ref={containerRef} className="flex h-full w-full">
-      <div className="overflow-hidden" style={{ width: `${pct}%` }}>
+    <div ref={containerRef} className="flex h-full w-full min-w-0">
+      <div inert={pct === 0} className="min-w-0 shrink-0 overflow-hidden" style={{ width: `calc((100% - ${HANDLE_WIDTH}px) * ${displayedRatio})` }}>
         {left}
       </div>
 
@@ -150,7 +165,7 @@ export const SplitPane: React.FC<SplitPaneProps> = ({
         onKeyDown={handleKeyDown}
         onDoubleClick={() => onRatioChange(0.5)}
         title={`${label} — drag to resize, double-click to reset`}
-        className={`group relative w-1 shrink-0 cursor-col-resize select-none focus:outline-none ${
+        className={`group relative w-2 shrink-0 cursor-col-resize select-none focus:outline-none ${
           dragging
             ? 'bg-gale-teal'
             : 'bg-zinc-800 hover:bg-zinc-600 focus-visible:bg-gale-teal'
@@ -163,7 +178,7 @@ export const SplitPane: React.FC<SplitPaneProps> = ({
         />
       </div>
 
-      <div className="min-w-0 flex-1 overflow-hidden">
+      <div inert={pct === 100} className="min-w-0 flex-1 overflow-hidden">
         {right}
       </div>
     </div>

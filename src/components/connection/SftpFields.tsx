@@ -21,7 +21,7 @@ export function SftpFields({ remote, ssh }: { remote: RemoteFieldsProps; ssh: Sf
     beforeFields={(<>
                     <SshConfigImport onSelect={handleSshConfigSelect} />
                     {sshConfigNotice && (
-                      <div className="p-3 bg-amber-950/30 border border-amber-800/50 rounded-lg text-xs text-amber-200">
+                      <div className="p-3 bg-status-warning/10 border border-status-warning/30 rounded-lg text-xs text-status-warning">
                         {sshConfigNotice}
                       </div>
                     )}
@@ -33,9 +33,10 @@ export function SftpFields({ remote, ssh }: { remote: RemoteFieldsProps; ssh: Sf
                       <span className="h-px flex-1 bg-zinc-700" />
                     </div>
                     <div>
-                      <label className="text-xs text-zinc-500">SSH Private Key Path</label>
+                      <label htmlFor="ssh-private-key" className="text-xs text-zinc-500">SSH Private Key Path</label>
                       <input
                         type="text"
+                        id="ssh-private-key"
                         value={keyPath}
                         onChange={(e) => setKeyPath(e.target.value)}
                         placeholder="/Users/you/.ssh/id_ed25519"
@@ -50,6 +51,7 @@ export function SftpFields({ remote, ssh }: { remote: RemoteFieldsProps; ssh: Sf
                     <button
                       type="button"
                       onClick={() => setShowSshHelper(!showSshHelper)}
+                      aria-expanded={showSshHelper}
                       className="flex items-center space-x-1 text-xs text-gale-teal hover:text-deep-current transition-colors"
                     >
                       <Key className="w-3 h-3" />
@@ -67,12 +69,12 @@ export function SftpFields({ remote, ssh }: { remote: RemoteFieldsProps; ssh: Sf
                     </>)}
     afterFields={<>
                 {!keyPath && !sftpPassword && !credsLoading && (
-                    <div className="p-3 bg-amber-950/30 border border-amber-800/50 rounded-lg">
+                    <div className="p-3 bg-status-warning/10 border border-status-warning/30 rounded-lg">
                         <div className="flex items-start space-x-2">
-                            <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5" />
+                            <AlertTriangle className="w-4 h-4 text-status-warning mt-0.5" />
                             <div>
-                                <p className="text-xs text-amber-200 font-medium">Authentication Required</p>
-                                <p className="text-xs text-amber-400/80 mt-1">
+                                <p className="text-xs text-status-warning font-medium">Authentication Required</p>
+                                <p className="text-xs text-status-warning mt-1">
                                     Enter a password, or choose an SSH key if this server does not allow password login.
                                 </p>
                             </div>

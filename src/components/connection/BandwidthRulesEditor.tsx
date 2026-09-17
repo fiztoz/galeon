@@ -1,3 +1,4 @@
+import { TimeField } from '../TimeField';
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import type { BandwidthRule } from '../../types';
@@ -87,7 +88,7 @@ export function BandwidthRulesEditor({ bandwidthRules, setBandwidthRules, setErr
               <button
                 type="button"
                 onClick={() => handleDeleteBandwidthRule(index)}
-                className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-red-400 flex-shrink-0"
+                className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-status-danger flex-shrink-0"
                 title="Delete rule"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -117,26 +118,17 @@ export function BandwidthRulesEditor({ bandwidthRules, setBandwidthRules, setErr
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-zinc-500 mb-1">Start</label>
-            <input
-              type="time"
-              value={newRuleStartTime}
-              onChange={(e) => setNewRuleStartTime(e.target.value)}
-              className="w-full px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal"
-            />
+            <TimeField label="Start time" value={newRuleStartTime} onValueChange={setNewRuleStartTime} />
           </div>
           <div>
             <label className="block text-xs text-zinc-500 mb-1">End</label>
-            <input
-              type="time"
-              value={newRuleEndTime}
-              onChange={(e) => setNewRuleEndTime(e.target.value)}
-              className="w-full px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal"
-            />
+            <TimeField label="End time" value={newRuleEndTime} onValueChange={setNewRuleEndTime} />
           </div>
         </div>
         <div>
           <label className="block text-xs text-zinc-500 mb-1">Limit (KB/s)</label>
           <input
+            aria-label="Bandwidth limit in KB/s"
             type="number"
             min="0"
             placeholder="0 = unlimited"

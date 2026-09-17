@@ -1,3 +1,6 @@
+import { X as CloseIcon } from 'lucide-react';
+import { Select } from './Select';
+import { createPortal } from 'react-dom';
 import { useObjectListing, useObjectSorting } from '../hooks/useObjectListing';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import React, { useEffect, useRef, useState } from 'react';
@@ -390,7 +393,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
     const label = prefix ? 'Folder total' : 'Bucket total';
     if (prefixSizeError) {
       return (
-        <span className="text-xs text-red-400/80 whitespace-nowrap" title={prefixSizeError}>
+        <span className="text-xs text-status-danger whitespace-nowrap" title={prefixSizeError}>
           {label}: unavailable
         </span>
       );
@@ -457,20 +460,20 @@ export const Explorer: React.FC<ExplorerProps> = ({
         ? normalizeFsPath('/' + parts.slice(0, index + 1).join('/'))
         : parts.slice(0, index + 1).join('/') + '/';
     return (
-      <div className="flex items-center justify-between gap-3 py-3 px-4 bg-zinc-900 border-b border-zinc-800 text-sm overflow-x-auto">
-        <div className="flex items-center space-x-1 min-w-0">
+      <div className="pane-path flex items-center justify-between gap-3 py-3 px-4 bg-zinc-900 border-b border-zinc-800 text-sm">
+        <nav aria-label="Remote path" className="flex items-center space-x-1 min-w-0 galeon-scrollbar">
         {protocol === 'sftp' && (
-          <span className="text-xs bg-green-900/50 text-green-400 px-2 py-0.5 rounded-full font-medium mr-1">
+          <span className="text-xs bg-status-success/10 text-status-success px-2 py-0.5 rounded-full font-medium mr-1">
             SFTP
           </span>
         )}
         {protocol === 'ftp' && (
-          <span className="text-xs bg-blue-900/50 text-blue-400 px-2 py-0.5 rounded-full font-medium mr-1">
+          <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full font-medium mr-1">
             FTP
           </span>
         )}
         {protocol === 'ftps' && (
-          <span className="text-xs bg-blue-900/50 text-blue-400 px-2 py-0.5 rounded-full font-medium mr-1">
+          <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full font-medium mr-1">
             FTPS
           </span>
         )}
@@ -488,7 +491,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
             </React.Fragment>
           );
         })}
-        </div>
+        </nav>
         {renderPrefixSizeSummary()}
       </div>
     );
@@ -496,7 +499,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
   return (
     <div
-      className="flex flex-col h-full bg-zinc-950 text-zinc-100"
+      className="file-pane flex flex-col h-full bg-zinc-950 text-zinc-100"
       onDragOver={(e) => {
         if (dragHasType(e, GALEON_LOCAL_PATHS_MIME)) {
           e.preventDefault();
@@ -523,7 +526,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
       {isDragging && (
         <div className="fixed inset-0 bg-gale-teal/5 border-2 border-dashed border-gale-teal/60 rounded-xl z-50 flex items-center justify-center pointer-events-none backdrop-blur-sm">
           <div className="bg-zinc-900/90 border border-zinc-800 px-6 py-4 rounded-xl shadow-2xl flex flex-col items-center space-y-2">
-            <Upload className="w-10 h-10 text-gale-teal animate-bounce" />
+            <Upload className="w-10 h-10 text-gale-teal" />
             <span className="text-sm font-semibold">Drop files here to upload</span>
             <span className="text-xs text-zinc-500">Uploading to {prefix || '/'}</span>
           </div>
@@ -536,9 +539,9 @@ export const Explorer: React.FC<ExplorerProps> = ({
       )}
 
       {/* Toolbar */}
-      <div className="px-6 py-3 bg-zinc-900/50 border-b border-zinc-800 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
+      <div className="pane-toolbar bg-zinc-900/50 border-b border-zinc-800 space-y-3">
+        <div className="pane-toolbar-row">
+          <div className="pane-actions">
             <button
               onClick={handleUpload}
               className="flex items-center space-x-2 px-3 py-1.5 bg-gale-teal text-on-accent hover:bg-deep-current hover:text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
@@ -560,12 +563,13 @@ export const Explorer: React.FC<ExplorerProps> = ({
               Refresh
             </button>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="pane-search">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
+              aria-label="Search remote files"
+              placeholder="Search remote files…"
               className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all w-48"
               autoCapitalize="off"
               autoCorrect="off"
@@ -574,10 +578,11 @@ export const Explorer: React.FC<ExplorerProps> = ({
             />
           </div>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="pane-filters">
           <span className="text-xs text-zinc-500">Filter:</span>
           <button
             onClick={() => setFilterType('all')}
+            aria-pressed={filterType === 'all'}
             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
               filterType === 'all' ? 'bg-gale-teal text-on-accent font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
             }`}
@@ -586,6 +591,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
           </button>
           <button
             onClick={() => setFilterType('folders')}
+            aria-pressed={filterType === 'folders'}
             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
               filterType === 'folders' ? 'bg-gale-teal text-on-accent font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
             }`}
@@ -594,6 +600,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
           </button>
           <button
             onClick={() => setFilterType('files')}
+            aria-pressed={filterType === 'files'}
             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
               filterType === 'files' ? 'bg-gale-teal text-on-accent font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
             }`}
@@ -608,20 +615,35 @@ export const Explorer: React.FC<ExplorerProps> = ({
               Clear
             </button>
           )}
+          <div className="compact-sort items-center gap-2">
+            <Select
+              aria-label="Sort remote files by"
+              value={sortKey}
+              onValueChange={(value) => handleSort(value as 'name' | 'size' | 'date')}
+              className="min-w-0 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300"
+            >
+              <option value="name">Name</option>
+              <option value="size">Size</option>
+              <option value="date">Modified</option>
+            </Select>
+            <button type="button" onClick={() => handleSort(sortKey)} aria-label={`Sort ${sortDirection === 'asc' ? 'descending' : 'ascending'}`} className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">
+              {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 galeon-scrollbar">
+      <div className="pane-content flex-1 overflow-auto galeon-scrollbar">
         {error && (
-          <div className="p-3 mb-4 text-sm bg-red-950/50 border border-red-800 text-red-200 rounded-lg flex items-start justify-between gap-3">
+          <div className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg flex items-start justify-between gap-3">
             <span className="min-w-0 break-words">{error}</span>
             <button
               type="button"
               onClick={() => setError('')}
-              className="shrink-0 text-red-400/80 hover:text-red-200 text-lg leading-none"
+              className="shrink-0 text-status-danger hover:text-status-danger text-lg leading-none"
               aria-label="Dismiss error"
             >
-              ×
+              <CloseIcon size={16} aria-hidden="true" />
             </button>
           </div>
         )}
@@ -631,35 +653,36 @@ export const Explorer: React.FC<ExplorerProps> = ({
             <span className="text-zinc-400 text-sm">Loading…</span>
           </div>
         ) : (
-          <div className="border border-zinc-800 rounded-xl bg-zinc-900/40 backdrop-blur-md">
-            <table className="w-full text-left border-collapse">
+          <div className="border border-zinc-800 rounded-xl bg-zinc-900/40">
+            <table className="file-table text-left border-collapse">
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-900/70 text-zinc-400 text-xs uppercase tracking-wider font-semibold">
                   <th className="px-4 py-3 w-10">
                     <input
                       type="checkbox"
+                      aria-label="Select all visible remote items"
                       checked={filteredObjects.length > 0 && selectedItems.size === filteredObjects.length}
                       onChange={handleSelectAll}
                       className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-gale-teal focus:ring-gale-teal focus:ring-1 accent-gale-teal"
                     />
                   </th>
                   <th 
-                    onClick={() => handleSort('name')}
+                    aria-sort={sortKey === 'name' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     className="px-6 py-3 cursor-pointer hover:text-zinc-200 select-none"
                   >
-                    Name {sortKey === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    <button type="button" onClick={() => handleSort('name')}>Name {sortKey === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}</button>
                   </th>
                   <th 
-                    onClick={() => handleSort('size')}
+                    aria-sort={sortKey === 'size' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     className="px-6 py-3 w-40 cursor-pointer hover:text-zinc-200 select-none"
                   >
-                    Size {sortKey === 'size' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    <button type="button" onClick={() => handleSort('size')}>Size {sortKey === 'size' && (sortDirection === 'asc' ? '↑' : '↓')}</button>
                   </th>
                   <th 
-                    onClick={() => handleSort('date')}
+                    aria-sort={sortKey === 'date' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     className="px-6 py-3 w-60 cursor-pointer hover:text-zinc-200 select-none"
                   >
-                    Last Modified {sortKey === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    <button type="button" onClick={() => handleSort('date')}>Last Modified {sortKey === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}</button>
                   </th>
                   <th className="px-6 py-3 w-20 text-center">Actions</th>
                 </tr>
@@ -671,7 +694,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
                       <div className="flex flex-col items-center gap-3 max-w-sm mx-auto">
                         {listFailed ? (
                           <>
-                            <AlertTriangle className="w-10 h-10 text-red-500/70" />
+                            <AlertTriangle className="w-10 h-10 text-status-danger" />
                             <p className="text-sm text-zinc-300">Couldn&apos;t load this folder</p>
                             <p className="text-xs text-zinc-500">
                               Its contents are unknown — this is not an empty folder.
@@ -745,6 +768,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
                       <td className="px-4 py-4">
                         <input
                           type="checkbox"
+                          aria-label={`Select ${obj.name}`}
                           checked={selectedItems.has(obj.fullKey)}
                           onChange={() => {}}
                           onClick={(e) => {
@@ -754,13 +778,19 @@ export const Explorer: React.FC<ExplorerProps> = ({
                           className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-gale-teal focus:ring-gale-teal focus:ring-1 accent-gale-teal"
                         />
                       </td>
-                      <td className="px-6 py-4 flex items-center space-x-3 max-w-lg truncate">
+                      <td className="px-6 py-4">
+                        <div className="file-name">
                         {obj.objectType === 'folder' ? (
                           <Folder className="w-5 h-5 text-gale-teal flex-shrink-0" />
                         ) : (
                           <File className="w-5 h-5 text-zinc-400 flex-shrink-0" />
                         )}
-                        <span className="truncate">{obj.name}</span>
+                        <div className="min-w-0">
+                          <button type="button" onClick={(event) => handleSelectItem(obj.fullKey, index, event.shiftKey)}
+                            onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleDoubleClick(obj); } }} title={obj.name} className="block max-w-full hover:text-gale-teal">{obj.name}</button>
+                          <span className="compact-date">{obj.lastModified ? new Date(obj.lastModified).toLocaleString() : '—'}</span>
+                        </div>
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-zinc-400 metric-text">{renderObjectSize(obj)}</td>
                       <td className="px-6 py-4 text-zinc-400 metric-text">
@@ -777,6 +807,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
                             const rect = e.currentTarget.getBoundingClientRect();
                             openItemMenu(obj, rect.right - 160, rect.bottom + 4);
                           }}
+                          aria-label={`Actions for ${obj.name}`}
                           className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-200 transition-colors"
                         >
                           <MoreVertical className="w-4 h-4" />
@@ -791,7 +822,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
         )}
       </div>
 
-      {activeMenu && objects.find(obj => obj.fullKey === activeMenu) && (
+      {activeMenu && objects.find(obj => obj.fullKey === activeMenu) && createPortal(
         <ObjectContextMenu
           obj={objects.find(obj => obj.fullKey === activeMenu)!}
           menuPosition={menuPosition}
@@ -800,7 +831,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
           downloadDestination={downloadDestination}
           onClose={() => setActiveMenu(null)}
           onAction={handleMenuAction}
-        />
+        />, document.body
       )}
 
       {/* Create Folder Modal */}
@@ -837,7 +868,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
           <p className="text-zinc-400 text-sm mb-4">
             Are you sure you want to delete <span className="text-zinc-200 font-medium">"{deleteTarget.name}"</span>?
             {deleteTarget.objectType === 'folder' && (
-              <span className="block mt-1 text-yellow-400">This will delete all contents inside the folder.</span>
+              <span className="block mt-1 text-status-warning">This will delete all contents inside the folder.</span>
             )}
           </p>
         </ConfirmDialog>
@@ -883,7 +914,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
         >
           <p className="text-zinc-400 text-sm mb-4">
             Are you sure you want to delete {selectedItems.size} selected items?
-            <span className="block mt-1 text-yellow-400">This action cannot be undone.</span>
+            <span className="block mt-1 text-status-warning">This action cannot be undone.</span>
           </p>
         </ConfirmDialog>
       )}
@@ -900,8 +931,8 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
       {/* Floating Batch Toolbar */}
       {selectedItems.size > 0 && (
-        <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-40">
-          <div className="bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl px-4 py-3 flex items-center space-x-4">
+        <div className="pane-selection">
+          <div className="text-sm">
             <span className="text-sm text-zinc-300">
               <span className="font-semibold">{selectedItems.size}</span> selected
             </span>
@@ -921,7 +952,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
             </button>
             <button
               onClick={() => setShowBatchDeleteConfirm(true)}
-              className="flex items-center space-x-1 px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium"
+              className="flex items-center space-x-1 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium"
             >
               <Trash2 className="w-4 h-4" />
               <span>Delete</span>

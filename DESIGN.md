@@ -84,7 +84,13 @@ flip with the scale:
 
 Modal scrims stay `bg-black/50` in both themes (a dark scrim is correct over a
 light page). `color-scheme` is set per theme so inputs, scrollbars, and native
-selects follow.
+controls follow.
+
+Accent text uses `--accent-ink` through `text-gale-teal`: brand teal in dark mode,
+deep teal (`#076c60`) in light mode for readable links and icons. Accent fills
+keep the original Gale Teal and `text-on-accent`. Dark secondary text uses
+`--color-zinc-500: #91919b` (5.68:1 on zinc-900). Keyboard focus uses a visible
+two-pixel `--focus-ring` outline in both themes.
 
 Requires `color-mix` (WebKit 16.2+). On an older WebKit the alpha utilities fall
 back to their baked dark literal — light mode degrades to dark-tinted panels over
@@ -137,6 +143,11 @@ Styling intent, not a component API dump. Implement with Tailwind + tokens in `s
 ### Inputs & forms
 
 - Zinc-900/800 fields, zinc-800 borders, teal focus ring.
+- Use the shared `Select` for choice menus: zinc surface, teal checkmark, keyboard arrows/Home/End, typeahead, Enter to commit, Escape to dismiss. Menus stay within the viewport and portal into the active dialog when needed.
+- Use `Autocomplete` for editable suggestions such as Region; custom values must remain valid, and Tab/Escape must never silently replace typed text.
+- Status messages use `text-status-danger`, `text-status-warning`, and `text-status-success`, with matching tinted surfaces. These tokens use darker inks in light mode; gold metric text uses `--metric-ink`.
+- Use `TimeField` for 24-hour time choices. Radio controls share native semantics with a themed appearance, and keyboard focus uses one outline rather than stacked rings.
+- Checkboxes retain native input semantics with a shared 16px zinc/teal appearance and visible keyboard focus.
 - **Progressive disclosure:** default connection forms stay short; advanced protocol options expand on demand.
 - Validation: danger text + border; no rainbow error themes.
 
@@ -174,6 +185,13 @@ Styling intent, not a component API dump. Implement with Tailwind + tokens in `s
 5. **Stable geometry.** Avoid layout shift when metrics update (tabular nums, reserved badge widths).
 6. **Pane discipline.** Dual-pane / inspector modes split space predictably; no floating card chaos.
 7. **Scrollbars:** thin, zinc thumb (`galeon-scrollbar` pattern) — utility, not a design feature.
+8. **Pane responsiveness:** adapt to each pane's width with container queries.
+   Below 640px, search occupies its own row and modified dates move beneath file
+   names; sorting remains available. Selection actions stay inside their pane,
+   and the transfer drawer reserves layout space instead of covering file rows.
+9. **Protected focus:** shared dialogs and Settings use `ModalSurface` for inert
+   backgrounds, focus containment, Escape dismissal where allowed, and focus
+   return. Collapsed panes and the closed inspector must be inert.
 
 ---
 

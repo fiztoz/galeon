@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { Select } from './Select';
+import { useId, useState } from 'react';
+import { ModalSurface } from './ModalSurface';
 import { Check, Copy, ExternalLink } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 
@@ -28,7 +30,7 @@ const eyebrowLabel = 'block text-xs font-semibold text-zinc-400 uppercase tracki
 const cancelBtn = 'px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200';
 const primaryBtn =
   'px-4 py-2 bg-gale-teal text-on-accent hover:bg-deep-current hover:text-white rounded-lg text-sm font-medium transition-colors';
-const dangerBtn = 'px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium';
+const dangerBtn = 'px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium';
 /** Full-width primary action (the Share dialog's Generate Link). No `px-*`: it spans the card. */
 const widePrimaryBtn =
   'w-full py-2 bg-gale-teal text-on-accent hover:bg-deep-current hover:text-white rounded-lg text-sm font-medium transition-colors mb-4';
@@ -43,6 +45,7 @@ export interface DialogProps {
   footer?: React.ReactNode;
   /** Footer row classes. Single-button footers drop the inter-button gap. */
   footerClassName?: string;
+  onClose?: () => void;
 }
 
 /** Overlay + card + heading + footer. Everything below is built from this. */
@@ -52,16 +55,18 @@ export const Dialog: React.FC<DialogProps> = ({
   titleClassName = 'mb-4',
   children,
   footer,
-  footerClassName = 'flex justify-end space-x-2',
-}) => (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <div className={card(width)}>
-      <h3 className={`text-lg font-semibold ${titleClassName}`}>{title}</h3>
+  footerClassName = 'flex flex-wrap justify-end gap-2',
+  onClose,
+}) => {
+  const titleId = useId();
+  return (
+    <ModalSurface className={card(width)} labelledBy={titleId} onClose={onClose}>
+      <h3 id={titleId} className={`text-lg font-semibold ${titleClassName}`}>{title}</h3>
       {children}
       {footer && <div className={footerClassName}>{footer}</div>}
-    </div>
-  </div>
-);
+    </ModalSurface>
+  );
+};
 
 export interface ConfirmDialogProps {
   title: React.ReactNode;
@@ -92,6 +97,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     title={title}
     width={width}
     titleClassName={titleClassName}
+    onClose={onCancel}
     footer={
       <>
         <button onClick={onCancel} className={cancelBtn}>{cancelLabel}</button>
@@ -129,6 +135,7 @@ export const TextPromptDialog: React.FC<TextPromptDialogProps> = ({
   return (
     <Dialog
       title={title}
+      onClose={onCancel}
       footer={
         <>
           <button onClick={onCancel} className={cancelBtn}>Cancel</button>
@@ -138,6 +145,7 @@ export const TextPromptDialog: React.FC<TextPromptDialogProps> = ({
     >
       <input
         type="text"
+        aria-label={placeholder}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && onConfirm(value)}
@@ -175,6 +183,7 @@ export const DestinationDialog: React.FC<DestinationDialogProps> = ({
   return (
     <Dialog
       title={title}
+      onClose={onCancel}
       footer={
         <>
           <button onClick={onCancel} className={cancelBtn}>Cancel</button>
@@ -184,16 +193,17 @@ export const DestinationDialog: React.FC<DestinationDialogProps> = ({
     >
       <div className="mb-4">
         <label className={fieldLabel}>Select destination folder:</label>
-        <select
+        <Select
+          aria-label="Destination folder"
           value={destination}
-          onChange={(e) => setDestination(e.target.value)}
+          onValueChange={(value) => setDestination(value)}
           className={field}
         >
           <option value="/">Root (/)</option>
           {folders.map((folder) => (
             <option key={folder} value={folder}>{folder}</option>
           ))}
-        </select>
+        </Select>
       </div>
     </Dialog>
   );
@@ -265,6 +275,7 @@ export const ShareLinkDialog: React.FC<ShareLinkDialogProps> = ({
   return (
     <Dialog
       title="Share Link"
+      onClose={onClose}
       footerClassName="flex justify-end"
       footer={<button onClick={onClose} className={cancelBtn}>Close</button>}
     >
@@ -299,15 +310,16 @@ export const ShareLinkDialog: React.FC<ShareLinkDialogProps> = ({
 
       <div className="mb-4">
         <label className={eyebrowLabel}>Link Expiration</label>
-        <select
+        <Select
+          aria-label="Link expiration"
           value={expiration}
-          onChange={(e) => setExpiration(Number(e.target.value))}
+          onValueChange={(value) => setExpiration(Number(value))}
           className={field}
         >
           {EXPIRY_OPTIONS.map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {!url ? (
@@ -320,16 +332,17 @@ export const ShareLinkDialog: React.FC<ShareLinkDialogProps> = ({
           <div className="flex space-x-2">
             <input
               type="text"
+              aria-label="Generated URL"
               value={url}
               readOnly
-              className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-300 focus:outline-none"
+              className="flex-1 min-w-0 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-300 focus:outline-none"
             />
             <button
               onClick={copy}
               className="px-3 py-2 bg-raised hover:bg-raised-hover rounded-lg text-sm"
               title="Copy link"
             >
-              {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+              {copied ? <Check className="w-4 h-4 text-status-success" /> : <Copy className="w-4 h-4" />}
             </button>
             <button
               onClick={open}
@@ -339,7 +352,7 @@ export const ShareLinkDialog: React.FC<ShareLinkDialogProps> = ({
               <ExternalLink className="w-4 h-4" />
             </button>
           </div>
-          {copied && <p className="text-xs text-green-400 mt-1">Copied to clipboard!</p>}
+          {copied && <p className="text-xs text-status-success mt-1">Copied to clipboard!</p>}
         </div>
       )}
     </Dialog>
@@ -383,7 +396,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({
         </button>
         <button
           onClick={() => onResolve('overwrite')}
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-medium"
+          className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-on-accent rounded-lg text-sm font-medium"
         >
           Overwrite
         </button>

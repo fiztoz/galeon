@@ -1,3 +1,5 @@
+import { X as CloseIcon } from 'lucide-react';
+import { Dialog } from './Dialogs';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
@@ -299,7 +301,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
 
   return (
     <div
-      className="flex flex-col h-full bg-zinc-950 text-zinc-100"
+      className="file-pane flex flex-col h-full bg-zinc-950 text-zinc-100"
       onDragOver={(e) => {
         if (dragHasType(e, GALEON_REMOTE_KEYS_MIME)) {
           e.preventDefault();
@@ -317,9 +319,9 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
       }}
     >
       {/* Path bar */}
-      <div className="flex items-center justify-between gap-3 py-3 px-4 bg-zinc-900 border-b border-zinc-800 text-sm overflow-x-auto">
-        <div className="flex items-center space-x-1 min-w-0">
-          <span className="text-xs bg-amber-900/50 text-amber-400 px-2 py-0.5 rounded-full font-medium mr-1 shrink-0">
+      <div className="pane-path flex items-center justify-between gap-3 py-3 px-4 bg-zinc-900 border-b border-zinc-800 text-sm">
+        <nav aria-label="Local path" className="flex items-center space-x-1 min-w-0 galeon-scrollbar">
+          <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full font-medium mr-1 shrink-0">
             LOCAL
           </span>
           <button
@@ -339,7 +341,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
               </button>
             </React.Fragment>
           ))}
-        </div>
+        </nav>
         <button
           onClick={navigateUp}
           disabled={pathSegments.length === 0}
@@ -351,9 +353,9 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
       </div>
 
       {/* Toolbar */}
-      <div className="px-4 py-3 bg-zinc-900/50 border-b border-zinc-800 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
+      <div className="pane-toolbar bg-zinc-900/50 border-b border-zinc-800 space-y-3">
+        <div className="pane-toolbar-row">
+          <div className="pane-actions">
             <button
               onClick={handleUploadSelected}
               disabled={!hasSelection}
@@ -376,12 +378,13 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
               Refresh
             </button>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="pane-search">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
+              aria-label="Search local files"
+              placeholder="Search local files…"
               className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all w-48"
               autoCapitalize="off"
               autoCorrect="off"
@@ -390,9 +393,10 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
             />
           </div>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="pane-filters">
           <button
             onClick={() => setShowHidden(!showHidden)}
+            aria-pressed={showHidden}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
               showHidden ? 'bg-gale-teal text-on-accent font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
             }`}
@@ -425,20 +429,20 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
       </div>
 
       {/* Content area */}
-      <div className={`flex-1 overflow-auto p-4 galeon-scrollbar ${dragOverRemote ? 'ring-2 ring-inset ring-gale-teal/60 bg-gale-teal/5' : ''}`}>
+      <div className={`pane-content flex-1 overflow-auto galeon-scrollbar ${dragOverRemote ? 'ring-2 ring-inset ring-gale-teal/60 bg-gale-teal/5' : ''}`}>
         {dragOverRemote && (
           <div className="mb-2 text-xs text-gale-teal font-medium px-1">Drop to download here</div>
         )}
         {error && (
-          <div className="p-3 mb-4 text-sm bg-red-950/50 border border-red-800 text-red-200 rounded-lg flex items-start justify-between gap-3">
+          <div className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg flex items-start justify-between gap-3">
             <span className="min-w-0 break-words">{error}</span>
             <button
               type="button"
               onClick={() => setError('')}
-              className="shrink-0 text-red-400/80 hover:text-red-200 text-lg leading-none"
+              className="shrink-0 text-status-danger hover:text-status-danger text-lg leading-none"
               aria-label="Dismiss error"
             >
-              ×
+              <CloseIcon size={16} aria-hidden="true" />
             </button>
           </div>
         )}
@@ -449,35 +453,36 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
             <span className="text-zinc-400 text-sm">Loading…</span>
           </div>
         ) : (
-          <div className="border border-zinc-800 rounded-xl bg-zinc-900/40 backdrop-blur-md">
-            <table className="w-full text-left border-collapse">
+          <div className="border border-zinc-800 rounded-xl bg-zinc-900/40">
+            <table className="file-table text-left border-collapse">
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-900/70 text-zinc-400 text-xs uppercase tracking-wider font-semibold">
                   <th className="px-4 py-3 w-10">
                     <input
                       type="checkbox"
+                      aria-label="Select all visible local items"
                       checked={filteredEntries.length > 0 && selectedItems.size === filteredEntries.length}
                       onChange={handleSelectAll}
                       className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-gale-teal focus:ring-gale-teal focus:ring-1 accent-gale-teal"
                     />
                   </th>
                   <th
-                    onClick={() => handleSort('name')}
+                    aria-sort={sortKey === 'name' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     className="px-6 py-3 cursor-pointer hover:text-zinc-200 select-none"
                   >
-                    Name {sortKey === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    <button type="button" onClick={() => handleSort('name')}>Name {sortKey === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}</button>
                   </th>
                   <th
-                    onClick={() => handleSort('size')}
+                    aria-sort={sortKey === 'size' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     className="px-6 py-3 w-40 cursor-pointer hover:text-zinc-200 select-none"
                   >
-                    Size {sortKey === 'size' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    <button type="button" onClick={() => handleSort('size')}>Size {sortKey === 'size' && (sortDirection === 'asc' ? '↑' : '↓')}</button>
                   </th>
                   <th
-                    onClick={() => handleSort('date')}
+                    aria-sort={sortKey === 'date' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     className="px-6 py-3 w-60 cursor-pointer hover:text-zinc-200 select-none"
                   >
-                    Modified {sortKey === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    <button type="button" onClick={() => handleSort('date')}>Modified {sortKey === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}</button>
                   </th>
                 </tr>
               </thead>
@@ -488,7 +493,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                       <div className="flex flex-col items-center gap-3 max-w-sm mx-auto">
                         {listFailed ? (
                           <>
-                            <AlertTriangle className="w-10 h-10 text-red-500/70" />
+                            <AlertTriangle className="w-10 h-10 text-status-danger" />
                             <p className="text-sm text-zinc-300">Couldn&apos;t load this folder</p>
                             <p className="text-xs text-zinc-500">
                               Its contents are unknown — this is not an empty folder.
@@ -518,7 +523,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                             <Folder className="w-10 h-10 text-zinc-600 opacity-70" />
                             <p className="text-sm text-zinc-300">This folder is empty</p>
                             <p className="text-xs text-zinc-500">
-                              Create a folder or select files from the remote pane to upload.
+                              Create a folder, or download files from the remote pane.
                             </p>
                           </>
                         )}
@@ -543,6 +548,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
+                          aria-label={`Select ${entry.name}`}
                           checked={selectedItems.has(entry.path)}
                           onChange={() => {}}
                           onClick={(e) => {
@@ -552,13 +558,19 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                           className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-gale-teal focus:ring-gale-teal focus:ring-1 accent-gale-teal"
                         />
                       </td>
-                      <td className="px-6 py-3 flex items-center space-x-3 max-w-lg truncate">
+                      <td className="px-6 py-3">
+                        <div className="file-name">
                         {entry.isDir ? (
                           <Folder className="w-5 h-5 text-gale-teal flex-shrink-0" />
                         ) : (
                           <File className="w-5 h-5 text-zinc-400 flex-shrink-0" />
                         )}
-                        <span className="truncate">{entry.name}</span>
+                        <div className="min-w-0">
+                          <button type="button" onClick={(event) => handleSelectItem(entry.path, index, event.shiftKey)}
+                            onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleDoubleClick(entry); } }} title={entry.name} className="block max-w-full hover:text-gale-teal">{entry.name}</button>
+                          <span className="compact-date">{formatDate(entry.modifiedMs)}</span>
+                        </div>
+                        </div>
                       </td>
                       <td className="px-6 py-3 text-zinc-400 metric-text">
                         {entry.isDir ? '—' : formatSize(entry.size)}
@@ -577,8 +589,8 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
 
       {/* Floating Batch Toolbar */}
       {hasSelection && (
-        <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-40">
-          <div className="bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl px-4 py-3 flex items-center space-x-4">
+        <div className="pane-selection">
+          <div className="text-sm">
             <span className="text-sm text-zinc-300">
               <span className="font-semibold">{selectedItems.size}</span> selected
             </span>
@@ -602,11 +614,10 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
 
       {/* New Folder Modal */}
       {showNewFolder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-96 shadow-2xl">
-            <h3 className="text-lg font-semibold mb-4">New Folder</h3>
+        <Dialog title="New Folder" onClose={() => setShowNewFolder(false)}>
             <input
               ref={inputRef}
+              aria-label="Folder name"
               type="text"
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
@@ -634,8 +645,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                 Create
               </button>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

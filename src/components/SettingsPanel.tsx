@@ -1,3 +1,4 @@
+import { ModalSurface } from './ModalSurface';
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { X, Lock, Shield, Info, RotateCcw, Key, Sun, Moon, Monitor } from 'lucide-react';
@@ -104,12 +105,13 @@ export function SettingsPanel({ open, onClose, onShowOnboarding, themeMode, onTh
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-lg max-h-[85vh] shadow-2xl flex flex-col">
+    <ModalSurface label="Settings" onClose={onClose} className="w-full max-w-lg p-0 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl">
+      <div className="max-h-[calc(100dvh-104px)] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
           <h2 className="text-lg font-semibold text-zinc-100">Settings</h2>
           <button
             type="button"
+            aria-label="Close settings"
             onClick={onClose}
             className="p-1 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
           >
@@ -151,7 +153,7 @@ export function SettingsPanel({ open, onClose, onShowOnboarding, themeMode, onTh
           {/* Privacy */}
           <section className="p-4 rounded-lg bg-zinc-950/50 border border-zinc-800">
             <div className="flex items-center gap-2 mb-2">
-              <Shield className="w-4 h-4 text-doubloon" />
+              <Shield className="w-4 h-4 text-zinc-400" />
               <h3 className="text-sm font-semibold text-zinc-200">Privacy</h3>
             </div>
             <p className="text-sm text-zinc-400 leading-relaxed">
@@ -226,7 +228,7 @@ export function SettingsPanel({ open, onClose, onShowOnboarding, themeMode, onTh
                 </div>
               )}
               {migrationError && (
-                <div className="mt-3 text-xs text-red-300 leading-relaxed">{migrationError}</div>
+                <div className="mt-3 text-xs text-status-danger leading-relaxed">{migrationError}</div>
               )}
             </div>
           </section>
@@ -286,6 +288,6 @@ export function SettingsPanel({ open, onClose, onShowOnboarding, themeMode, onTh
           </section>
         </div>
       </div>
-    </div>
+    </ModalSurface>
   );
 }

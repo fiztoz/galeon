@@ -708,6 +708,7 @@ function App() {
             <button
               onClick={() => setDualPaneEnabled((prev) => !prev)}
               title="Toggle Dual Pane (⌥⌘L)"
+              aria-pressed={dualPaneEnabled}
               className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md transition-colors ${
                 dualPaneEnabled
                   ? 'text-gale-teal bg-gale-teal/10'
@@ -762,7 +763,7 @@ function App() {
           </button>
         </div>
       </header>
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 min-h-0 overflow-hidden">
         {dualPaneEnabled ? (
           <SplitPane
               label="Local and remote pane divider"

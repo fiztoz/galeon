@@ -19,7 +19,8 @@ export function hookHarness() {
       }
     },
   };
-  mock.module('react', () => ({ ...actualReact, ...react, default: { ...actualReact, ...react } }));
+  const extra = { useLayoutEffect: react.useEffect, useId: () => react.useRef(`test-${cursor}`).current };
+  mock.module('react', () => ({ ...actualReact, ...react, ...extra, default: { ...actualReact, ...react, ...extra } }));
   return {
     render<T>(fn: () => T): T { cursor = 0; const result = fn(); const effects = pending; pending = []; effects.forEach(fn => fn()); return result; },
     unmount() { slots.forEach(slot => slot?.cleanup?.()); slots = []; },

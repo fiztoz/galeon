@@ -116,8 +116,10 @@ Stability and UX good enough to publish.
 
 - ~~Self-host the UI fonts so a launch makes no third-party request~~ ✅ vendored
   under OFL in `public/fonts/`; CSP now allows no external host at all
-- CSP is set and verified against the built assets, but still wants a `tauri dev`
-  pass to confirm Tauri's injected bootstrap and real IPC
+- ✅ Native macOS smoke pass (2026-09-17): a local debug app bundle loaded the
+  embedded UI, connected to MinIO through real IPC, and uploaded/downloaded a
+  fixture with identical SHA-256. Fresh-install Windows/Linux checks remain open;
+  see [TEST_INFRA.md](TEST_INFRA.md).
 - ✅ Drag **between** the panes (1.0.0-alpha.4). In-app drags use custom MIME types
   (`application/x-galeon-local-paths` / `application/x-galeon-remote-keys`); drop
   targets only `preventDefault` when that MIME is present, so Finder/Explorer OS

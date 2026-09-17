@@ -1,3 +1,4 @@
+import { X as CloseIcon } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useState } from 'react';
 import { Check, Clock, Copy, ExternalLink, Link, Trash2 } from 'lucide-react';
@@ -44,16 +45,16 @@ const HistoryItem: React.FC<{
         <div className="flex items-center space-x-2 min-w-0">
           <span className="text-sm font-medium truncate">{entry.fileName}</span>
           {(entry.operation === 'upload') && (
-            <span className="text-[10px] uppercase tracking-wider bg-amber-900/50 text-amber-300 px-1.5 py-0.5 rounded font-semibold">Upload</span>
+            <span className="text-[10px] uppercase tracking-wider bg-status-warning/10 text-status-warning px-1.5 py-0.5 rounded font-semibold">Upload</span>
           )}
-          {isExpired && <span className="text-xs text-red-400">Expired</span>}
+          {isExpired && <span className="text-xs text-status-danger">Expired</span>}
         </div>
         <div className="flex items-center space-x-1">
           <button
             onClick={handleCopy}
             className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-200"
           >
-            {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+            {copied ? <Check className="w-4 h-4 text-status-success" /> : <Copy className="w-4 h-4" />}
           </button>
           <button
             type="button"
@@ -66,7 +67,7 @@ const HistoryItem: React.FC<{
           </button>
           <button
             onClick={() => onDelete(entry.id)}
-            className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-red-400"
+            className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-status-danger"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -102,7 +103,7 @@ export const PresignHistoryModal: React.FC<PresignHistoryModalProps> = ({
   onClose,
 }) => (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-[600px] max-h-[80vh] shadow-2xl flex flex-col">
+    <div className="bg-zinc-900 border border-zinc-800 galeon-modal-panel rounded-xl p-6 w-[600px] max-h-[80vh] shadow-2xl flex flex-col">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold flex items-center space-x-2">
           <Link className="w-5 h-5 text-gale-teal" />
@@ -112,7 +113,7 @@ export const PresignHistoryModal: React.FC<PresignHistoryModalProps> = ({
           {entries.length > 0 && (
             <button
               onClick={onClearAll}
-              className="flex items-center space-x-1 text-xs text-red-400 hover:text-red-300"
+              className="flex items-center space-x-1 text-xs text-status-danger hover:text-status-danger"
             >
               <Trash2 className="w-3 h-3" />
               <span>Clear All</span>
@@ -121,8 +122,8 @@ export const PresignHistoryModal: React.FC<PresignHistoryModalProps> = ({
           <button
             onClick={onClose}
             className="text-zinc-400 hover:text-zinc-200 text-xl"
-          >
-            ×
+           aria-label="Close shared links history">
+            <CloseIcon size={16} aria-hidden="true" />
           </button>
         </div>
       </div>
