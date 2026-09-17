@@ -1,3 +1,4 @@
+import { Select } from '../Select';
 import React, { useState, type Dispatch, type SetStateAction } from 'react';
 import { FIELD } from './field';
 import { S3_PRESETS, endpointForPreset, guessPreset, type S3ProviderId } from './presets';
@@ -90,11 +91,11 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
 <>
                 <div>
                   <label htmlFor="s3-provider" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Provider</label>
-                  <select id="s3-provider" value={provider} onChange={(e) => pickProvider(e.target.value as S3ProviderId)} className={FIELD}>
+                  <Select id="s3-provider" value={provider} onValueChange={(value) => pickProvider(value as S3ProviderId)} className={FIELD}>
                     {S3_PRESETS.map((p) => (
                       <option key={p.id} value={p.id}>{p.label}</option>
                     ))}
-                  </select>
+                  </Select>
                   <p className="mt-1 text-xs text-zinc-500">{active.help}</p>
                 </div>
                 {active.needsAccountId && (
@@ -189,9 +190,9 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
 
                     <div>
                       <label htmlFor="s3-storage-class" className="block text-sm font-medium text-zinc-200 mb-1">Storage Class</label>
-                      <select
+                      <Select
  id="s3-storage-class"                        value={storageClass}
-                        onChange={(e) => setStorageClass(e.target.value)}
+                        onValueChange={(value) => setStorageClass(value)}
                         className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all"
                       >
                         <option value="STANDARD">Standard</option>
@@ -201,7 +202,7 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                         <option value="INTELLIGENT_TIERING">Intelligent-Tiering</option>
                         <option value="GLACIER">Glacier</option>
                         <option value="GLACIER_DEEP_ARCHIVE">Glacier Deep Archive</option>
-                      </select>
+                      </Select>
                     </div>
 
                     <div>

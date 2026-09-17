@@ -1,3 +1,4 @@
+import { Select } from './Select';
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { FileKey2, Loader2, RefreshCw, X } from 'lucide-react';
@@ -114,10 +115,10 @@ export const SshConfigImport = ({ onSelect, mode = 'sftp' }: SshConfigImportProp
         </p>
       )}
       {!loading && connections && connections.length > 0 && (
-        <select
+        <Select
           defaultValue=""
-          onChange={(event) => {
-            const connection = connections.find((item) => item.alias === event.target.value);
+          onValueChange={(value) => {
+            const connection = connections.find((item) => item.alias === value);
             if (!connection) return;
             onSelect(connection);
             setOpen(false);
@@ -131,7 +132,7 @@ export const SshConfigImport = ({ onSelect, mode = 'sftp' }: SshConfigImportProp
               {connection.alias} — {connection.username ? `${connection.username}@` : ''}{connection.host}:{connection.port}
             </option>
           ))}
-        </select>
+        </Select>
       )}
     </div>
   );

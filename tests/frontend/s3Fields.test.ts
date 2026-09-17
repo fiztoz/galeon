@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { Children, isValidElement, type ReactNode } from 'react';
+import { Select } from '../../src/components/Select';
 import { hookHarness } from './harness';
 import type { S3FieldsProps } from '../../src/components/connection/S3Fields';
 
@@ -11,10 +12,11 @@ interface FieldProps {
   children?: ReactNode;
   value?: string;
   placeholder?: string;
+  onValueChange?: (value: string) => void;
   onChange?: (event: { target: { value: string } }) => void;
 }
 
-function fields(tree: ReactNode, type: string): FieldProps[] {
+function fields(tree: ReactNode, type: string | typeof Select): FieldProps[] {
   const found: FieldProps[] = [];
   Children.forEach(tree, (node) => {
     if (!isValidElement<FieldProps>(node)) return;
@@ -44,10 +46,10 @@ function form(endpoint = '', region = 'us-east-1') {
 
 test('loading another profile refreshes provider without rewriting its settings', () => {
   const { props, render } = form();
-  expect(fields(render(), 'select')[0].value).toBe('aws');
+  expect(fields(render(), Select)[0].value).toBe('aws');
   props.endpoint = 'http://localhost:9000';
   props.region = 'local-region';
-  expect(fields(render(), 'select')[0].value).toBe('minio');
+  expect(fields(render(), Select)[0].value).toBe('minio');
   expect(props.endpoint).toBe('http://localhost:9000');
   expect(props.region).toBe('local-region');
 });
@@ -64,12 +66,12 @@ test('R2 account follows the loaded endpoint, including switching between R2 pro
 
 test('explicit provider choices survive their own endpoint updates', () => {
   const { props, render } = form();
-  fields(render(), 'select')[0].onChange?.({ target: { value: 'r2' } });
-  expect(fields(render(), 'select')[0].value).toBe('r2');
+  fields(render(), Select)[0].onValueChange?.('r2');
+  expect(fields(render(), Select)[0].value).toBe('r2');
   fields(render(), 'input').find(field => field.placeholder === 'R2 account ID')?.onChange?.({ target: { value: 'test-account' } });
-  expect(fields(render(), 'select')[0].value).toBe('r2');
-  fields(render(), 'select')[0].onChange?.({ target: { value: 'custom' } });
-  expect(fields(render(), 'select')[0].value).toBe('custom');
+  expect(fields(render(), Select)[0].value).toBe('r2');
+  fields(render(), Select)[0].onValueChange?.('custom');
+  expect(fields(render(), Select)[0].value).toBe('custom');
   expect(props.endpoint).toBe('https://test-account.r2.cloudflarestorage.com');
 });
 
@@ -96,5 +98,5 @@ test('free-text regions still update region-derived provider endpoints', () => {
   const region = fields(render(), 'input').find(field => field.value === 'us-east-1');
   region?.onChange?.({ target: { value: 'custom-region-1' } });
   expect(props.endpoint).toBe('https://s3.custom-region-1.wasabisys.com');
-  expect(fields(render(), 'select')[0].value).toBe('wasabi');
+  expect(fields(render(), Select)[0].value).toBe('wasabi');
 });

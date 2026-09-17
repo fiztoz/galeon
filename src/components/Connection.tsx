@@ -1,3 +1,4 @@
+import { Select } from './Select';
 import { DEFAULT_S3_ENDPOINT, DEFAULT_S3_REGION, DEFAULT_SFTP_PORT, DEFAULT_FTP_PORT, defaultPortFor } from './connection/defaults';
 import { ProfileSidebar } from './connection/ProfileSidebar';
 import { SaveProfileDialog } from './connection/SaveProfileDialog';
@@ -779,11 +780,11 @@ export const Connection: React.FC<ConnectionProps> = ({
               <label htmlFor="connection-protocol" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
                 Protocol
               </label>
-              <select
+              <Select
                 id="connection-protocol"
                 value={protocol}
-                onChange={(e) => {
-                  const newProto = e.target.value as 's3' | 'sftp' | 'ftp' | 'ftps';
+                onValueChange={(value) => {
+                  const newProto = value as 's3' | 'sftp' | 'ftp' | 'ftps';
                   const currentPort = port;
                   setProtocol(newProto);
                   setSshConfigNotice('');
@@ -811,7 +812,7 @@ export const Connection: React.FC<ConnectionProps> = ({
                 <option value="sftp">SFTP / SSH</option>
                 <option value="ftp">FTP</option>
                 <option value="ftps">FTPS (FTP over TLS)</option>
-              </select>
+              </Select>
             </div>
             
             <ProtocolFields

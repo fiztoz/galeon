@@ -1,3 +1,4 @@
+import { Select } from './Select';
 import { useId, useState } from 'react';
 import { ModalSurface } from './ModalSurface';
 import { Check, Copy, ExternalLink } from 'lucide-react';
@@ -192,17 +193,17 @@ export const DestinationDialog: React.FC<DestinationDialogProps> = ({
     >
       <div className="mb-4">
         <label className={fieldLabel}>Select destination folder:</label>
-        <select
+        <Select
           aria-label="Destination folder"
           value={destination}
-          onChange={(e) => setDestination(e.target.value)}
+          onValueChange={(value) => setDestination(value)}
           className={field}
         >
           <option value="/">Root (/)</option>
           {folders.map((folder) => (
             <option key={folder} value={folder}>{folder}</option>
           ))}
-        </select>
+        </Select>
       </div>
     </Dialog>
   );
@@ -309,16 +310,16 @@ export const ShareLinkDialog: React.FC<ShareLinkDialogProps> = ({
 
       <div className="mb-4">
         <label className={eyebrowLabel}>Link Expiration</label>
-        <select
+        <Select
           aria-label="Link expiration"
           value={expiration}
-          onChange={(e) => setExpiration(Number(e.target.value))}
+          onValueChange={(value) => setExpiration(Number(value))}
           className={field}
         >
           {EXPIRY_OPTIONS.map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {!url ? (

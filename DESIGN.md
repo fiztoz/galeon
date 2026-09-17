@@ -84,7 +84,7 @@ flip with the scale:
 
 Modal scrims stay `bg-black/50` in both themes (a dark scrim is correct over a
 light page). `color-scheme` is set per theme so inputs, scrollbars, and native
-selects follow.
+controls follow.
 
 Accent text uses `--accent-ink` through `text-gale-teal`: brand teal in dark mode,
 deep teal (`#076c60`) in light mode for readable links and icons. Accent fills
@@ -143,6 +143,8 @@ Styling intent, not a component API dump. Implement with Tailwind + tokens in `s
 ### Inputs & forms
 
 - Zinc-900/800 fields, zinc-800 borders, teal focus ring.
+- Use the shared `Select` for choice menus: zinc surface, teal checkmark, keyboard arrows/Home/End, typeahead, Enter to commit, Escape to dismiss. Menus stay within the viewport and portal into the active dialog when needed.
+- Checkboxes retain native input semantics with a shared 16px zinc/teal appearance and visible keyboard focus.
 - **Progressive disclosure:** default connection forms stay short; advanced protocol options expand on demand.
 - Validation: danger text + border; no rainbow error themes.
 

@@ -1,3 +1,4 @@
+import { Select } from './Select';
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { save, open } from '@tauri-apps/plugin-dialog';
@@ -438,17 +439,17 @@ export const ProfileImportExport: React.FC<ProfileImportExportProps> = ({
                   <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
                     On name conflict
                   </label>
-                  <select
+                  <Select aria-label="On name conflict"
                     value={io.strategy}
-                    onChange={(e) =>
-                      setIo({ ...io, strategy: e.target.value as CollisionStrategy })
+                    onValueChange={(value) =>
+                      setIo({ ...io, strategy: value as CollisionStrategy })
                     }
                     className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal"
                   >
                     <option value="rename">Rename imported (recommended)</option>
                     <option value="skip">Skip existing names</option>
                     <option value="overwrite">Overwrite existing</option>
-                  </select>
+                  </Select>
                 </div>
                 {io.strategy === 'overwrite' && (
                   <div className="p-3 bg-amber-950/30 border border-amber-800/50 rounded-lg text-xs text-amber-200/90">

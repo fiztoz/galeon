@@ -1,3 +1,4 @@
+import { Select } from './Select';
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -420,16 +421,16 @@ export function SyncPanel({
               {/* Connection profile */}
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1.5">Connection Profile</label>
-                <select
+                <Select aria-label="Connection profile"
                   value={selectedConnectionProfileId}
-                  onChange={(e) => setSelectedConnectionProfileId(e.target.value)}
+                  onValueChange={(value) => setSelectedConnectionProfileId(value)}
                   className="w-full bg-zinc-800 border border-zinc-700 focus:border-gale-teal focus:ring-1 focus:ring-gale-teal rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none transition-all"
                 >
                   <option value="">— select a profile —</option>
                   {profiles.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
-                </select>
+                </Select>
               </div>
 
               {/* Local path */}
@@ -841,10 +842,10 @@ export function SyncPanel({
 
                               <div className="flex flex-wrap items-center gap-2">
                                 <label className="text-xs text-zinc-500 shrink-0">Frequency</label>
-                                <select
+                                <Select aria-label="Schedule frequency"
                                   value={schedule.frequency}
-                                  onChange={(e) => updateScheduleEdit(sp.id, sp, {
-                                    frequency: e.target.value as SyncSchedule['frequency'],
+                                  onValueChange={(value) => updateScheduleEdit(sp.id, sp, {
+                                    frequency: value as SyncSchedule['frequency'],
                                   })}
                                   className="bg-zinc-800 border border-zinc-700 focus:border-gale-teal rounded px-2 py-1 text-xs text-zinc-200 outline-none"
                                 >
@@ -852,7 +853,7 @@ export function SyncPanel({
                                   <option value="hourly">Hourly</option>
                                   <option value="daily">Daily</option>
                                   <option value="weekly">Weekly</option>
-                                </select>
+                                </Select>
 
                                 {(schedule.frequency === 'daily' || schedule.frequency === 'weekly') && (
                                   <>
@@ -879,15 +880,15 @@ export function SyncPanel({
                                 )}
 
                                 {schedule.frequency === 'weekly' && (
-                                  <select
+                                  <Select aria-label="Day of week"
                                     value={schedule.dayOfWeek ?? 0}
-                                    onChange={(e) => updateScheduleEdit(sp.id, sp, { dayOfWeek: Number(e.target.value) })}
+                                    onValueChange={(value) => updateScheduleEdit(sp.id, sp, { dayOfWeek: Number(value) })}
                                     className="bg-zinc-800 border border-zinc-700 focus:border-gale-teal rounded px-2 py-1 text-xs text-zinc-200 outline-none"
                                   >
                                     {DAYS_OF_WEEK.map((day, idx) => (
                                       <option key={day} value={idx}>{day}</option>
                                     ))}
-                                  </select>
+                                  </Select>
                                 )}
                               </div>
 

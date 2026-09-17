@@ -1,3 +1,4 @@
+import { Select } from './Select';
 import React, { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
@@ -838,10 +839,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                           Storage Class
                         </span>
                         <div className="flex items-center gap-2 mt-1.5">
-                          <select
+                          <Select aria-label="Storage class"
                             value={editStorageClass}
-                            onChange={(e) => {
-                              setEditStorageClass(e.target.value);
+                            onValueChange={(value) => {
+                              setEditStorageClass(value);
                               setSaveSuccess(false);
                               setSaveError(null);
                             }}
@@ -852,7 +853,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                                 {cls}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                           <button
                             onClick={handleSaveStorageClass}
                             disabled={saving}

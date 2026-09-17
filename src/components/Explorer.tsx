@@ -1,3 +1,4 @@
+import { Select } from './Select';
 import { createPortal } from 'react-dom';
 import { useObjectListing, useObjectSorting } from '../hooks/useObjectListing';
 import { useMultiSelect } from '../hooks/useMultiSelect';
@@ -614,16 +615,16 @@ export const Explorer: React.FC<ExplorerProps> = ({
             </button>
           )}
           <div className="compact-sort items-center gap-2">
-            <select
+            <Select
               aria-label="Sort remote files by"
               value={sortKey}
-              onChange={(event) => handleSort(event.target.value as 'name' | 'size' | 'date')}
+              onValueChange={(value) => handleSort(value as 'name' | 'size' | 'date')}
               className="min-w-0 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300"
             >
               <option value="name">Name</option>
               <option value="size">Size</option>
               <option value="date">Modified</option>
-            </select>
+            </Select>
             <button type="button" onClick={() => handleSort(sortKey)} aria-label={`Sort ${sortDirection === 'asc' ? 'descending' : 'ascending'}`} className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">
               {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
             </button>
