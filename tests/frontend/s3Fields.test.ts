@@ -1,3 +1,4 @@
+import { Autocomplete } from '../../src/components/Autocomplete';
 import { afterEach, expect, test } from 'bun:test';
 import { Children, isValidElement, type ReactNode } from 'react';
 import { Select } from '../../src/components/Select';
@@ -16,7 +17,7 @@ interface FieldProps {
   onChange?: (event: { target: { value: string } }) => void;
 }
 
-function fields(tree: ReactNode, type: string | typeof Select): FieldProps[] {
+function fields(tree: ReactNode, type: string | typeof Select | typeof Autocomplete): FieldProps[] {
   const found: FieldProps[] = [];
   Children.forEach(tree, (node) => {
     if (!isValidElement<FieldProps>(node)) return;
@@ -77,9 +78,9 @@ test('explicit provider choices survive their own endpoint updates', () => {
 
 test('regions outside preset suggestions remain visible and editable', () => {
   const { props, render } = form('', 'custom-region-1');
-  const region = fields(render(), 'input').find(field => field.value === 'custom-region-1');
+  const region = fields(render(), Autocomplete).find(field => field.value === 'custom-region-1');
   expect(region).toBeDefined();
-  region?.onChange?.({ target: { value: 'custom-region-2' } });
+  region?.onValueChange?.('custom-region-2');
   expect(props.region).toBe('custom-region-2');
 });
 
@@ -87,16 +88,16 @@ test('switching profiles replaces stale region-driven provider behavior', () => 
   const { props, render } = form('https://s3.us-east-1.wasabisys.com');
   render();
   props.endpoint = 'http://localhost:9000';
-  const region = fields(render(), 'input').find(field => field.value === 'us-east-1');
-  region?.onChange?.({ target: { value: 'local-region' } });
+  const region = fields(render(), Autocomplete).find(field => field.value === 'us-east-1');
+  region?.onValueChange?.('local-region');
   expect(props.region).toBe('local-region');
   expect(props.endpoint).toBe('http://localhost:9000');
 });
 
 test('free-text regions still update region-derived provider endpoints', () => {
   const { props, render } = form('https://s3.us-east-1.wasabisys.com');
-  const region = fields(render(), 'input').find(field => field.value === 'us-east-1');
-  region?.onChange?.({ target: { value: 'custom-region-1' } });
+  const region = fields(render(), Autocomplete).find(field => field.value === 'us-east-1');
+  region?.onValueChange?.('custom-region-1');
   expect(props.endpoint).toBe('https://s3.custom-region-1.wasabisys.com');
   expect(fields(render(), Select)[0].value).toBe('wasabi');
 });

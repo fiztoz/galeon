@@ -1,4 +1,5 @@
-import { Children, isValidElement, useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useChoicePopup } from './useChoicePopup';
+import { Children, isValidElement, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 
@@ -19,9 +20,8 @@ export function Select({ value, defaultValue, onValueChange, children, className
   const selected = String(value ?? internal);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const [position, setPosition] = useState({ left: 0, top: 0, width: 0, maxHeight: 280 });
   const trigger = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
+  const { menu, position } = useChoicePopup(trigger, open, options.length, active, setOpen);
   const search = useRef({ text: '', time: 0 });
   const listId = useId();
   const selectedIndex = options.findIndex((option) => option.value === selected);
@@ -43,40 +43,6 @@ export function Select({ value, defaultValue, onValueChange, children, className
     if (option.value !== selected) onValueChange(option.value);
   }
 
-  useLayoutEffect(() => {
-    if (!open || !trigger.current) return;
-    const rect = trigger.current.getBoundingClientRect();
-    const below = window.innerHeight - rect.bottom - 12;
-    const above = rect.top - 12;
-    const height = Math.min(280, options.length * 36 + 12);
-    const upward = below < height && above > below;
-    const maxHeight = Math.max(36, Math.min(height, upward ? above : below));
-    const width = Math.min(Math.max(rect.width, 200), window.innerWidth - 24);
-    setPosition({ left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)), top: upward ? rect.top - maxHeight - 6 : rect.bottom + 6, width, maxHeight });
-  }, [open, options.length]);
-
-  useEffect(() => {
-    if (!open) return;
-    menu.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' });
-  }, [open, active]);
-
-  useEffect(() => {
-    if (!open) return;
-    const outside = (event: PointerEvent) => {
-      if (!trigger.current?.contains(event.target as Node) && !menu.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const dismiss = (event: Event) => {
-      if (!menu.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', outside);
-    window.addEventListener('resize', dismiss);
-    document.addEventListener('scroll', dismiss, true);
-    return () => {
-      document.removeEventListener('pointerdown', outside);
-      window.removeEventListener('resize', dismiss);
-      document.removeEventListener('scroll', dismiss, true);
-    };
-  }, [open]);
 
   return <>
     <button

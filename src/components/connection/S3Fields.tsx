@@ -1,3 +1,4 @@
+import { Autocomplete } from '../Autocomplete';
 import { Select } from '../Select';
 import React, { useState, type Dispatch, type SetStateAction } from 'react';
 import { FIELD } from './field';
@@ -125,14 +126,7 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label htmlFor="s3-region" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Region</label>
-                    <input id="s3-region" type="text" value={region} onChange={(e) => onPresetRegion(e.target.value)} list={active.regionOptions ? 's3-region-options' : undefined} placeholder={active.regionPlaceholder} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
-                    {active.regionOptions && (
-                      <datalist id="s3-region-options">
-                        {active.regionOptions.map((r) => (
-                          <option key={r} value={r} />
-                        ))}
-                      </datalist>
-                    )}
+                    <Autocomplete id="s3-region" type="text" value={region} onValueChange={onPresetRegion} options={active.regionOptions ?? []} placeholder={active.regionPlaceholder} className={FIELD} autoCapitalize="off" autoCorrect="off" spellCheck={false} />
                   </div>
                   <div className="flex items-end pb-2">
                     <div className="flex items-center space-x-2">

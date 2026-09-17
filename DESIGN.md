@@ -144,6 +144,7 @@ Styling intent, not a component API dump. Implement with Tailwind + tokens in `s
 
 - Zinc-900/800 fields, zinc-800 borders, teal focus ring.
 - Use the shared `Select` for choice menus: zinc surface, teal checkmark, keyboard arrows/Home/End, typeahead, Enter to commit, Escape to dismiss. Menus stay within the viewport and portal into the active dialog when needed.
+- Use `Autocomplete` for editable suggestions such as Region; custom values must remain valid, and Tab/Escape must never silently replace typed text.
 - Checkboxes retain native input semantics with a shared 16px zinc/teal appearance and visible keyboard focus.
 - **Progressive disclosure:** default connection forms stay short; advanced protocol options expand on demand.
 - Validation: danger text + border; no rainbow error themes.
