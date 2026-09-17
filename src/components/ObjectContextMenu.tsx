@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Download, FolderDown, Eye, Share2, PenLine, Info, Pencil, FolderInput, Copy, Trash2 } from 'lucide-react';
 import type { GaleonObject } from '../types';
 import type { ProtocolCapabilities } from '../types';
@@ -16,7 +16,10 @@ interface ObjectContextMenuProps {
 }
 
 export function ObjectContextMenu({ obj, menuPosition, protocol, capabilities, downloadDestination, onAction, onClose }: ObjectContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    menuRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
@@ -29,12 +32,28 @@ export function ObjectContextMenu({ obj, menuPosition, protocol, capabilities, d
       document.removeEventListener('scroll', onClose, true);
       document.removeEventListener('click', onClose);
       document.removeEventListener('contextmenu', onClose);
+      previousFocus?.focus?.();
     };
   }, [onClose]);
   return (
         <div
-          className="fixed min-w-[10.5rem] bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-[9999] py-1"
-          style={{ left: menuPosition.x, top: menuPosition.y }}
+          ref={menuRef}
+          aria-label={`Actions for ${obj.name}`}
+          className="fixed w-44 overflow-y-auto galeon-scrollbar bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-[9999] py-1"
+          style={{ left: menuPosition.x, top: menuPosition.y, maxHeight: `calc(100dvh - ${menuPosition.y + 8}px)` }}
+          onKeyDown={(event) => {
+            const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? []);
+            const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+            let next: number;
+            if (event.key === 'ArrowDown') next = (index + 1) % buttons.length;
+            else if (event.key === 'ArrowUp') next = (index - 1 + buttons.length) % buttons.length;
+            else if (event.key === 'Home') next = 0;
+            else if (event.key === 'End') next = buttons.length - 1;
+            else return;
+            event.preventDefault();
+            event.stopPropagation();
+            buttons[next]?.focus();
+          }}
           onClick={(e) => e.stopPropagation()}
           onContextMenu={(e) => e.preventDefault()}
         >
@@ -136,7 +155,7 @@ export function useObjectContextMenu(selectedItems: Set<string>, setSelectedItem
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const openItemMenu = (obj: GaleonObject, x: number, y: number) => {
-    const menuWidth = 160;
+    const menuWidth = 176;
     const menuHeight = 320;
     setMenuPosition({
       x: Math.max(8, Math.min(x, window.innerWidth - menuWidth - 8)),

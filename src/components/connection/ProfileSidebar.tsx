@@ -68,7 +68,7 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
   };
 
   return (
-    <div className="w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col shrink-0">
+    <div className="profile-sidebar w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col shrink-0">
       <div
         data-tauri-drag-region
         className="app-titlebar app-titlebar-traffic border-b border-zinc-800 pr-3"
@@ -90,6 +90,7 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
             type="text"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
+            aria-label="Filter saved profiles"
             placeholder="Filter profiles…"
             className="w-full px-2.5 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-gale-teal"
             autoCapitalize="off"
@@ -123,43 +124,51 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
             {filtered.map((profile) => (
               <div
                 key={profile.id}
-                onClick={onRowClick(profile)}
-                onDoubleClick={() => onRowDoubleClick(profile)}
-                className={`p-3 rounded-lg cursor-pointer transition-all duration-150 relative group ${
+                className={`flex items-center rounded-lg border relative group ${
                   selectedProfileId === profile.id
-                    ? 'bg-abyss/40 border border-gale-teal/30 pl-4'
-                    : 'hover:bg-zinc-800/60 border border-transparent pl-3'
+                    ? 'bg-gale-teal/10 border-gale-teal/30'
+                    : 'hover:bg-zinc-800/60 border-transparent'
                 }`}
               >
-                {selectedProfileId === profile.id && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded bg-gale-teal h-8" />
-                )}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 min-w-0">
+                <button
+                  type="button"
+                  onClick={onRowClick(profile)}
+                  onDoubleClick={() => onRowDoubleClick(profile)}
+                  aria-pressed={selectedProfileId === profile.id}
+                  className="min-w-0 flex-1 p-3 text-left rounded-lg"
+                  title={`Load ${profile.name}`}
+                >
+                  <span className="flex items-center gap-2 min-w-0">
                     {profile.protocol === 'sftp' || profile.protocol === 'ftp' || profile.protocol === 'ftps' ? (
-                      <Server className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      <Server className="w-4 h-4 text-gale-teal shrink-0" />
                     ) : (
-                      <Database className="w-4 h-4 text-gale-teal flex-shrink-0" />
+                      <Database className="w-4 h-4 text-gale-teal shrink-0" />
                     )}
                     <span className="text-sm font-medium truncate">{profile.name}</span>
-                  </div>
-                  <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onEdit(profile); }}
-                      className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-200"
-                    >
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onDelete(profile.id); }}
-                      className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-red-400"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-1 text-xs text-zinc-500 truncate">
-                  {subtitleFor(profile)}
+                  </span>
+                  <span className="block mt-1 text-xs text-zinc-500 truncate" title={subtitleFor(profile)}>
+                    {subtitleFor(profile)}
+                  </span>
+                </button>
+                <div className="profile-actions flex shrink-0 items-center pr-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                  <button
+                    type="button"
+                    aria-label={`Edit ${profile.name}`}
+                    title="Edit profile"
+                    onClick={() => onEdit(profile)}
+                    className="p-1.5 hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-200"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${profile.name}`}
+                    title="Delete profile"
+                    onClick={() => onDelete(profile.id)}
+                    className="p-1.5 hover:bg-zinc-700 rounded text-zinc-400 hover:text-red-400"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             ))}

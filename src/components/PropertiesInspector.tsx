@@ -613,7 +613,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
       {/* Sliding drawer */}
       <div
-        className={`fixed top-0 right-0 h-full w-96 z-40 flex flex-col bg-zinc-900 border-l border-zinc-800 shadow-2xl transition-transform duration-200 ${
+        inert={!open}
+        aria-hidden={!open}
+        className={`fixed top-0 right-0 h-full w-96 max-w-full z-40 flex flex-col bg-zinc-900 border-l border-zinc-800 shadow-2xl transition-transform duration-200 ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
       >

@@ -738,7 +738,7 @@ export const Connection: React.FC<ConnectionProps> = ({
       />
 
       {/* Right Panel - Connection Form */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <div
           data-tauri-drag-region
           className="app-titlebar justify-end gap-2 pr-4 pl-4 border-b border-zinc-800/60 bg-zinc-950"
@@ -755,9 +755,9 @@ export const Connection: React.FC<ConnectionProps> = ({
             </button>
           )}
         </div>
-        <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto galeon-scrollbar">
-        <div className="w-full max-w-md p-8 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl backdrop-blur-md">
-          <h2 className="text-3xl font-display font-medium mb-6 tracking-[0.06em] text-zinc-100">
+        <div className="flex-1 min-h-0 flex flex-col p-4 xl:p-8 overflow-y-auto galeon-scrollbar">
+        <div className="w-full max-w-md mx-auto my-auto shrink-0 p-6 bg-zinc-900 border border-zinc-800 rounded-xl">
+          <h2 className="text-2xl font-display font-medium mb-6 tracking-tight text-zinc-100">
             Connect Storage
           </h2>
           {error && (
@@ -776,10 +776,11 @@ export const Connection: React.FC<ConnectionProps> = ({
           <form onSubmit={handleConnect} className="space-y-4">
             {/* Protocol Selector */}
             <div>
-              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+              <label htmlFor="connection-protocol" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
                 Protocol
               </label>
               <select
+                id="connection-protocol"
                 value={protocol}
                 onChange={(e) => {
                   const newProto = e.target.value as 's3' | 'sftp' | 'ftp' | 'ftps';
@@ -835,6 +836,7 @@ export const Connection: React.FC<ConnectionProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowBandwidthAdvanced(!showBandwidthAdvanced)}
+                  aria-expanded={showBandwidthAdvanced}
                   className="flex items-center space-x-2 text-xs text-zinc-400 hover:text-zinc-200"
                 >
                   <span>{showBandwidthAdvanced ? '▼' : '▶'}</span>

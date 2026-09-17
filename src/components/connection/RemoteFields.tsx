@@ -21,10 +21,10 @@ export function RemoteFields({ host, setHost, port, setPort, username, setUserna
 <>
                 {beforeFields}
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                  <label htmlFor="remote-host" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
                     Host
                   </label>
-                  <input
+                  <input id="remote-host"
                     type="text"
                     value={host}
                     onChange={(e) => setHost(e.target.value)}
@@ -39,10 +39,10 @@ export function RemoteFields({ host, setHost, port, setPort, username, setUserna
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                    <label htmlFor="remote-port" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
                       Port
                     </label>
-                    <input
+                    <input id="remote-port"
                       type="number"
                       value={port}
                       onChange={(e) => setPort(Number(e.target.value))}
@@ -50,10 +50,10 @@ export function RemoteFields({ host, setHost, port, setPort, username, setUserna
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                    <label htmlFor="remote-username" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
                       Username
                     </label>
-                    <input
+                    <input id="remote-username"
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}

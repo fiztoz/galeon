@@ -33,9 +33,10 @@ export function SftpFields({ remote, ssh }: { remote: RemoteFieldsProps; ssh: Sf
                       <span className="h-px flex-1 bg-zinc-700" />
                     </div>
                     <div>
-                      <label className="text-xs text-zinc-500">SSH Private Key Path</label>
+                      <label htmlFor="ssh-private-key" className="text-xs text-zinc-500">SSH Private Key Path</label>
                       <input
                         type="text"
+                        id="ssh-private-key"
                         value={keyPath}
                         onChange={(e) => setKeyPath(e.target.value)}
                         placeholder="/Users/you/.ssh/id_ed25519"
@@ -50,6 +51,7 @@ export function SftpFields({ remote, ssh }: { remote: RemoteFieldsProps; ssh: Sf
                     <button
                       type="button"
                       onClick={() => setShowSshHelper(!showSshHelper)}
+                      aria-expanded={showSshHelper}
                       className="flex items-center space-x-1 text-xs text-gale-teal hover:text-deep-current transition-colors"
                     >
                       <Key className="w-3 h-3" />

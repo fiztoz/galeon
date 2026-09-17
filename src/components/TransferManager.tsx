@@ -399,7 +399,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
     .reduce((sum, t) => sum + t.bytesPerSecond, 0);
 
   return (
-    <div className={`fixed bottom-0 left-0 right-0 bg-zinc-900 border-t-2 border-zinc-800 z-50 transition-all duration-300 flex flex-col ${isOpen ? 'h-80' : 'h-[42px]'}`}>
+    <div className={`relative shrink-0 max-h-[45dvh] bg-zinc-900 border-t border-zinc-800 flex flex-col ${isOpen ? 'h-80' : 'h-[42px]'}`}>
       {/* Restored transfers banner */}
       {restoredCount > 0 && (
         <div className="bg-amber-900/30 border-b border-amber-800/50 px-6 py-1.5 flex items-center justify-between shrink-0">

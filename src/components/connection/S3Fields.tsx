@@ -89,8 +89,8 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
   return (
 <>
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Provider</label>
-                  <select value={provider} onChange={(e) => pickProvider(e.target.value as S3ProviderId)} className={FIELD}>
+                  <label htmlFor="s3-provider" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Provider</label>
+                  <select id="s3-provider" value={provider} onChange={(e) => pickProvider(e.target.value as S3ProviderId)} className={FIELD}>
                     {S3_PRESETS.map((p) => (
                       <option key={p.id} value={p.id}>{p.label}</option>
                     ))}
@@ -99,26 +99,26 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                 </div>
                 {active.needsAccountId && (
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Account ID</label>
-                    <input type="text" value={accountId} onChange={(e) => onAccountId(e.target.value)} placeholder="R2 account ID" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+                    <label htmlFor="s3-account" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Account ID</label>
+                    <input id="s3-account" type="text" value={accountId} onChange={(e) => onAccountId(e.target.value)} placeholder="R2 account ID" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
                   </div>
                 )}
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Bucket Name</label>
-                  <input type="text" value={bucket} onChange={(e) => setBucket(e.target.value)} required placeholder="e.g. my-bucket" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+                  <label htmlFor="s3-bucket" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Bucket Name</label>
+                  <input id="s3-bucket" type="text" value={bucket} onChange={(e) => setBucket(e.target.value)} required placeholder="e.g. my-bucket" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
                   <p className="mt-1 text-xs text-zinc-500">Bucket name (not the full URL)</p>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Access Key ID</label>
-                  <input type="text" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+                  <label htmlFor="s3-access-key" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Access Key ID</label>
+                  <input id="s3-access-key" type="text" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Secret Access Key</label>
-                  <input type="password" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+                  <label htmlFor="s3-secret-key" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Secret Access Key</label>
+                  <input id="s3-secret-key" type="password" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Custom Endpoint</label>
-                  <input type="text" value={endpoint} onChange={(e) => updateEndpoint(e.target.value, provider, selectionForEndpoint(e.target.value).accountId)} placeholder={active.endpointPlaceholder} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+                  <label htmlFor="s3-endpoint" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Custom Endpoint</label>
+                  <input id="s3-endpoint" type="text" value={endpoint} onChange={(e) => updateEndpoint(e.target.value, provider, selectionForEndpoint(e.target.value).accountId)} placeholder={active.endpointPlaceholder} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
                   <p className="mt-1 text-xs text-zinc-500">MinIO / R2 / Wasabi: paste the API endpoint URL</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -156,6 +156,7 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                 <button
                   type="button"
                   onClick={() => setShowAdvanced(!showAdvanced)}
+                  aria-expanded={showAdvanced}
                   className="flex items-center space-x-2 text-xs text-zinc-400 hover:text-zinc-200"
                 >
                   <span>{showAdvanced ? '▼' : '▶'}</span>
@@ -173,6 +174,9 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                       <button
                         type="button"
                         onClick={() => setUseVirtualHostStyle(!useVirtualHostStyle)}
+                        role="switch"
+                        aria-label="Virtual host style"
+                        aria-checked={useVirtualHostStyle}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                           useVirtualHostStyle ? 'bg-gale-teal' : 'bg-zinc-700'
                         }`}
@@ -184,9 +188,9 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-zinc-200 mb-1">Storage Class</label>
+                      <label htmlFor="s3-storage-class" className="block text-sm font-medium text-zinc-200 mb-1">Storage Class</label>
                       <select
-                        value={storageClass}
+ id="s3-storage-class"                        value={storageClass}
                         onChange={(e) => setStorageClass(e.target.value)}
                         className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all"
                       >
@@ -201,9 +205,9 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-zinc-200 mb-1">Bandwidth Limit (KB/s)</label>
+                      <label htmlFor="s3-bandwidth" className="block text-sm font-medium text-zinc-200 mb-1">Bandwidth Limit (KB/s)</label>
                       <input
-                        type="number"
+ id="s3-bandwidth"                        type="number"
                         min="0"
                         placeholder="Unlimited"
                         value={maxBandwidth}
