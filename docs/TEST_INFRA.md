@@ -95,10 +95,31 @@ cargo test --lib ftp_native::
 
 ## Frontend regression tests
 
-Run `bun run test:frontend` for the Explorer hook suites. They exercise listing races,
+Run `bun run test:frontend` for the frontend regression suites. They exercise listing races,
 filtered selection, folder-size cancellation, native drop cleanup, conflict resolution,
-and context-menu dismissal without connecting to storage. Each suite runs in a separate
+context-menu dismissal, and S3 profile/provider/region transitions without connecting to storage. Each suite runs in a separate
 Bun process so its React/Tauri module mocks cannot affect another suite.
 
 These deterministic hook tests complement `bun run build`; they do not replace the
 native Tauri visual pass for themes, dialogs, and split-pane interactions.
+
+## Native app smoke pass
+
+Use the local MinIO bucket above and disposable files; do not use production
+profiles for smoke tests. Exercise the actual Tauri app, since a browser preview
+cannot validate native dialogs, credential reads, or IPC.
+
+1. Open the app and load the local MinIO profile. Confirm the provider, endpoint,
+   and region match the profile before connecting.
+2. Connect and browse the seeded bucket. Upload a small generated file through
+   the native file picker, then download it under a different name.
+3. Compare the original and downloaded bytes (or SHA-256 hashes). Confirm both
+   transfers complete, then restart the app and check the queue and profile.
+4. Repeat on each supported OS using the CI-produced installer in a fresh user
+   environment before declaring fresh-install coverage.
+
+On 2026-09-17, the macOS local debug bundle passed profile loading, connection,
+listing, and a 3,200-byte native-dialog round trip with matching SHA-256. The
+141 Rust unit tests and 66 MinIO integration tests also passed. This verifies
+embedded UI startup and real IPC, not fresh-install behavior, release performance,
+or Windows/Linux installer behavior.

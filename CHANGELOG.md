@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Loading an S3 profile refreshes its provider selection and R2 account field
+  without overwriting saved connection settings. A previously selected provider
+  no longer rewrites another profile's endpoint when its region is edited.
+- S3 region presets now offer suggestions while allowing free-text entry, so
+  saved and newly entered regions outside the suggestion list remain usable.
+
 ### Changed
 
 - JavaScript patch group: lucide-react 1.45, React 19.3, Vite 8.3, and matching

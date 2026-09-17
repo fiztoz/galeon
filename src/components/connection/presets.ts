@@ -24,7 +24,7 @@ export interface S3Preset {
   endpointPlaceholder: string;
   defaultRegion: string;
   regionPlaceholder: string;
-  /** When set, the region renders as a dropdown instead of free text. */
+  /** Suggestions only; users can also enter regions absent from this list. */
   regionOptions?: string[];
   useVirtualHostStyle: boolean;
   /** R2 builds its endpoint from an account ID; show that field. */
