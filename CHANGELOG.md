@@ -51,6 +51,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Update rustls to 0.23.45, addressing RUSTSEC-2026-0285 (TLS 1.3 handshake
   messages accepted across encryption-level boundaries).
+- Update the build dependency `source-map-js` to 1.2.2, addressing
+  GHSA-68fv-2mgg-jv7q (denial of service from indexed source-map offsets).
 
 ## [1.0.0-alpha.4]
 
