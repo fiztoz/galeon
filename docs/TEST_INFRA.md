@@ -34,6 +34,14 @@ E2E integration tests require a running MinIO server:
 ./scripts/dev-minio.sh up
 ```
 
+The first run builds `galeon-minio-test:2025-10-15` from the official MinIO and
+`mc` source revisions pinned in `scripts/minio-test.Dockerfile`; subsequent runs
+reuse that local image. This avoids the unavailable upstream container images.
+Run `./scripts/dev-minio.sh build` to rebuild it. The image is only a local test
+fixture, not a production storage deployment. On networks with a custom CA,
+build it with Docker's `--secret id=ca_bundle,src=/path/to/ca-bundle.crt`; the
+certificate is mounted only during compilation and is not included in the image.
+
 ### Data Layout during Tests
 *   Test downloads are saved in `src-tauri/target/test-downloads/`.
 *   Test uploads are read from `src-tauri/target/test-uploads/`.
