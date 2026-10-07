@@ -475,6 +475,7 @@ jobs:
           BASE="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
           printf '%s\n' \
             "## Galeon $TAG" '' "$STATUS" '' \
+            "See the [changelog]($BASE/blob/$COMMIT/CHANGELOG.md) for the changes in this release." '' \
             '### Install (macOS)' '' \
             "1. Download \`$DMG\` below." \
             '2. Open the DMG and drag **Galeon** into **Applications**.' \
