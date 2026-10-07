@@ -149,6 +149,10 @@ Styling intent, not a component API dump. Implement with Tailwind + tokens in `s
 - Use `TimeField` for 24-hour time choices. Radio controls share native semantics with a themed appearance, and keyboard focus uses one outline rather than stacked rings.
 - Checkboxes retain native input semantics with a shared 16px zinc/teal appearance and visible keyboard focus.
 - **Progressive disclosure:** default connection forms stay short; advanced protocol options expand on demand.
+- Connection setup uses a flat form with destination and credential groups. Keep
+  Connect and labelled save actions in a persistent footer; only fields scroll.
+  TLS verification bypass lives under Advanced options, with a visible warning
+  even when that section is collapsed. Use sentence-case field labels.
 - Validation: danger text + border; no rainbow error themes.
 
 ### Explorer / tables
@@ -156,6 +160,9 @@ Styling intent, not a component API dump. Implement with Tailwind + tokens in `s
 - Virtualized lists; compact rows; zebra only if it improves scanability without adding hue.
 - Selection: Gale Teal tint or left rail — never purple highlight.
 - Columns for size/date/speed: right-align + tabular figures.
+- File lists meet the pane edges with sticky column headers. Avoid wrapping the
+  table in another rounded card. Filters use quiet neutral pressed states so
+  teal remains available for the primary action and file selection.
 - Icons: Lucide-style outline set at 14–16px in toolbars; brand mark only where brand identity is intended.
 
 ### Navigation chrome

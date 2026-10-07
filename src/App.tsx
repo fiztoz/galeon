@@ -709,23 +709,23 @@ function App() {
               onClick={() => setDualPaneEnabled((prev) => !prev)}
               title="Toggle Dual Pane (⌥⌘L)"
               aria-pressed={dualPaneEnabled}
-              className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md transition-colors ${
+              className={`ui-button ${
                 dualPaneEnabled
                   ? 'text-gale-teal bg-gale-teal/10'
                   : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
               }`}
             >
-              <Columns className="w-3 h-3" />
+              <Columns className="w-3.5 h-3.5" />
               <span>Local</span>
             </button>
           )}
           <button
             onClick={() => setPaletteOpen(true)}
             title="Command Palette (⌘K)"
-            className="inline-flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 px-2 py-1 rounded-md transition-colors"
+            className="ui-button ui-button-ghost"
           >
-            <Command className="w-3 h-3" />
-            <span className="metric-text">K</span>
+            <Command className="w-3.5 h-3.5" />
+            <span>Commands</span>
           </button>
           <ActiveEditors
             sessions={editSessions}
@@ -735,29 +735,31 @@ function App() {
           <button
             onClick={() => { setSyncPrefillProfile(null); setSyncPanelOpen(true); }}
             title="Sync"
-            className="inline-flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 px-2 py-1 rounded-md transition-colors"
+            className="ui-button ui-button-ghost"
           >
-            <RefreshCw className="w-3 h-3" />
+            <RefreshCw className="w-3.5 h-3.5" />
             <span>Sync</span>
           </button>
           <button
             onClick={() => { loadPresignHistory(); setShowHistory(true); }}
             title="Shared links"
-            className="inline-flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 px-2 py-1 rounded-md transition-colors"
+            className="ui-button ui-button-ghost"
           >
-            <Link className="w-3 h-3" />
-            <span className="metric-text">{presignHistory.length}</span>
+            <Link className="w-3.5 h-3.5" />
+            <span>Links</span>
+            {presignHistory.length > 0 && <span className="metric-text">{presignHistory.length}</span>}
           </button>
           <button
             onClick={() => setSettingsOpen(true)}
             title="Settings (⌘,)"
-            className="inline-flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 px-2 py-1 rounded-md transition-colors"
+            aria-label="Settings"
+            className="ui-button ui-button-ghost"
           >
-            <Settings className="w-3 h-3" />
+            <Settings className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={handleDisconnect}
-            className="inline-flex items-center text-[11px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 px-2 py-1 rounded-md transition-colors ml-0.5"
+            className="ui-button ui-button-ghost ml-1"
           >
             Disconnect
           </button>
