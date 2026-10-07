@@ -8,7 +8,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useFolderSizes } from '../hooks/useFolderSizes';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { useUploadPipeline, type PendingConflict } from '../hooks/useUploadPipeline';
-import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, MoreVertical, Loader2, AlertTriangle } from 'lucide-react';
+import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, MoreVertical, Loader2, AlertTriangle, Search, RotateCw } from 'lucide-react';
 import { ProtocolCapabilities, GaleonObject } from '../types';
 import {
   ConflictDialog,
@@ -463,17 +463,17 @@ export const Explorer: React.FC<ExplorerProps> = ({
       <div className="pane-path flex items-center justify-between gap-3 py-3 px-4 bg-zinc-900 border-b border-zinc-800 text-sm">
         <nav aria-label="Remote path" className="flex items-center space-x-1 min-w-0 galeon-scrollbar">
         {protocol === 'sftp' && (
-          <span className="text-xs bg-status-success/10 text-status-success px-2 py-0.5 rounded-full font-medium mr-1">
+          <span className="text-xs bg-status-success/10 text-status-success px-2 py-0.5 rounded font-medium mr-1">
             SFTP
           </span>
         )}
         {protocol === 'ftp' && (
-          <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full font-medium mr-1">
+          <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded font-medium mr-1">
             FTP
           </span>
         )}
         {protocol === 'ftps' && (
-          <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full font-medium mr-1">
+          <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded font-medium mr-1">
             FTPS
           </span>
         )}
@@ -544,33 +544,36 @@ export const Explorer: React.FC<ExplorerProps> = ({
           <div className="pane-actions">
             <button
               onClick={handleUpload}
-              className="flex items-center space-x-2 px-3 py-1.5 bg-gale-teal text-on-accent hover:bg-deep-current hover:text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+              className="ui-button ui-button-primary"
             >
               <Upload className="w-4 h-4" />
               <span>Upload</span>
             </button>
             <button
               onClick={() => setShowCreateFolder(true)}
-              className="flex items-center space-x-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm font-medium transition-colors"
+              className="ui-button ui-button-secondary"
             >
               <Plus className="w-4 h-4" />
-              <span>New Folder</span>
+              <span>New folder</span>
             </button>
             <button
               onClick={() => fetchDirectory(prefix)}
-              className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm font-medium transition-colors"
+              className="ui-button ui-button-ghost"
+              aria-label="Refresh files"
+              title="Refresh files"
             >
-              Refresh
+              <RotateCw size={14} aria-hidden="true" />
             </button>
           </div>
           <div className="pane-search">
+            <Search size={14} aria-hidden="true" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label="Search remote files"
               placeholder="Search remote files…"
-              className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all w-48"
+              className="connection-field text-zinc-100 placeholder:text-zinc-500"
               autoCapitalize="off"
               autoCorrect="off"
               autoComplete="off"
@@ -579,31 +582,25 @@ export const Explorer: React.FC<ExplorerProps> = ({
           </div>
         </div>
         <div className="pane-filters">
-          <span className="text-xs text-zinc-500">Filter:</span>
+          <span className="sr-only">Filter:</span>
           <button
             onClick={() => setFilterType('all')}
             aria-pressed={filterType === 'all'}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              filterType === 'all' ? 'bg-gale-teal text-on-accent font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-            }`}
+            className="pane-filter-button"
           >
             All
           </button>
           <button
             onClick={() => setFilterType('folders')}
             aria-pressed={filterType === 'folders'}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              filterType === 'folders' ? 'bg-gale-teal text-on-accent font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-            }`}
+            className="pane-filter-button"
           >
             Folders
           </button>
           <button
             onClick={() => setFilterType('files')}
             aria-pressed={filterType === 'files'}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              filterType === 'files' ? 'bg-gale-teal text-on-accent font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-            }`}
+            className="pane-filter-button"
           >
             Files
           </button>
@@ -635,7 +632,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
       <div className="pane-content flex-1 overflow-auto galeon-scrollbar">
         {error && (
-          <div className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg flex items-start justify-between gap-3">
+          <div role="alert" className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg flex items-start justify-between gap-3">
             <span className="min-w-0 break-words">{error}</span>
             <button
               type="button"
@@ -653,10 +650,10 @@ export const Explorer: React.FC<ExplorerProps> = ({
             <span className="text-zinc-400 text-sm">Loading…</span>
           </div>
         ) : (
-          <div className="border border-zinc-800 rounded-xl bg-zinc-900/40">
+          <div className="file-list">
             <table className="file-table text-left border-collapse">
               <thead>
-                <tr className="border-b border-zinc-800 bg-zinc-900/70 text-zinc-400 text-xs uppercase tracking-wider font-semibold">
+                <tr className="border-b border-zinc-800 bg-zinc-900 text-zinc-400 text-xs font-medium">
                   <th className="px-4 py-3 w-10">
                     <input
                       type="checkbox"

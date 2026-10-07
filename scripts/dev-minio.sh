@@ -6,6 +6,7 @@
 #   scripts/dev-minio.sh status  # show container + bucket contents
 #   scripts/dev-minio.sh down    # stop container (data volume survives)
 #   scripts/dev-minio.sh reset   # stop container and wipe the data volume
+#   scripts/dev-minio.sh build   # rebuild the pinned test image
 #
 # Connect from Galeon (dev credentials only — never reuse anywhere real):
 #   Endpoint:   http://localhost:9000     Region: us-east-1
@@ -20,26 +21,39 @@ VOLUME=galeon-minio-data
 ACCESS_KEY=galeon
 SECRET_KEY=galeon-dev-secret
 BUCKET=galeon-test
-MINIO_IMAGE=quay.io/minio/minio
-MC_IMAGE=quay.io/minio/mc
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+TEST_IMAGE=galeon-minio-test:2025-10-15
+
+build_image() {
+  docker build -f "$SCRIPT_DIR/minio-test.Dockerfile" -t "$TEST_IMAGE" "$SCRIPT_DIR"
+}
+
+ensure_image() {
+  docker image inspect "$TEST_IMAGE" >/dev/null 2>&1 || build_image
+}
 
 mc_run() {
-  docker run --rm --network "$NET" --entrypoint sh "$MC_IMAGE" -c \
+  ensure_image
+  docker run --rm --network "$NET" --entrypoint sh "$TEST_IMAGE" -c \
     "mc alias set local http://$NAME:9000 $ACCESS_KEY $SECRET_KEY >/dev/null && $1"
 }
 
 case "${1:-}" in
+  build)
+    build_image
+    ;;
   up)
     docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
     if docker ps --format '{{.Names}}' | grep -q "^$NAME$"; then
       echo "✔ $NAME already running"
     else
+      ensure_image
       docker rm "$NAME" >/dev/null 2>&1 || true
       docker run -d --name "$NAME" --network "$NET" \
         -p 127.0.0.1:9000:9000 -p 127.0.0.1:9001:9001 \
         -e MINIO_ROOT_USER="$ACCESS_KEY" -e MINIO_ROOT_PASSWORD="$SECRET_KEY" \
         -v "$VOLUME":/data \
-        "$MINIO_IMAGE" server /data --console-address ':9001' >/dev/null
+        "$TEST_IMAGE" server /data --console-address ':9001' >/dev/null
       until curl -sf http://localhost:9000/minio/health/live >/dev/null; do sleep 0.5; done
       echo "✔ MinIO up — S3 http://localhost:9000 · console http://localhost:9001 ($ACCESS_KEY / $SECRET_KEY)"
     fi

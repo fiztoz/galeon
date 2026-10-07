@@ -21,7 +21,8 @@ import {
 } from './sshTunnel';
 import { SshTunnelProfiles } from './SshTunnelProfiles';
 import { SshConfigConnection } from './SshConfigImport';
-import { Plus, Save, Settings, Eraser } from 'lucide-react';
+import { Settings, LockKeyhole } from 'lucide-react';
+import { ConnectionActions } from './connection/ConnectionActions';
 
 /** Friend-readable connect errors (strip noisy Rust/Tauri wrappers when present). */
 const formatConnectError = (err: unknown): string => {
@@ -95,6 +96,7 @@ export const Connection: React.FC<ConnectionProps> = ({
   // has to say so, otherwise it looks ready while the password box is still empty.
   const [credsLoading, setCredsLoading] = useState(false);
   const [error, setError] = useState('');
+  const errorRef = useRef<HTMLDivElement>(null);
   
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -108,6 +110,10 @@ export const Connection: React.FC<ConnectionProps> = ({
   // Guards the double-click connect itself: a second in-flight connect_storage opens a
   // second backend session, and only the last sessionId is kept — the first leaks.
   const connectingRef = useRef(false);
+
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [error]);
 
   useEffect(() => {
     getVersion().then(setAppVersion).catch(() => setAppVersion(null));
@@ -655,6 +661,9 @@ export const Connection: React.FC<ConnectionProps> = ({
 
   /** Full reset to defaults so Connect/Save cannot clobber imports with stale fields. */
   const resetFormToDefaults = () => {
+    ++profileActionNonceRef.current;
+    setCredsLoading(false);
+    setError('');
     setSelectedProfileId(null);
     setProfileName('');
     setEditingProfile(null);
@@ -738,33 +747,36 @@ export const Connection: React.FC<ConnectionProps> = ({
         onDelete={handleDeleteProfile}
         onReloadProfiles={onReloadProfiles}
         onImportComplete={resetFormToDefaults}
+        onNewConnection={resetFormToDefaults}
       />
 
       {/* Right Panel - Connection Form */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <div
           data-tauri-drag-region
-          className="app-titlebar justify-end gap-2 pr-4 pl-4 border-b border-zinc-800/60 bg-zinc-950"
+          className="app-titlebar justify-between gap-2 px-5 border-b border-zinc-800 bg-zinc-950"
         >
+          <span data-tauri-drag-region className="text-xs text-zinc-500">Connections</span>
           {onOpenSettings && (
             <button
               type="button"
               data-no-drag
               onClick={onOpenSettings}
-              className="flex items-center gap-1.5 text-xs bg-zinc-800/80 hover:bg-zinc-700 px-2.5 py-1 rounded-md font-medium transition-colors text-zinc-300"
+              className="ui-button ui-button-ghost"
             >
               <Settings className="w-3.5 h-3.5" />
               <span>Settings</span>
             </button>
           )}
         </div>
-        <div className="flex-1 min-h-0 flex flex-col p-4 xl:p-8 overflow-y-auto galeon-scrollbar">
-        <div className="w-full max-w-md mx-auto my-auto shrink-0 p-6 bg-zinc-900 border border-zinc-800 rounded-xl">
-          <h2 className="text-2xl font-display font-medium mb-6 tracking-tight text-zinc-100">
-            Connect Storage
-          </h2>
+        <div className="connection-scroll galeon-scrollbar">
+        <div className="connection-content">
+          <header className="connection-heading">
+            <h1>{profiles.find(profile => profile.id === selectedProfileId)?.name || 'New connection'}</h1>
+            <p>Connect to a bucket or remote server to browse and transfer files.</p>
+          </header>
           {error && (
-            <div className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg flex items-start justify-between gap-3">
+            <div ref={errorRef} role="alert" className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg flex items-start justify-between gap-3">
               <span className="min-w-0 break-words">{error}</span>
               <button
                 type="button"
@@ -776,10 +788,10 @@ export const Connection: React.FC<ConnectionProps> = ({
               </button>
             </div>
           )}
-          <form onSubmit={handleConnect} className="space-y-4">
+          <form id="connection-form" onSubmit={handleConnect} className="connection-form space-y-4" aria-label="Connection details" aria-busy={loading}>
             {/* Protocol Selector */}
             <div>
-              <label htmlFor="connection-protocol" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+              <label htmlFor="connection-protocol" className="connection-label">
                 Protocol
               </label>
               <Select
@@ -859,46 +871,21 @@ export const Connection: React.FC<ConnectionProps> = ({
                 Loading saved credentials from the keychain…
               </p>
             )}
-            <div className="flex space-x-2">
-              <button type="submit" disabled={loading} className="flex-1 py-3 bg-gale-teal text-on-accent font-semibold hover:bg-deep-current hover:text-white rounded-lg text-sm transition-all duration-150 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
-                {loading ? 'Connecting...' : protocol === 'sftp' ? 'Connect SFTP' : protocol === 'ftp' ? 'Connect FTP' : protocol === 'ftps' ? 'Connect FTPS' : 'Connect S3'}
-              </button>
-              {selectedProfileId && (
-                <button
-                  type="button"
-                  onClick={handleSaveButton}
-                  disabled={protocol === 's3' ? !bucket : !host}
-                  className="px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
-                  title="Save changes to profile"
-                >
-                  <Save className="w-4 h-4" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={handleSaveAsNewProfile}
-                disabled={protocol === 's3' ? !bucket : !host}
-                className="px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
-                title="Save as new profile"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={handleClearCredentials}
-                className="px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-sm font-medium transition-colors"
-                title={
-                  protocol === 's3'
-                    ? 'Clear bucket and access keys'
-                    : 'Clear host, username, and password'
-                }
-              >
-                <Eraser className="w-4 h-4" />
-              </button>
-            </div>
+            <p className="connection-keychain-note">
+              <LockKeyhole size={13} aria-hidden="true" /> Saved credentials are stored in your OS keychain.
+            </p>
           </form>
         </div>
         </div>
+        <ConnectionActions
+          loading={loading}
+          credsLoading={credsLoading}
+          hasProfile={!!selectedProfileId}
+          canSave={!!(protocol === 's3' ? bucket : host)}
+          onSave={handleSaveButton}
+          onSaveAsNew={handleSaveAsNewProfile}
+          onClear={handleClearCredentials}
+        />
       </div>
 
       {showSaveModal && (
