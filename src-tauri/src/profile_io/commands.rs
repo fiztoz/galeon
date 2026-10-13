@@ -16,6 +16,114 @@ pub async fn preview_profile_import(path: String) -> Result<ImportPreview, Strin
 }
 
 /// Export selected (or all) profiles to a JSON file path.
+/// TOCTOU gate: bind the import to the exact bytes that were previewed.
+///
+/// Extracted from `import_profiles` so the policy is testable on its own — it is
+/// the control that stops a file being swapped between preview and apply, and
+/// SECURITY.md advertises it as a feature, so it needs coverage rather than
+/// being buried in a command body.
+///
+/// - `includes_secrets`: a secrets import MUST carry the preview hash. Omitting
+///   it would let a swapped file write whatever credentials it likes into the
+///   keyring with no confirmation against what the user actually saw.
+/// - Otherwise the hash is optional, but verified whenever the UI supplied one.
+pub(crate) fn verify_import_hash(
+    includes_secrets: bool,
+    actual_hash: &str,
+    expected_content_hash: Option<&str>,
+) -> Result<(), String> {
+    let expected = expected_content_hash
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+
+    if includes_secrets {
+        return match expected {
+            Some(expected) if expected == actual_hash => Ok(()),
+            Some(_) => Err(
+                "Import file changed since preview. Choose the file again to continue.".to_string(),
+            ),
+            None => Err(
+                "Content hash from preview is required when the import file includes secrets."
+                    .to_string(),
+            ),
+        };
+    }
+
+    if let Some(expected) = expected {
+        if expected != actual_hash {
+            return Err(
+                "Import file changed since preview. Choose the file again to continue.".to_string(),
+            );
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::verify_import_hash;
+
+    const CHANGED: &str = "Import file changed since preview. Choose the file again to continue.";
+    const REQUIRED: &str =
+        "Content hash from preview is required when the import file includes secrets.";
+
+    #[test]
+    fn secrets_import_with_the_matching_preview_hash_is_accepted() {
+        assert!(verify_import_hash(true, "abc123", Some("abc123")).is_ok());
+    }
+
+    #[test]
+    fn secrets_import_without_a_hash_is_rejected() {
+        // The critical case: no confirmation that what is applied is what was
+        // previewed, which is exactly what the hash exists to prevent.
+        assert_eq!(
+            verify_import_hash(true, "abc123", None).unwrap_err(),
+            REQUIRED
+        );
+    }
+
+    #[test]
+    fn secrets_import_with_a_blank_hash_is_rejected() {
+        // A whitespace-only hash must not read as "provided".
+        assert_eq!(
+            verify_import_hash(true, "abc123", Some("   ")).unwrap_err(),
+            REQUIRED
+        );
+    }
+
+    #[test]
+    fn swapped_file_is_rejected_when_secrets_are_present() {
+        assert_eq!(
+            verify_import_hash(true, "attacker-hash", Some("preview-hash")).unwrap_err(),
+            CHANGED
+        );
+    }
+
+    #[test]
+    fn swapped_file_is_rejected_when_the_ui_supplied_a_hash() {
+        assert_eq!(
+            verify_import_hash(false, "attacker-hash", Some("preview-hash")).unwrap_err(),
+            CHANGED
+        );
+    }
+
+    #[test]
+    fn a_secretless_import_may_omit_the_hash() {
+        // Deliberate: non-secret imports stay usable without the preview step.
+        assert!(verify_import_hash(false, "abc123", None).is_ok());
+    }
+
+    #[test]
+    fn a_secretless_import_with_a_matching_hash_is_accepted() {
+        assert!(verify_import_hash(false, "abc123", Some("abc123")).is_ok());
+    }
+
+    #[test]
+    fn the_hash_is_trimmed_before_comparison() {
+        assert!(verify_import_hash(true, "abc123", Some("  abc123\n")).is_ok());
+    }
+}
+
 #[tauri::command]
 pub async fn export_profiles(
     app_handle: AppHandleType,
@@ -133,35 +241,11 @@ pub async fn import_profiles(
         );
     }
 
-    // TOCTOU: secrets imports must always bind to the previewed file hash.
-    // Non-secret imports keep optional hash verification when the UI supplies one.
-    let expected = expected_content_hash
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
-    if preview.includes_secrets {
-        match expected {
-            Some(expected) if expected == hash => {}
-            Some(_) => {
-                return Err(
-                    "Import file changed since preview. Choose the file again to continue."
-                        .to_string(),
-                );
-            }
-            None => {
-                return Err(
-                    "Content hash from preview is required when the import file includes secrets."
-                        .to_string(),
-                );
-            }
-        }
-    } else if let Some(expected) = expected {
-        if expected != hash {
-            return Err(
-                "Import file changed since preview. Choose the file again to continue.".to_string(),
-            );
-        }
-    }
+    verify_import_hash(
+        preview.includes_secrets,
+        &hash,
+        expected_content_hash.as_deref(),
+    )?;
 
     let mut config = read_config(&app_handle)?;
     let (merged, mut result, pending, delete_ids) =

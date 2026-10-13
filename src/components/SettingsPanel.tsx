@@ -185,6 +185,9 @@ export function SettingsPanel({ open, onClose, onShowOnboarding, themeMode, onTh
                     {credentialStatus.cachedSecretCount === 1 ? '' : 's'} cached in memory
                   </div>
                 )}
+                <div className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                  Drops cached secrets and disconnects open sessions, so in-flight transfers stop.
+                </div>
               </div>
               <button
                 type="button"

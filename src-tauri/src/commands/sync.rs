@@ -35,6 +35,16 @@ pub async fn compute_sync_diff(
         .clone();
     drop(sessions);
 
+    // `walk_local_tree` treats a missing root as an empty tree so a first-time
+    // remoteToLocal download into a new folder works. That is only ever correct
+    // when the LOCAL side is the destination. For localToRemote the local root
+    // is the source: a missing one means an unmounted volume or a typo, and
+    // reporting "0 files to upload" would hide a broken profile until a
+    // scheduled run tried to delete the whole remote prefix.
+    if direction == DIR_LOCAL_TO_REMOTE && !std::path::Path::new(&local_path).exists() {
+        return Err(format!("Local folder does not exist: {}", local_path));
+    }
+
     let local = walk_local_tree(std::path::Path::new(&local_path)).await?;
     let remote = walk_remote_tree(&session, &remote_prefix).await?;
 
