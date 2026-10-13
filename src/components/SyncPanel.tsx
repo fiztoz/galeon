@@ -20,6 +20,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import { ConnectionProfile } from '../types';
+import { useSyncRunLog } from '../hooks/useSyncRunLog';
+import { SyncRunHistory } from './SyncRunHistory';
 
 // ── Contract types (matching backend camelCase exactly) ─────────────────────
 
@@ -279,6 +281,15 @@ export function SyncPanel({
   const [scheduleEdits, setScheduleEdits] = useState<Record<string, SyncSchedule>>({});
   const [savingScheduleId, setSavingScheduleId] = useState<string | null>(null);
 
+  // ── Run history (profiles view) ─────────────────────────────────────────
+  // Fetch/clear state lives in the hook so this file stays a shell (AGENTS 4.3).
+  const runLog = useSyncRunLog();
+  const refreshRuns = runLog.refresh;
+  useEffect(() => {
+    if (!isOpen || view !== 'profiles') return;
+    void refreshRuns();
+  }, [isOpen, view, refreshRuns]);
+
   // ── Staleness derivation ────────────────────────────────────────────────
   // Any input that feeds compute_sync_diff changing invalidates the reviewed
   // plan — Apply is blocked until the diff is recomputed from these inputs.
@@ -406,6 +417,9 @@ export function SyncPanel({
         remotePrefix,
         profileId: connectionProfileId ?? null,
       });
+      // The backend records the run as part of executing the plan — pull the
+      // new history row in so a partial run's deletions/failures are visible.
+      void refreshRuns();
       if (failures > 0) {
         setApplyError(`${failures} sync item(s) failed`);
         return;
@@ -417,7 +431,7 @@ export function SyncPanel({
     } finally {
       setApplyLoading(false);
     }
-  }, [plan, planStale, sessionId, deleteExtraneous, localPath, remotePrefix, connectionProfileId, confirmDeleteOpen, onSyncComplete, onClose]);
+  }, [plan, planStale, sessionId, deleteExtraneous, localPath, remotePrefix, connectionProfileId, confirmDeleteOpen, refreshRuns, onSyncComplete, onClose]);
 
   const handleSaveProfile = async () => {
     if (!saveProfileName.trim()) return;
@@ -1110,6 +1124,9 @@ export function SyncPanel({
                   })}
                 </div>
               )}
+
+              {/* What each run actually did — deletions included. */}
+              <SyncRunHistory log={runLog} />
             </div>
           )}
         </div>
