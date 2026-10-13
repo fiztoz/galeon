@@ -136,6 +136,50 @@ export function isSyncPlanStale(
   );
 }
 
+/**
+ * Copy entries whose DESTINATION is newer than the source — i.e. the sync will
+ * overwrite a file the user changed more recently.
+ *
+ * This is not a bug: one-way sync means the source is authoritative, so a
+ * differing file is copied source-over-destination by design. The planner's
+ * `reason` only says "size differs", though, which gives no hint that a newer
+ * file is about to be replaced. The plan carries both timestamps, so the UI can
+ * say so.
+ */
+export interface OverwriteWarning {
+  relativePath: string;
+  /** Which side gets replaced. */
+  destination: 'local' | 'remote';
+}
+
+const COPY_ACTIONS = new Set(['upload', 'download']);
+
+export function findOverwrites(
+  plan: readonly SyncPlanEntry[],
+  direction: 'localToRemote' | 'remoteToLocal',
+): OverwriteWarning[] {
+  const out: OverwriteWarning[] = [];
+  for (const entry of plan) {
+    if (!COPY_ACTIONS.has(entry.action)) continue;
+    if (!entry.localModified || !entry.remoteModified) continue;
+    const local = Date.parse(entry.localModified);
+    const remote = Date.parse(entry.remoteModified);
+    if (Number.isNaN(local) || Number.isNaN(remote)) continue;
+    // localToRemote uploads local over remote, so the destination is the remote
+    // side; remoteToLocal is the mirror. Only the NEWER side being the
+    // destination is worth surfacing.
+    const destinationIsNewer =
+      direction === 'localToRemote' ? remote > local : local > remote;
+    if (destinationIsNewer) {
+      out.push({
+        relativePath: entry.relativePath,
+        destination: direction === 'localToRemote' ? 'remote' : 'local',
+      });
+    }
+  }
+  return out;
+}
+
 function defaultSchedule(): SyncSchedule {
   return {
     enabled: false,
@@ -452,6 +496,10 @@ export function SyncPanel({
     {} as Record<SyncPlanEntry['action'], number>,
   );
   const deleteCount = (counts.deleteRemote ?? 0) + (counts.deleteLocal ?? 0);
+  // Copies that will replace a NEWER file at the destination. Expected for
+  // one-way sync (the source is authoritative), but the plan only says "size
+  // differs", so say it plainly rather than letting the user discover it.
+  const overwrites = planStale ? [] : findOverwrites(plan, direction);
   // The delete-confirmation block must never show for a stale plan: its count
   // comes from a plan that no longer describes the current inputs.
   const showConfirmBlock = confirmDeleteOpen && !planStale;
@@ -692,6 +740,32 @@ export function SyncPanel({
                   >
                     Edit settings
                   </button>
+                </div>
+              )}
+
+              {overwrites.length > 0 && (
+                <div className="mx-4 mt-4 px-3 py-2 rounded-lg bg-status-warning/10 border border-status-warning/30 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-status-warning" />
+                  <p className="text-xs text-zinc-300 leading-relaxed">
+                    <span className="text-status-warning font-semibold">
+                      {overwrites.length} file{overwrites.length === 1 ? '' : 's'} will overwrite a
+                      newer copy
+                    </span>{' '}
+                    at the {direction === 'localToRemote' ? 'remote' : 'local'} destination. That is
+                    how one-way sync works — the source wins — but the newer version will be gone
+                    afterwards
+                    {overwrites.length > 0 && (
+                      <span className="block mt-1 text-zinc-500">
+                        e.g.{' '}
+                        {overwrites
+                          .slice(0, 3)
+                          .map((o) => o.relativePath)
+                          .join(', ')}
+                        {overwrites.length > 3 ? ` and ${overwrites.length - 3} more` : ''}
+                      </span>
+                    )}
+                    .
+                  </p>
                 </div>
               )}
 

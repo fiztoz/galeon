@@ -1,7 +1,24 @@
 ## [Unreleased]
 
+### Changed
+
+- A sync run now reports what actually happened instead of what it queued. `execute_sync_plan`
+  returned as soon as every transfer had been handed to the transfer pipeline, so a run whose
+  transfers then failed reported success — and the scheduler recorded `success: true` and advanced
+  the schedule for a run that never completed. It now waits for its transfers to finish. The
+  transfers already ran concurrently, so this delays the report rather than slowing the work.
+- The sync diff now warns when applying it would overwrite a *newer* file at the destination.
+  One-way sync means the source wins by design, and the plan's "size differs" reason gave no hint
+  that something newer was about to be replaced. Nothing about the decision changed.
+
 ### Fixed
 
+- A sync plan whose entries disagree about direction is now rejected instead of executed.
+  Every entry carries the direction it was computed for; a mixed plan can only come from two
+  diffs being combined or a plan edited in flight, and its deletes would resolve against the
+  wrong roots.
+- A profile export containing secrets is now written owner-only (0600) instead of at the umask
+  default. It is plaintext credentials on disk in the user's Downloads folder.
 - A failed download no longer destroys the file it was replacing. The finished `.part` is
   verified before it is renamed over the destination; previously the rename happened first, so
   a checksum or size mismatch left a corrupt file where a good one had been, with the only trace

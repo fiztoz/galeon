@@ -272,3 +272,67 @@ async fn test_tier4_s04_recursive_directory_transfer() {
 
     ctx.cleanup().await;
 }
+
+#[tokio::test]
+async fn test_tier4_s05_execute_sync_plan_reports_real_transfer_outcomes() {
+    // `execute_sync_plan` used to return as soon as every transfer had been
+    // QUEUED, so a run whose transfers then failed reported success and the
+    // scheduler recorded `success: true` for it. This asserts the command waits
+    // for the real outcomes — and that waiting terminates rather than hanging.
+    let _guard = TEST_SERIAL_MUTEX.lock().await;
+    let ctx = TestContext::setup("tier4_s05").await;
+    let state = ctx.app.state::<GaleonEngine>();
+
+    // A real local file, so the upload genuinely succeeds.
+    let good_local = ctx.temp_dir.join("good.bin");
+    std::fs::write(&good_local, b"payload a").unwrap();
+
+    let plan = vec![
+        SyncPlanEntry {
+            relative_path: "good.bin".into(),
+            action: "upload".into(),
+            reason: "new".into(),
+            local_size: Some(9),
+            remote_size: None,
+            local_modified: None,
+            remote_modified: None,
+            direction: crate::DIR_LOCAL_TO_REMOTE.into(),
+        },
+        SyncPlanEntry {
+            // No such local file: the transfer must fail.
+            relative_path: "missing.bin".into(),
+            action: "upload".into(),
+            reason: "new".into(),
+            local_size: Some(9),
+            remote_size: None,
+            local_modified: None,
+            remote_modified: None,
+            direction: crate::DIR_LOCAL_TO_REMOTE.into(),
+        },
+    ];
+
+    let failures = execute_sync_plan(
+        ctx.handle.clone(),
+        state,
+        ctx.session_id.clone(),
+        plan,
+        false,
+        ctx.temp_dir.to_string_lossy().to_string(),
+        "tier4_s05".to_string(),
+        None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        failures, 1,
+        "the missing local file must be counted as a failure, not reported as a clean run"
+    );
+
+    // The good one really did land, so we know the run executed rather than
+    // simply erroring out early.
+    let op = ctx.operator();
+    assert!(op.stat("tier4_s05/good.bin").await.is_ok());
+
+    ctx.cleanup().await;
+}
