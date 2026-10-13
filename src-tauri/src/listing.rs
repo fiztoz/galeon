@@ -17,9 +17,12 @@ pub(crate) fn remote_key_relative_to(full_key: &str, base: &str) -> String {
     normalize_rel_path(rel)
 }
 
-/// List a single remote directory, reusing the exact per-protocol logic from
-/// `list_directory` (kept as a free fn so the recursive walker and the command
-/// share one code path).
+/// List a single remote directory across every session protocol.
+///
+/// This is the one implementation of directory listing: the `list_directory`
+/// command delegates here, and so does the sync tree walker. Keep per-protocol
+/// branching in this function rather than at the call sites — two copies of
+/// this match arm is exactly the divergence bug AGENTS.md 3.1 warns about.
 pub(crate) async fn list_remote_dir(
     session: &StorageSession,
     prefix: &str,
