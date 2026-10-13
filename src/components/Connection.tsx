@@ -10,13 +10,13 @@ import { ProtocolFields } from './connection/ProtocolFields';
 import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
-import { ConnectionProfile, BandwidthRule, StorageProtocol } from '../types';
+import { ConnectionProfile, StorageProtocol } from '../types';
 import { OnboardingProtocol } from './OnboardingWizard';
+import { useConnectionForm } from './connection/useConnectionForm';
 import {
   EMPTY_SSH_TUNNEL,
   sshTunnelFormFromProfile,
   sshTunnelForProfile,
-  SshTunnelFormValue,
   validateSshTunnelDestination,
 } from './sshTunnel';
 import { SshTunnelProfiles } from './SshTunnelProfiles';
@@ -85,30 +85,33 @@ export const Connection: React.FC<ConnectionProps> = ({
   initialProtocol,
   onOpenSettings,
 }) => {
-  const [protocol, setProtocol] = useState<StorageProtocol>('s3');
-  const [bucket, setBucket] = useState('');
-  const [accessKey, setAccessKey] = useState('');
-  const [secretKey, setSecretKey] = useState('');
-  const [endpoint, setEndpoint] = useState(DEFAULT_S3_ENDPOINT);
-  const [region, setRegion] = useState(DEFAULT_S3_REGION);
-  const [dangerDisableSsl, setDangerDisableSsl] = useState(false);
-  const [useVirtualHostStyle, setUseVirtualHostStyle] = useState(false);
-  const [storageClass, setStorageClass] = useState('STANDARD');
-  const [maxBandwidth, setMaxBandwidth] = useState<number | ''>('');
-  const [bandwidthRules, setBandwidthRules] = useState<BandwidthRule[]>([]);
+  const {
+    protocol, setProtocol,
+    bucket, setBucket,
+    accessKey, setAccessKey,
+    secretKey, setSecretKey,
+    endpoint, setEndpoint,
+    region, setRegion,
+    dangerDisableSsl, setDangerDisableSsl,
+    useVirtualHostStyle, setUseVirtualHostStyle,
+    storageClass, setStorageClass,
+    maxBandwidth, setMaxBandwidth,
+    bandwidthRules, setBandwidthRules,
+    showAdvanced, setShowAdvanced,
+    showBandwidthAdvanced, setShowBandwidthAdvanced,
+    sshTunnel, setSshTunnel,
+    sshTunnelProfileId, setSshTunnelProfileId,
+    host, setHost,
+    port, setPort,
+    username, setUsername,
+    keyPath, setKeyPath,
+    credentialPath, setCredentialPath,
+    sftpPassword, setSftpPassword,
+    showSshHelper, setShowSshHelper,
+    sshConfigNotice, setSshConfigNotice,
+    resetFields,
+  } = useConnectionForm();
   const bandwidthDraft = useBandwidthRuleDraft();
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showBandwidthAdvanced, setShowBandwidthAdvanced] = useState(false);
-  const [sshTunnel, setSshTunnel] = useState<SshTunnelFormValue>({ ...EMPTY_SSH_TUNNEL });
-  const [sshTunnelProfileId, setSshTunnelProfileId] = useState<string | undefined>();
-  const [host, setHost] = useState('');
-  const [port, setPort] = useState<number>(DEFAULT_SFTP_PORT);
-  const [username, setUsername] = useState('');
-  const [keyPath, setKeyPath] = useState('');
-  const [credentialPath, setCredentialPath] = useState('');
-  const [sftpPassword, setSftpPassword] = useState('');
-  const [showSshHelper, setShowSshHelper] = useState(false);
-  const [sshConfigNotice, setSshConfigNotice] = useState('');
   const [loading, setLoading] = useState(false);
   // A profile's secrets arrive from the keychain after the rest of its fields; the form
   // has to say so, otherwise it looks ready while the password box is still empty.
@@ -762,29 +765,7 @@ export const Connection: React.FC<ConnectionProps> = ({
     setSelectedProfileId(null);
     setProfileName('');
     setEditingProfile(null);
-    setProtocol('s3');
-    setBucket('');
-    setAccessKey('');
-    setSecretKey('');
-    setEndpoint(DEFAULT_S3_ENDPOINT);
-    setRegion(DEFAULT_S3_REGION);
-    setDangerDisableSsl(false);
-    setUseVirtualHostStyle(false);
-    setStorageClass('STANDARD');
-    setMaxBandwidth('');
-    setBandwidthRules([]);
-    setHost('');
-    setPort(DEFAULT_SFTP_PORT);
-    setUsername('');
-    setKeyPath('');
-    setCredentialPath('');
-    setSftpPassword('');
-    setSshTunnel({ ...EMPTY_SSH_TUNNEL });
-    setSshTunnelProfileId(undefined);
-    setShowAdvanced(false);
-    setShowBandwidthAdvanced(false);
-    setShowSshHelper(false);
-    setSshConfigNotice('');
+    resetFields();
   };
 
   const handleSshConfigSelect = (connection: SshConfigConnection) => {

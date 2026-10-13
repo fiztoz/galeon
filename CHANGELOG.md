@@ -2,6 +2,8 @@
 
 ### Fixed
 
+- A render error no longer blanks the window. An error boundary wraps the app and offers Try again
+  or Reload, and states that profiles and keychain credentials are untouched.
 - A panic inside a transfer body no longer leaves a transfer spinning forever. Transfer jobs run in
   `tokio::spawn`, where an unwinding task is discarded silently — no failure event, and the queue
   entry stayed `active` until the next app launch. Panics are now converted into an ordinary
