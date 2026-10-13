@@ -170,6 +170,13 @@ pub async fn update_transfer_queue_entry(
         if !entry.profile_id.is_empty() {
             existing.profile_id = entry.profile_id;
         }
+        // The session a transfer belongs to is set once, at enqueue time, and
+        // must survive the completion/failure updates that carry no session.
+        // Finalisation builds a fresh entry, so without this a failed transfer
+        // would lose the information needed to retry it.
+        if let Some(sid) = entry.session_id {
+            existing.session_id = Some(sid);
+        }
         // Always update status and timestamp; keep existing byte counts when the
         // caller has none (completion/failure updates pass zeros)
         let completed = entry.status == "completed";
