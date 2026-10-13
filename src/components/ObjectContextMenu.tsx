@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Download, FolderDown, Eye, Share2, PenLine, Info, Pencil, FolderInput, Copy, Trash2 } from 'lucide-react';
 import type { GaleonObject } from '../types';
-import type { ProtocolCapabilities } from '../types';
+import type { ProtocolCapabilities, StorageProtocol } from '../types';
 import { isPreviewableFile } from './PropertiesInspector';
 
 export type ObjectMenuAction = 'download' | 'downloadHere' | 'preview' | 'share' | 'edit' | 'properties' | 'rename' | 'move' | 'copy' | 'delete';
 interface ObjectContextMenuProps {
   obj: GaleonObject;
   menuPosition: { x: number; y: number };
-  protocol?: 's3' | 'sftp' | 'ftp' | 'ftps';
+  protocol?: StorageProtocol;
   capabilities?: ProtocolCapabilities;
   downloadDestination?: string;
   onAction: (action: ObjectMenuAction, obj: GaleonObject) => void;

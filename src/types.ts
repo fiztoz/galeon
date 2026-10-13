@@ -28,10 +28,17 @@ export interface BandwidthRule {
   limitKbps: number; // 0 = unlimited
 }
 
+/**
+ * Storage protocol Galeon speaks. `s3` covers every S3-compatible provider
+ * (the presets in `components/connection/presets.ts` pick their quirks);
+ * `webdav`, `azure`, and `gcs` are the non-S3 OpenDAL services.
+ */
+export type StorageProtocol = 's3' | 'sftp' | 'ftp' | 'ftps' | 'webdav' | 'azure' | 'gcs';
+
 export interface ConnectionProfile {
   id: string;
   name: string;
-  protocol?: 's3' | 'sftp' | 'ftp' | 'ftps'; // Protocol type, defaults to 's3'
+  protocol?: StorageProtocol; // Protocol type, defaults to 's3'
   // S3 fields
   endpoint?: string;
   region?: string;
@@ -48,6 +55,7 @@ export interface ConnectionProfile {
   port?: number;
   username?: string;
   keyPath?: string; // Path to SSH private key
+  credentialPath?: string; // Path to the GCS service-account JSON
   passiveMode?: boolean; // FTP passive mode
   encrypt?: boolean; // FTPS encryption
   // Optional SSH bastion used to forward the configured S3/SFTP destination.

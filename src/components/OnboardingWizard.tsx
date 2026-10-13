@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Database, Shield, WifiOff, Anchor, Server, KeyRound, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Database, Shield, WifiOff, Anchor, Server, KeyRound, FolderSync, ChevronRight, ChevronLeft } from 'lucide-react';
+import type { StorageProtocol } from '../types';
 
-export type OnboardingProtocol = 's3' | 'sftp' | 'ftp' | 'ftps';
+export type OnboardingProtocol = StorageProtocol;
 
 interface OnboardingWizardProps {
   onComplete: (selectedProtocol?: OnboardingProtocol) => void;
@@ -37,6 +38,13 @@ const ISLE_CARDS: {
     description: 'Traditional file transfer',
     examples: 'FTP or TLS-secured FTPS',
     icon: Server,
+  },
+  {
+    protocol: 'webdav',
+    title: 'WebDAV server',
+    description: 'HTTP file sharing',
+    examples: 'Nextcloud, ownCloud, NAS boxes',
+    icon: FolderSync,
   },
 ];
 
@@ -93,7 +101,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
                 <p className="mt-2 text-lg text-zinc-300">Sail your cloud.</p>
               </div>
               <p className="text-sm text-zinc-400 max-w-md mx-auto leading-relaxed">
-                A fast, lightweight desktop client for S3-compatible storage, SFTP, and FTP/FTPS.
+                A fast, lightweight desktop client for S3-compatible storage, SFTP, FTP/FTPS, and WebDAV.
                 Connect to the locations you choose — nothing else.
               </p>
             </div>
@@ -104,7 +112,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               <div>
                 <h2 className="text-2xl font-display font-medium text-zinc-100">Choose your isle</h2>
                 <p className="mt-2 text-sm text-zinc-400">
-                  Pick the storage location Galeon should sail to — an S3 bucket, SFTP server, or FTP host.
+                  Pick the storage location Galeon should sail to — an S3 bucket, SFTP server, FTP host, or WebDAV server.
                 </p>
               </div>
               <div className="grid gap-3">

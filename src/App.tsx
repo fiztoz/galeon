@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Connection } from './components/Connection';
 import { Explorer } from './components/Explorer';
-import type { GaleonObject } from './types';
+import type { GaleonObject, StorageProtocol } from './types';
 import { TransferManager, TransferState } from './components/TransferManager';
 import { CommandPalette, CommandAction } from './components/CommandPalette';
 import { PropertiesInspector } from './components/PropertiesInspector';
@@ -31,7 +31,7 @@ function App() {
   sessionId: string;
   bucket: string;
   profileId?: string;
-  protocol?: 's3' | 'sftp' | 'ftp' | 'ftps';
+  protocol?: StorageProtocol;
   capabilities?: ProtocolCapabilities;
 } | null>(null);
   const [profiles, setProfiles] = useState<ConnectionProfile[]>([]);
@@ -167,7 +167,7 @@ function App() {
 
   const attemptAutoReconnect = async () => {
     try {
-      const result = await invoke<{ sessionId: string; bucket: string; profileId: string; protocol?: 's3' | 'sftp' | 'ftp' | 'ftps' } | null>('auto_reconnect');
+      const result = await invoke<{ sessionId: string; bucket: string; profileId: string; protocol?: StorageProtocol } | null>('auto_reconnect');
       if (result) {
         console.log('[App] Auto-reconnected to profile:', result.profileId);
         // Fetch capabilities for the protocol
@@ -257,7 +257,7 @@ function App() {
     await loadSyncProfiles();
   };
 
-  const handleConnected = async (sessionId: string, bucket: string, profileId?: string, protocol?: 's3' | 'sftp' | 'ftp' | 'ftps') => {
+  const handleConnected = async (sessionId: string, bucket: string, profileId?: string, protocol?: StorageProtocol) => {
     // Fetch protocol capabilities
     let capabilities: ProtocolCapabilities | undefined;
     try {

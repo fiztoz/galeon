@@ -9,7 +9,7 @@ import { useFolderSizes } from '../hooks/useFolderSizes';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { useUploadPipeline, type PendingConflict } from '../hooks/useUploadPipeline';
 import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, MoreVertical, Loader2, AlertTriangle } from 'lucide-react';
-import { ProtocolCapabilities, GaleonObject } from '../types';
+import { ProtocolCapabilities, GaleonObject, StorageProtocol } from '../types';
 import {
   ConflictDialog,
   ConfirmDialog,
@@ -38,7 +38,7 @@ export const formatSize = (bytes: number | null) => {
 interface ExplorerProps {
   sessionId: string;
   bucket: string;
-  protocol?: 's3' | 'sftp' | 'ftp' | 'ftps';
+  protocol?: StorageProtocol;
   capabilities?: ProtocolCapabilities;
   onInitiateDownload: (remoteKey: string, localPath: string) => void;
   onInitiateUpload: (localPath: string, remoteKey: string) => void;

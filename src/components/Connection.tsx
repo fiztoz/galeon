@@ -10,7 +10,7 @@ import { ProtocolFields } from './connection/ProtocolFields';
 import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
-import { ConnectionProfile, BandwidthRule } from '../types';
+import { ConnectionProfile, BandwidthRule, StorageProtocol } from '../types';
 import { OnboardingProtocol } from './OnboardingWizard';
 import {
   EMPTY_SSH_TUNNEL,
@@ -31,6 +31,15 @@ const formatConnectError = (err: unknown): string => {
   return msg || 'Connection failed. Check host, credentials, and network.';
 };
 
+/** Hostname for session subtitles (invalid endpoints fall back to the raw string). */
+const hostOfEndpoint = (endpoint: string) => {
+  try {
+    return new URL(endpoint).hostname || endpoint;
+  } catch {
+    return endpoint.replace(/^https?:\/\//, '');
+  }
+};
+
 /** Safe hostname display for sidebar subtitles (invalid endpoints must not crash render). */
 const profileEndpointLabel = (endpoint?: string, bucket?: string) => {
   let host = 'AWS S3';
@@ -45,7 +54,7 @@ const profileEndpointLabel = (endpoint?: string, bucket?: string) => {
 };
 
 interface ConnectionProps {
-  onConnected: (sessionId: string, bucket: string, profileId?: string, protocol?: 's3' | 'sftp' | 'ftp' | 'ftps') => void;
+  onConnected: (sessionId: string, bucket: string, profileId?: string, protocol?: StorageProtocol) => void;
   profiles: ConnectionProfile[];
   onSaveProfile: (
     profile: ConnectionProfile,
@@ -58,16 +67,24 @@ interface ConnectionProps {
   onOpenSettings?: () => void;
 }
 
-export const Connection: React.FC<ConnectionProps> = ({ 
-  onConnected, 
-  profiles, 
-  onSaveProfile, 
+/** Host/port/password protocols (native Rust transports, no bucket concept). */
+const isFileProtocol = (protocol: StorageProtocol) =>
+  protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps';
+
+/** Endpoint-URL protocols on OpenDAL (WebDAV, Azure Blob, GCS). */
+const isHttpProtocol = (protocol: StorageProtocol) =>
+  protocol === 'webdav' || protocol === 'azure' || protocol === 'gcs';
+
+export const Connection: React.FC<ConnectionProps> = ({
+  onConnected,
+  profiles,
+  onSaveProfile,
   onDeleteProfile,
   onReloadProfiles,
   initialProtocol,
   onOpenSettings,
 }) => {
-  const [protocol, setProtocol] = useState<'s3' | 'sftp' | 'ftp' | 'ftps'>('s3');
+  const [protocol, setProtocol] = useState<StorageProtocol>('s3');
   const [bucket, setBucket] = useState('');
   const [accessKey, setAccessKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
@@ -87,6 +104,7 @@ export const Connection: React.FC<ConnectionProps> = ({
   const [port, setPort] = useState<number>(DEFAULT_SFTP_PORT);
   const [username, setUsername] = useState('');
   const [keyPath, setKeyPath] = useState('');
+  const [credentialPath, setCredentialPath] = useState('');
   const [sftpPassword, setSftpPassword] = useState('');
   const [showSshHelper, setShowSshHelper] = useState(false);
   const [sshConfigNotice, setSshConfigNotice] = useState('');
@@ -116,7 +134,7 @@ export const Connection: React.FC<ConnectionProps> = ({
   useEffect(() => {
     if (!initialProtocol) return;
     setProtocol(initialProtocol);
-    if (initialProtocol !== 's3') {
+    if (initialProtocol !== 's3' && !isHttpProtocol(initialProtocol)) {
       setPort(defaultPortFor(initialProtocol));
     }
     if (initialProtocol !== 's3' && initialProtocol !== 'sftp') {
@@ -245,7 +263,7 @@ export const Connection: React.FC<ConnectionProps> = ({
           setError('Enter Access Key ID and Secret Access Key.');
           return;
         }
-      } else {
+      } else if (isFileProtocol(protocol)) {
         if (!host.trim()) {
           setError('Enter a host name or IP address.');
           return;
@@ -259,6 +277,34 @@ export const Connection: React.FC<ConnectionProps> = ({
         // even rendered for those protocols, so demanding one is unsatisfiable.
         if (protocol === 'sftp' && !resolved.sftpPassword && !keyPath.trim()) {
           setError('Enter a password or an SSH private key path.');
+          return;
+        }
+      } else if (protocol === 'webdav') {
+        if (!endpoint.trim()) {
+          setError('Enter the WebDAV server URL (e.g. https://cloud.example.com/remote.php/dav).');
+          return;
+        }
+      } else if (protocol === 'azure') {
+        if (!username.trim()) {
+          setError('Enter the Azure storage account name.');
+          return;
+        }
+        if (!bucket.trim()) {
+          setError('Enter the Azure container name.');
+          return;
+        }
+        if (!resolved.sftpPassword.trim()) {
+          setError('Enter the Azure account key.');
+          return;
+        }
+      } else if (protocol === 'gcs') {
+        if (!bucket.trim()) {
+          setError('Enter the GCS bucket name.');
+          return;
+        }
+        // A credential file or pasted JSON — one of the two is required.
+        if (!credentialPath.trim() && !resolved.sftpPassword.trim()) {
+          setError('Choose a service account JSON file, or paste its contents.');
           return;
         }
       }
@@ -286,39 +332,54 @@ export const Connection: React.FC<ConnectionProps> = ({
       const trimmedUsername = username.trim();
       const trimmedKeyPath = keyPath.trim();
 
+      const isFile = isFileProtocol(protocol);
+      const isHttp = isHttpProtocol(protocol);
+      const trimmedCredentialPath = credentialPath.trim();
+
       const profile = {
         id: selectedProfileId || crypto.randomUUID(),
         name: profileName || 'Quick Connect',
         protocol,
-        // S3 fields
-        endpoint: protocol === 's3' ? (trimmedEndpoint || null) : null,
+        // S3 + WebDAV/Azure/GCS share the endpoint field
+        endpoint: (protocol === 's3' || isHttp) ? (trimmedEndpoint || null) : null,
         region: protocol === 's3' ? (trimmedRegion || null) : null,
         accessKey: protocol === 's3' ? (trimmedAccessKey || null) : null,
         secretKey: protocol === 's3' ? (trimmedSecretKey || null) : null,
-        bucket: protocol === 's3' ? trimmedBucket : null,
+        bucket: (protocol === 's3' || protocol === 'azure' || protocol === 'gcs') ? trimmedBucket : null,
         dangerDisableSslVerification: protocol === 's3' ? (dangerDisableSsl || null) : null,
         useVirtualHostStyle: protocol === 's3' ? (useVirtualHostStyle || null) : null,
         storageClass: protocol === 's3' ? (storageClass || null) : null,
         maxBandwidth: maxBandwidth ? maxBandwidth * 1024 : null,
         bandwidthRules: bandwidthRules.length > 0 ? bandwidthRules : null,
         // SFTP/FTP fields
-        host: (protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps') ? trimmedHost : null,
-        port: (protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps') ? port : null,
-        username: (protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps') ? trimmedUsername : null,
+        host: isFile ? trimmedHost : null,
+        port: isFile ? port : null,
+        username: (isFile || protocol === 'webdav' || protocol === 'azure') ? trimmedUsername : null,
         keyPath: protocol === 'sftp' ? (trimmedKeyPath || null) : null,
+        credentialPath: protocol === 'gcs' ? (trimmedCredentialPath || null) : null,
         sshTunnel: sshTunnelProfileId ? null : sshTunnelForProfile(sshTunnel, protocol) ?? null,
         sshTunnelProfileId: sshTunnelProfileId ?? null,
       };
-      
-      const secret = (protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps') ? resolved.sftpPassword || null : null;
-      
+
+      // GCS prefers the credential file; a stored paste must not shadow it (the
+      // backend enforces the same precedence).
+      const secret = protocol === 's3' || (protocol === 'gcs' && trimmedCredentialPath)
+        ? null
+        : resolved.sftpPassword || null;
+
       const sessionId = await invoke<string>('connect_storage', {
         profile,
         password: secret,
         sshTunnelPassword: resolved.sshTunnelPassword || null,
       });
-      
-      const displayName = protocol === 's3' ? trimmedBucket : `${trimmedUsername}@${trimmedHost}`;
+
+      const displayName = protocol === 's3'
+        ? trimmedBucket
+        : isFile
+          ? `${trimmedUsername}@${trimmedHost}`
+          : trimmedUsername
+            ? `${trimmedUsername}@${hostOfEndpoint(trimmedEndpoint)}`
+            : hostOfEndpoint(trimmedEndpoint);
       // The selected profile (if any) travels with the session so the
       // transfer queue can record which saved profile a transfer belongs to
       onConnected(sessionId, displayName, selectedProfileId ?? undefined, protocol);
@@ -345,6 +406,15 @@ export const Connection: React.FC<ConnectionProps> = ({
       setPort(profile.port || defaultPortFor(proto));
       setUsername(profile.username || '');
       setKeyPath(profile.keyPath || '');
+      setSftpPassword('');
+    } else if (isHttpProtocol(proto)) {
+      // WebDAV / Azure / GCS: endpoint-first fields (Azure's container and
+      // GCS's bucket ride the shared bucket state; Azure's account name the
+      // shared username state).
+      setEndpoint(profile.endpoint || '');
+      setBucket(profile.bucket || '');
+      setUsername(profile.username || '');
+      setCredentialPath(profile.credentialPath || '');
       setSftpPassword('');
     } else if (proto === 's3') {
       setBucket(profile.bucket || '');
@@ -478,6 +548,12 @@ export const Connection: React.FC<ConnectionProps> = ({
           setUseVirtualHostStyle(profile.useVirtualHostStyle || false);
           setStorageClass(profile.storageClass || 'STANDARD');
           setMaxBandwidth(profile.maxBandwidth ? Math.round(profile.maxBandwidth / 1024) : '');
+        } else if (isHttpProtocol(proto)) {
+          setEndpoint(profile.endpoint || '');
+          setBucket(profile.bucket || '');
+          setUsername(profile.username || '');
+          setCredentialPath(profile.credentialPath || '');
+          setSftpPassword(password || '');
         } else {
           setHost(profile.host || '');
           setPort(profile.port || defaultPortFor(proto));
@@ -508,38 +584,60 @@ export const Connection: React.FC<ConnectionProps> = ({
         );
         return;
       }
+      // Azure requires the account key; GCS needs the JSON file or a paste.
+      if (proto === 'azure' && !password) {
+        setError('No saved account key for this profile. Enter the Azure account key, then press Connect.');
+        return;
+      }
+      if (proto === 'gcs' && !profile.credentialPath && !password) {
+        setError('This GCS profile has no service account JSON. Choose a file or paste its contents, then press Connect.');
+        return;
+      }
+
+      const isFile = isFileProtocol(proto);
+      const isHttp = isHttpProtocol(proto);
 
       const connectProfile = {
         id: profile.id,
         name: profile.name,
         protocol: proto,
-        endpoint: proto === 's3' ? (profile.endpoint || null) : null,
+        endpoint: (proto === 's3' || isHttp) ? (profile.endpoint || null) : null,
         region: proto === 's3' ? (profile.region || null) : null,
         accessKey: proto === 's3' ? access : null,
         secretKey: proto === 's3' ? secretKeyVal : null,
-        bucket: proto === 's3' ? (profile.bucket || null) : null,
+        bucket: (proto === 's3' || proto === 'azure' || proto === 'gcs') ? (profile.bucket || null) : null,
         dangerDisableSslVerification: proto === 's3' ? (profile.dangerDisableSslVerification || null) : null,
         useVirtualHostStyle: proto === 's3' ? (profile.useVirtualHostStyle || null) : null,
         storageClass: proto === 's3' ? (profile.storageClass || null) : null,
         maxBandwidth: profile.maxBandwidth ?? null,
         bandwidthRules: profile.bandwidthRules ?? null,
-        host: proto !== 's3' ? (profile.host || null) : null,
-        port: proto !== 's3' ? (profile.port ?? null) : null,
-        username: proto !== 's3' ? (profile.username || null) : null,
+        host: isFile ? (profile.host || null) : null,
+        port: isFile ? (profile.port ?? null) : null,
+        username: (isFile || proto === 'webdav' || proto === 'azure') ? (profile.username || null) : null,
         keyPath: proto === 'sftp' ? (profile.keyPath || null) : null,
+        credentialPath: proto === 'gcs' ? (profile.credentialPath || null) : null,
         sshTunnel: profile.sshTunnel ?? null,
         sshTunnelProfileId: profile.sshTunnelProfileId ?? null,
       };
 
+      // GCS with a credential path ignores the keyring slot (file wins).
+      const connectPassword = proto === 's3' || (proto === 'gcs' && profile.credentialPath)
+        ? null
+        : password;
+
       const sessionId = await invoke<string>('connect_storage', {
         profile: connectProfile,
-        password: proto !== 's3' ? password : null,
+        password: connectPassword,
         sshTunnelPassword: tunnelPassword,
       });
       const displayName =
         proto === 's3'
           ? (profile.bucket || profile.name)
-          : `${profile.username || ''}@${profile.host || ''}`;
+          : isFile
+            ? `${profile.username || ''}@${profile.host || ''}`
+            : profile.username
+              ? `${profile.username}@${hostOfEndpoint(profile.endpoint || '')}`
+              : hostOfEndpoint(profile.endpoint || '') || profile.name;
       onConnected(sessionId, displayName, profile.id, proto);
     } catch (err: unknown) {
       setError(formatConnectError(err));
@@ -551,6 +649,51 @@ export const Connection: React.FC<ConnectionProps> = ({
       // connect started owns the flag itself and is still waiting on its own read.
       if (nonce === profileActionNonceRef.current) setCredsLoading(false);
     }
+  };
+
+  /**
+   * One profile builder for both save paths (dialog + disk icon). `base` is the
+   * existing profile being saved over (the disk-icon path keeps unknown fields);
+   * a fresh dialog save builds every field from the form.
+   */
+  const buildProfileFromForm = (base?: ConnectionProfile): ConnectionProfile => {
+    const isFile = isFileProtocol(protocol);
+    const isHttp = isHttpProtocol(protocol);
+    return {
+      ...base,
+      id: base?.id ?? (editingProfile?.id || crypto.randomUUID()),
+      name: base?.name ?? profileName.trim(),
+      protocol,
+      // S3 + WebDAV/Azure/GCS share the endpoint field. Azure's container and
+      // GCS's bucket ride `bucket`; Azure's account name rides `username`; GCS's
+      // service-account JSON path is the one field only it uses.
+      endpoint: (protocol === 's3' || isHttp) ? (endpoint || undefined) : undefined,
+      region: protocol === 's3' ? (region || undefined) : undefined,
+      accessKey: protocol === 's3' ? (accessKey || undefined) : undefined,
+      secretKey: protocol === 's3' ? (secretKey || undefined) : undefined,
+      bucket: (protocol === 's3' || protocol === 'azure' || protocol === 'gcs') ? bucket : undefined,
+      dangerDisableSslVerification: protocol === 's3' ? (dangerDisableSsl || undefined) : undefined,
+      useVirtualHostStyle: protocol === 's3' ? (useVirtualHostStyle || undefined) : undefined,
+      storageClass: protocol === 's3' ? (storageClass || undefined) : undefined,
+      maxBandwidth: protocol === 's3' ? (maxBandwidth ? maxBandwidth * 1024 : undefined) : undefined,
+      bandwidthRules: bandwidthRules.length > 0 ? bandwidthRules : undefined,
+      // SFTP/FTP fields
+      host: isFile ? host : undefined,
+      port: isFile ? port : undefined,
+      username: (isFile || protocol === 'webdav' || protocol === 'azure') ? username : undefined,
+      keyPath: protocol === 'sftp' ? (keyPath || undefined) : undefined,
+      credentialPath: protocol === 'gcs' ? (credentialPath || undefined) : undefined,
+      sshTunnel: sshTunnelProfileId ? undefined : sshTunnelForProfile(sshTunnel, protocol),
+      sshTunnelProfileId,
+    };
+  };
+
+  /** The secret handed to the keyring for the active protocol (S3 sends keys in-band). */
+  const formSecret = (): string | null => {
+    if (protocol === 's3') return null;
+    // A GCS credential file on disk wins over a pasted JSON (backend agrees).
+    if (protocol === 'gcs' && credentialPath.trim()) return null;
+    return sftpPassword || null;
   };
 
   const handleSaveProfile = async () => {
@@ -566,34 +709,8 @@ export const Connection: React.FC<ConnectionProps> = ({
       return;
     }
 
-    const profile: ConnectionProfile = {
-      id: editingProfile?.id || crypto.randomUUID(),
-      name: profileName.trim(),
-      protocol,
-      // S3 fields
-      bucket: protocol === 's3' ? bucket : undefined,
-      accessKey: protocol === 's3' ? (accessKey || undefined) : undefined,
-      secretKey: protocol === 's3' ? (secretKey || undefined) : undefined,
-      endpoint: protocol === 's3' ? (endpoint || undefined) : undefined,
-      region: protocol === 's3' ? (region || undefined) : undefined,
-      dangerDisableSslVerification: protocol === 's3' ? (dangerDisableSsl || undefined) : undefined,
-      useVirtualHostStyle: protocol === 's3' ? (useVirtualHostStyle || undefined) : undefined,
-      storageClass: protocol === 's3' ? (storageClass || undefined) : undefined,
-      maxBandwidth: protocol === 's3' ? (maxBandwidth ? maxBandwidth * 1024 : undefined) : undefined,
-      bandwidthRules: bandwidthRules.length > 0 ? bandwidthRules : undefined,
-      // SFTP/FTP fields
-      host: (protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps') ? host : undefined,
-      port: (protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps') ? port : undefined,
-      username: (protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps') ? username : undefined,
-      keyPath: protocol === 'sftp' ? (keyPath || undefined) : undefined,
-      sshTunnel: sshTunnelProfileId ? undefined : sshTunnelForProfile(sshTunnel, protocol),
-      sshTunnelProfileId,
-    };
-    
-    const secret = (protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps')
-      ? (sftpPassword || null)
-      : null;
-    await onSaveProfile(profile, secret, sshTunnel.password || null);
+    const profile = buildProfileFromForm();
+    await onSaveProfile(profile, formSecret(), sshTunnel.password || null);
     setShowSaveModal(false);
     setProfileName('');
     setEditingProfile(null);
@@ -614,30 +731,8 @@ export const Connection: React.FC<ConnectionProps> = ({
     const selected = profiles.find((p) => p.id === selectedProfileId);
     if (!selected) return;
 
-    const profile: ConnectionProfile = {
-      ...selected,
-      protocol,
-      bucket: protocol === 's3' ? bucket : undefined,
-      accessKey: protocol === 's3' ? (accessKey || undefined) : undefined,
-      secretKey: protocol === 's3' ? (secretKey || undefined) : undefined,
-      endpoint: protocol === 's3' ? (endpoint || undefined) : undefined,
-      region: protocol === 's3' ? (region || undefined) : undefined,
-      dangerDisableSslVerification: protocol === 's3' ? (dangerDisableSsl || undefined) : undefined,
-      useVirtualHostStyle: protocol === 's3' ? (useVirtualHostStyle || undefined) : undefined,
-      storageClass: protocol === 's3' ? (storageClass || undefined) : undefined,
-      maxBandwidth: protocol === 's3' ? (maxBandwidth ? maxBandwidth * 1024 : undefined) : undefined,
-      bandwidthRules: bandwidthRules.length > 0 ? bandwidthRules : undefined,
-      host: (protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps') ? host : undefined,
-      port: (protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps') ? port : undefined,
-      username: (protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps') ? username : undefined,
-      keyPath: protocol === 'sftp' ? (keyPath || undefined) : undefined,
-      sshTunnel: sshTunnelProfileId ? undefined : sshTunnelForProfile(sshTunnel, protocol),
-      sshTunnelProfileId,
-    };
-    const secret = (protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps')
-      ? (sftpPassword || null)
-      : null;
-    await onSaveProfile(profile, secret, sshTunnel.password || null);
+    const profile = buildProfileFromForm(selected);
+    await onSaveProfile(profile, formSecret(), sshTunnel.password || null);
   };
 
   const handleSaveAsNewProfile = () => {
@@ -673,6 +768,7 @@ export const Connection: React.FC<ConnectionProps> = ({
     setPort(DEFAULT_SFTP_PORT);
     setUsername('');
     setKeyPath('');
+    setCredentialPath('');
     setSftpPassword('');
     setSshTunnel({ ...EMPTY_SSH_TUNNEL });
     setSshTunnelProfileId(undefined);
@@ -786,11 +882,11 @@ export const Connection: React.FC<ConnectionProps> = ({
                 id="connection-protocol"
                 value={protocol}
                 onValueChange={(value) => {
-                  const newProto = value as 's3' | 'sftp' | 'ftp' | 'ftps';
+                  const newProto = value as StorageProtocol;
                   const currentPort = port;
                   setProtocol(newProto);
                   setSshConfigNotice('');
-                  if (newProto !== 's3' && newProto !== 'sftp') {
+                  if (newProto !== 's3' && newProto !== 'sftp' && !isHttpProtocol(newProto)) {
                     // FTP data channels cannot use this single-port SSH forwarding path.
                     // Clear the hidden choice so it cannot leak into a saved FTP/FTPS profile.
                     setSshTunnel({ ...EMPTY_SSH_TUNNEL });
@@ -799,8 +895,9 @@ export const Connection: React.FC<ConnectionProps> = ({
 
                   // Apply the new protocol's default port when switching, but only
                   // override a port that still looks like some protocol's default —
-                  // a hand-typed port belongs to the user.
-                  if (newProto !== 's3') {
+                  // a hand-typed port belongs to the user. Endpoint-URL protocols
+                  // (webdav/azure/gcs) show no port field at all.
+                  if (newProto !== 's3' && !isHttpProtocol(newProto)) {
                     const isUntouched =
                       !currentPort ||
                       currentPort === DEFAULT_SFTP_PORT ||
@@ -814,6 +911,9 @@ export const Connection: React.FC<ConnectionProps> = ({
                 <option value="sftp">SFTP / SSH</option>
                 <option value="ftp">FTP</option>
                 <option value="ftps">FTPS (FTP over TLS)</option>
+                <option value="webdav">WebDAV</option>
+                <option value="azure">Azure Blob</option>
+                <option value="gcs">Google Cloud Storage</option>
               </Select>
             </div>
             
@@ -822,6 +922,9 @@ export const Connection: React.FC<ConnectionProps> = ({
               s3={{ bucket, setBucket, accessKey, setAccessKey, secretKey, setSecretKey, endpoint, setEndpoint, region, setRegion, dangerDisableSsl, setDangerDisableSsl, showAdvanced, setShowAdvanced, useVirtualHostStyle, setUseVirtualHostStyle, storageClass, setStorageClass, maxBandwidth, setMaxBandwidth, bandwidthRules: <BandwidthRulesEditor bandwidthRules={bandwidthRules} setBandwidthRules={setBandwidthRules} setError={setError} draft={bandwidthDraft} /> }}
               remote={{ host, setHost, port, setPort, username, setUsername, sftpPassword, setSftpPassword }}
               ssh={{ keyPath, setKeyPath, showSshHelper, setShowSshHelper, sshConfigNotice, credsLoading, handleSshConfigSelect }}
+              webdav={{ endpoint, setEndpoint, username, setUsername, sftpPassword, setSftpPassword }}
+              azure={{ endpoint, setEndpoint, bucket, setBucket, username, setUsername, sftpPassword, setSftpPassword }}
+              gcs={{ endpoint, setEndpoint, bucket, setBucket, credentialPath, setCredentialPath, sftpPassword, setSftpPassword }}
             />
 
             {(protocol === 's3' || protocol === 'sftp') && (
@@ -861,8 +964,22 @@ export const Connection: React.FC<ConnectionProps> = ({
             )}
             <div className="flex space-x-2">
               <button type="submit" disabled={loading} className="flex-1 py-3 bg-gale-teal text-on-accent font-semibold hover:bg-deep-current hover:text-white rounded-lg text-sm transition-all duration-150 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
-                {loading ? 'Connecting...' : protocol === 'sftp' ? 'Connect SFTP' : protocol === 'ftp' ? 'Connect FTP' : protocol === 'ftps' ? 'Connect FTPS' : 'Connect S3'}
-              </button>
+                {loading
+                  ? 'Connecting...'
+                  : protocol === 'sftp'
+                    ? 'Connect SFTP'
+                    : protocol === 'ftp'
+                      ? 'Connect FTP'
+                      : protocol === 'ftps'
+                        ? 'Connect FTPS'
+                        : protocol === 'webdav'
+                          ? 'Connect WebDAV'
+                          : protocol === 'azure'
+                            ? 'Connect Azure'
+                            : protocol === 'gcs'
+                              ? 'Connect GCS'
+                              : 'Connect S3'}
+                </button>
               {selectedProfileId && (
                 <button
                   type="button"

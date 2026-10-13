@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
 import { X, FileText, Folder, Database, Tag, Clock, HardDrive, Loader2, AlertCircle, Save, ShieldCheck, Copy, Check, Eye, ExternalLink } from 'lucide-react';
 import type { GaleonObject } from '../types';
-import { ProtocolCapabilities } from '../types';
+import { ProtocolCapabilities, StorageProtocol } from '../types';
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -31,7 +31,7 @@ export interface PropertiesInspectorProps {
   onClose: () => void;
   sessionId: string;
   object: GaleonObject | null;
-  protocol?: 's3' | 'sftp' | 'ftp' | 'ftps';
+  protocol?: StorageProtocol;
   capabilities?: ProtocolCapabilities;
   mode?: 'properties' | 'preview';
 }
@@ -131,7 +131,7 @@ function previewKindFor(contentType: string | null): PreviewKind | null {
 
 export function isPreviewableFile(
   key: string,
-  protocol?: 's3' | 'sftp' | 'ftp' | 'ftps',
+  protocol?: StorageProtocol,
 ): boolean {
   const isS3 = !protocol || protocol === 's3';
   if (!isS3) return false;
