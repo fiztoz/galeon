@@ -290,12 +290,12 @@ export const SshTunnelProfiles: React.FC<SshTunnelProfilesProps> = ({
       <section className="border-t border-zinc-800 pt-4" aria-label="SSH tunnel">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-800 text-gale-teal">
+            <span className="mt-0.5 shrink-0 text-zinc-500">
               <Network className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-zinc-200">SSH tunnel</p>
-              <p className={`mt-0.5 truncate text-xs ${selectedProfileId && !loading && !selected ? 'text-status-danger' : 'text-zinc-500'}`}>
+              <p className="text-xs font-medium text-zinc-200">SSH tunnel</p>
+              <p className={`mt-0.5 truncate text-[11px] ${selectedProfileId && !loading && !selected ? 'text-status-danger' : 'text-zinc-500'}`}>
                 {connectionSummary}
               </p>
             </div>
@@ -304,7 +304,7 @@ export const SshTunnelProfiles: React.FC<SshTunnelProfilesProps> = ({
             ref={triggerRef}
             type="button"
             onClick={openManager}
-            className="inline-flex shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-gale-teal transition-colors hover:bg-zinc-800 hover:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gale-teal"
+            className="ui-button ui-button-ghost shrink-0"
             aria-haspopup="dialog"
           >
             {enabled ? 'Manage' : 'Set up'}

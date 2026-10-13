@@ -1,19 +1,22 @@
-# Changelog
-
-All notable changes to Galeon are documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-
 ## [Unreleased]
 
 ### Added
 
-- WebDAV connections: connect to Nextcloud, ownCloud, NAS, and shared-hosting DAV URLs with optional username/password (anonymous shares work too).
-- Azure Blob connections: account name + account key, with the container in the bucket field. The endpoint is derived from the account name unless a custom URL (sovereign clouds) is entered.
-- Google Cloud Storage: connect with a service-account JSON file (stored as a path — the key file stays on disk) or paste the JSON contents into the keyring.
-- The three new protocols appear in the connect form and onboarding, carry protocol capabilities (multipart, presigned URLs, bulk delete match OpenDAL's actual service support), and work with the explorer, transfers, drag-and-drop, preview, edit-in-place, and one-way sync.
+- WebDAV connections: connect to Nextcloud/ownCloud, NAS boxes, and shared-hosting DAV URLs with optional username/password (anonymous shares work too).
+- Azure Blob connections: account name + account key, container in the bucket field; the endpoint derives from the account name or is overridden for sovereign clouds.
+- Google Cloud Storage: service-account JSON on disk (path stored; key stays outside the keyring) or pasted JSON into the keyring.
+- Auto-reconnect resumes queued transfers on app restart for WebDAV, Azure, and GCS (not only S3); the reopened session now reports its protocol.
+- Per-protocol capabilities for the three new protocols mirror OpenDAL 0.59's actual service support (multipart, presigned URLs, bulk delete).
+
+
+## [1.0.0-alpha.5] - 2026-10-07
 
 ### Fixed
+
+- Starting a new connection clears pending profile credential reads. Connection
+  errors scroll into view, and Connect stays disabled while credentials load.
+- Restore Linux integration checks by building the MinIO test fixture from
+  pinned official source revisions after public container images became unavailable.
 
 - Unify status colors in both themes, radio and time controls, focus outlines, disclosure/close icons, and older dialog size limits.
 
@@ -37,10 +40,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- JavaScript patch group: lucide-react 1.45, React 19.3, Vite 8.3, and matching
-  types.
-- Rust patch group in `Cargo.lock`; `dirs` 5.0.1 → 6.0.0; `rcgen` 0.13 → 0.14.10
-  (`CertifiedKey::signing_key` in the TLS test fixture).
+- Refine the connection screen with grouped destination and credential fields,
+  labelled actions in a persistent footer, and a clear New connection action.
+- Give connected remote and local explorers full-width tables, sticky headers,
+  aligned size/date columns, quieter filters, and consistent compact controls.
+- Update Tauri and its JavaScript API/CLI to 2.12.1, dialog to 2.8.1, opener to
+  2.7.0, OpenDAL to 0.59.3, `dirs` to 7.0.0, and `suppaftp` to 12.0.1.
+- Refresh JavaScript dependencies including lucide-react 1.50, React 19.3,
+  Vite 8.3.2, and matching types; update the Rust dependency lockfile and the
+  `rcgen` TLS test fixture to 0.14.10.
+
+### Security
+
+- Update rustls to 0.23.45, addressing RUSTSEC-2026-0285 (TLS 1.3 handshake
+  messages accepted across encryption-level boundaries).
+- Update the build dependency `source-map-js` to 1.2.2, addressing
+  GHSA-68fv-2mgg-jv7q (denial of service from indexed source-map offsets).
 
 ## [1.0.0-alpha.4]
 

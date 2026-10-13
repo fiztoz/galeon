@@ -90,132 +90,99 @@ export function S3Fields({ bucket, setBucket, accessKey, setAccessKey, secretKey
   };
 
   return (
-<>
-                <div>
-                  <label htmlFor="s3-provider" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Provider</label>
-                  <Select id="s3-provider" value={provider} onValueChange={(value) => pickProvider(value as S3ProviderId)} className={FIELD}>
-                    {S3_PRESETS.map((p) => (
-                      <option key={p.id} value={p.id}>{p.label}</option>
-                    ))}
-                  </Select>
-                  <p className="mt-1 text-xs text-zinc-500">{active.help}</p>
-                </div>
-                {active.needsAccountId && (
-                  <div>
-                    <label htmlFor="s3-account" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Account ID</label>
-                    <input id="s3-account" type="text" value={accountId} onChange={(e) => onAccountId(e.target.value)} placeholder="R2 account ID" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
-                  </div>
-                )}
-                <div>
-                  <label htmlFor="s3-bucket" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Bucket Name</label>
-                  <input id="s3-bucket" type="text" value={bucket} onChange={(e) => setBucket(e.target.value)} required placeholder="e.g. my-bucket" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
-                  <p className="mt-1 text-xs text-zinc-500">Bucket name (not the full URL)</p>
-                </div>
-                <div>
-                  <label htmlFor="s3-access-key" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Access Key ID</label>
-                  <input id="s3-access-key" type="text" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
-                </div>
-                <div>
-                  <label htmlFor="s3-secret-key" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Secret Access Key</label>
-                  <input id="s3-secret-key" type="password" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
-                </div>
-                <div>
-                  <label htmlFor="s3-endpoint" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Custom Endpoint</label>
-                  <input id="s3-endpoint" type="text" value={endpoint} onChange={(e) => updateEndpoint(e.target.value, provider, selectionForEndpoint(e.target.value).accountId)} placeholder={active.endpointPlaceholder} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
-                  <p className="mt-1 text-xs text-zinc-500">MinIO / R2 / Wasabi: paste the API endpoint URL</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="s3-region" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Region</label>
-                    <Autocomplete id="s3-region" type="text" value={region} onValueChange={onPresetRegion} options={active.regionOptions ?? []} placeholder={active.regionPlaceholder} className={FIELD} autoCapitalize="off" autoCorrect="off" spellCheck={false} />
-                  </div>
-                  <div className="flex items-end pb-2">
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="disable-ssl"
-                        checked={dangerDisableSsl}
-                        onChange={(e) => setDangerDisableSsl(e.target.checked)}
-                        className="w-4 h-4 text-status-warning bg-zinc-800 border-zinc-600 rounded focus:ring-yellow-500"
-                      />
-                      <label htmlFor="disable-ssl" className="text-xs text-zinc-400">
-                        Disable SSL Verify
-                        {dangerDisableSsl && (
-                          <span className="ml-1 text-status-warning">(self-signed OK)</span>
-                        )}
-                      </label>
-                    </div>
-                  </div>
-                </div>
+    <>
+      <section className="connection-section" aria-labelledby="s3-destination-heading">
+        <h2 id="s3-destination-heading" className="connection-section-title">Destination</h2>
+        <div className="connection-grid">
+          <div>
+            <label htmlFor="s3-provider" className="connection-label">Provider</label>
+            <Select id="s3-provider" value={provider} onValueChange={(value) => pickProvider(value as S3ProviderId)} className={FIELD}>
+              {S3_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </Select>
+          </div>
+          <div>
+            <label htmlFor="s3-region" className="connection-label">Region</label>
+            <Autocomplete id="s3-region" type="text" value={region} onValueChange={onPresetRegion} options={active.regionOptions ?? []} placeholder={active.regionPlaceholder} className={FIELD} autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+          </div>
+          {active.needsAccountId && (
+            <div className="connection-grid-full">
+              <label htmlFor="s3-account" className="connection-label">Account ID</label>
+              <input id="s3-account" type="text" value={accountId} onChange={(e) => onAccountId(e.target.value)} placeholder="R2 account ID" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+            </div>
+          )}
+          <div>
+            <label htmlFor="s3-bucket" className="connection-label">Bucket name</label>
+            <input id="s3-bucket" type="text" value={bucket} onChange={(e) => setBucket(e.target.value)} required placeholder="my-bucket" className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+          </div>
+          <div>
+            <label htmlFor="s3-endpoint" className="connection-label">Endpoint {provider === 'aws' && <span>optional</span>}</label>
+            <input id="s3-endpoint" type="text" value={endpoint} onChange={(e) => updateEndpoint(e.target.value, provider, selectionForEndpoint(e.target.value).accountId)} placeholder={active.endpointPlaceholder} className={FIELD} aria-describedby="s3-provider-help" autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+          </div>
+        </div>
+        <p id="s3-provider-help" className="connection-help">{active.help}</p>
+      </section>
 
-                {/* Advanced Settings Toggle */}
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  aria-expanded={showAdvanced}
-                  className="flex items-center space-x-2 text-xs text-zinc-400 hover:text-zinc-200"
-                >
-                  <ChevronRight size={14} aria-hidden="true" className={`shrink-0 transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
-                  <span>Advanced S3 Options</span>
-                </button>
+      <section className="connection-section" aria-labelledby="s3-credentials-heading">
+        <h2 id="s3-credentials-heading" className="connection-section-title">Credentials</h2>
+        <div className="connection-grid">
+          <div>
+            <label htmlFor="s3-access-key" className="connection-label">Access key ID</label>
+            <input id="s3-access-key" type="text" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+          </div>
+          <div>
+            <label htmlFor="s3-secret-key" className="connection-label">Secret access key</label>
+            <input id="s3-secret-key" type="password" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className={FIELD} autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
+          </div>
+        </div>
+      </section>
 
-                {/* Advanced Settings Panel */}
-                {showAdvanced && (
-                  <div className="p-4 bg-zinc-800/50 rounded-lg border border-zinc-700 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="text-sm font-medium text-zinc-200">Virtual Host Style</label>
-                        <p className="text-xs text-zinc-500">Use bucket.endpoint.com style URLs</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setUseVirtualHostStyle(!useVirtualHostStyle)}
-                        role="switch"
-                        aria-label="Virtual host style"
-                        aria-checked={useVirtualHostStyle}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          useVirtualHostStyle ? 'bg-gale-teal' : 'bg-zinc-700'
-                        }`}
-                      >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          useVirtualHostStyle ? 'translate-x-6' : 'translate-x-1'
-                        }`} />
-                      </button>
-                    </div>
-
-                    <div>
-                      <label htmlFor="s3-storage-class" className="block text-sm font-medium text-zinc-200 mb-1">Storage Class</label>
-                      <Select
- id="s3-storage-class"                        value={storageClass}
-                        onValueChange={(value) => setStorageClass(value)}
-                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all"
-                      >
-                        <option value="STANDARD">Standard</option>
-                        <option value="REDUCED_REDUNDANCY">Reduced Redundancy</option>
-                        <option value="STANDARD_IA">Standard-IA</option>
-                        <option value="ONEZONE_IA">One Zone-IA</option>
-                        <option value="INTELLIGENT_TIERING">Intelligent-Tiering</option>
-                        <option value="GLACIER">Glacier</option>
-                        <option value="GLACIER_DEEP_ARCHIVE">Glacier Deep Archive</option>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <label htmlFor="s3-bandwidth" className="block text-sm font-medium text-zinc-200 mb-1">Bandwidth Limit (KB/s)</label>
-                      <input
- id="s3-bandwidth"                        type="number"
-                        min="0"
-                        placeholder="Unlimited"
-                        value={maxBandwidth}
-                        onChange={(e) => setMaxBandwidth(e.target.value ? Number(e.target.value) : '')}
-                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all placeholder:text-zinc-500"
-                      />
-                      <p className="mt-1 text-xs text-zinc-500">Leave blank for unlimited speed</p>
-                    </div>
-
-                    {bandwidthRules}
-                  </div>
-                )}
-              </>
+      <div className="connection-section">
+        <button type="button" onClick={() => setShowAdvanced(!showAdvanced)} aria-expanded={showAdvanced} aria-controls="s3-advanced" className="connection-disclosure">
+          <ChevronRight size={14} aria-hidden="true" className={`shrink-0 transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
+          <span>Advanced options</span>
+          <span className="connection-disclosure-hint">TLS, storage & bandwidth</span>
+        </button>
+        {dangerDisableSsl && <p role="status" className="mt-2 text-xs text-status-warning">TLS certificate verification is disabled for this connection.</p>}
+        {showAdvanced && (
+          <div id="s3-advanced" className="connection-advanced space-y-4">
+            <div>
+              <label htmlFor="disable-ssl" className="flex items-center gap-2 text-xs text-zinc-300">
+                <input type="checkbox" id="disable-ssl" checked={dangerDisableSsl} onChange={(e) => setDangerDisableSsl(e.target.checked)} aria-describedby="disable-ssl-help" />
+                Disable TLS certificate verification
+              </label>
+              <p id="disable-ssl-help" className="connection-help">Only for trusted servers with self-signed certificates.</p>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <span className="text-xs font-medium text-zinc-200">Virtual host style</span>
+                <p className="connection-help">Use bucket.endpoint.com URLs</p>
+              </div>
+              <button type="button" onClick={() => setUseVirtualHostStyle(!useVirtualHostStyle)} role="switch" aria-label="Virtual host style" aria-checked={useVirtualHostStyle} className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${useVirtualHostStyle ? 'bg-gale-teal' : 'bg-zinc-700'}`}>
+                <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${useVirtualHostStyle ? 'translate-x-4.5' : 'translate-x-1'}`} />
+              </button>
+            </div>
+            <div className="connection-grid">
+              <div>
+                <label htmlFor="s3-storage-class" className="connection-label">Storage class</label>
+                <Select id="s3-storage-class" value={storageClass} onValueChange={setStorageClass} className={FIELD}>
+                  <option value="STANDARD">Standard</option>
+                  <option value="REDUCED_REDUNDANCY">Reduced Redundancy</option>
+                  <option value="STANDARD_IA">Standard-IA</option>
+                  <option value="ONEZONE_IA">One Zone-IA</option>
+                  <option value="INTELLIGENT_TIERING">Intelligent-Tiering</option>
+                  <option value="GLACIER">Glacier</option>
+                  <option value="GLACIER_DEEP_ARCHIVE">Glacier Deep Archive</option>
+                </Select>
+              </div>
+              <div>
+                <label htmlFor="s3-bandwidth" className="connection-label">Bandwidth limit <span>KB/s</span></label>
+                <input id="s3-bandwidth" type="number" min="0" placeholder="Unlimited" value={maxBandwidth} onChange={(e) => setMaxBandwidth(e.target.value ? Number(e.target.value) : '')} className={FIELD} />
+              </div>
+            </div>
+            {bandwidthRules}
+          </div>
+        )}
+      </div>
+    </>
   );
 }

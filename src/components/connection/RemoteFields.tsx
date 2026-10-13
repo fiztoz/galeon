@@ -21,7 +21,7 @@ export function RemoteFields({ host, setHost, port, setPort, username, setUserna
 <>
                 {beforeFields}
                 <div>
-                  <label htmlFor="remote-host" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                  <label htmlFor="remote-host" className="connection-label">
                     Host
                   </label>
                   <input id="remote-host"
@@ -39,7 +39,7 @@ export function RemoteFields({ host, setHost, port, setPort, username, setUserna
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="remote-port" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                    <label htmlFor="remote-port" className="connection-label">
                       Port
                     </label>
                     <input id="remote-port"
@@ -50,7 +50,7 @@ export function RemoteFields({ host, setHost, port, setPort, username, setUserna
                     />
                   </div>
                   <div>
-                    <label htmlFor="remote-username" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                    <label htmlFor="remote-username" className="connection-label">
                       Username
                     </label>
                     <input id="remote-username"
@@ -67,7 +67,7 @@ export function RemoteFields({ host, setHost, port, setPort, username, setUserna
                   </div>
                 </div>
                 <div className="mb-3">
-                  <label htmlFor="storage-password" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                  <label htmlFor="storage-password" className="connection-label">
                     Password
                   </label>
                   <div className="space-y-2">

@@ -14,6 +14,8 @@ import {
   Eye,
   EyeOff,
   ArrowUpToLine,
+  Search,
+  RotateCw,
 } from 'lucide-react';
 import { formatSize } from './Explorer';
 import {
@@ -321,7 +323,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
       {/* Path bar */}
       <div className="pane-path flex items-center justify-between gap-3 py-3 px-4 bg-zinc-900 border-b border-zinc-800 text-sm">
         <nav aria-label="Local path" className="flex items-center space-x-1 min-w-0 galeon-scrollbar">
-          <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full font-medium mr-1 shrink-0">
+          <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded font-medium mr-1 shrink-0">
             LOCAL
           </span>
           <button
@@ -359,33 +361,36 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
             <button
               onClick={handleUploadSelected}
               disabled={!hasSelection}
-              className="flex items-center space-x-2 px-3 py-1.5 bg-gale-teal text-on-accent hover:bg-deep-current hover:text-white rounded-lg text-sm font-semibold transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+              className="ui-button ui-button-primary"
             >
               <ArrowUpToLine className="w-4 h-4" />
-              <span>Upload to Remote</span>
+              <span>Upload selected</span>
             </button>
             <button
               onClick={() => setShowNewFolder(true)}
-              className="flex items-center space-x-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm font-medium transition-colors"
+              className="ui-button ui-button-secondary"
             >
               <Plus className="w-4 h-4" />
-              <span>New Folder</span>
+              <span>New folder</span>
             </button>
             <button
               onClick={() => fetchDirectory(currentPath)}
-              className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm font-medium transition-colors"
+              className="ui-button ui-button-ghost"
+              aria-label="Refresh files"
+              title="Refresh files"
             >
-              Refresh
+              <RotateCw size={14} aria-hidden="true" />
             </button>
           </div>
           <div className="pane-search">
+            <Search size={14} aria-hidden="true" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label="Search local files"
               placeholder="Search local files…"
-              className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 focus:outline-none focus:border-gale-teal focus:ring-1 focus:ring-gale-teal transition-all w-48"
+              className="connection-field text-zinc-100 placeholder:text-zinc-500"
               autoCapitalize="off"
               autoCorrect="off"
               autoComplete="off"
@@ -397,9 +402,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
           <button
             onClick={() => setShowHidden(!showHidden)}
             aria-pressed={showHidden}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              showHidden ? 'bg-gale-teal text-on-accent font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-            }`}
+            className="pane-filter-button flex items-center gap-1.5"
           >
             {showHidden ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
             Hidden
@@ -409,9 +412,8 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
             <button
               key={key}
               onClick={() => handleSort(key)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                sortKey === key ? 'bg-gale-teal text-on-accent font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-              }`}
+              aria-pressed={sortKey === key}
+              className="pane-filter-button"
             >
               {key === 'name' ? 'Name' : key === 'size' ? 'Size' : 'Date'}
               {sortKey === key && (sortDirection === 'asc' ? ' ↑' : ' ↓')}
@@ -434,7 +436,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
           <div className="mb-2 text-xs text-gale-teal font-medium px-1">Drop to download here</div>
         )}
         {error && (
-          <div className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg flex items-start justify-between gap-3">
+          <div role="alert" className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg flex items-start justify-between gap-3">
             <span className="min-w-0 break-words">{error}</span>
             <button
               type="button"
@@ -453,10 +455,10 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
             <span className="text-zinc-400 text-sm">Loading…</span>
           </div>
         ) : (
-          <div className="border border-zinc-800 rounded-xl bg-zinc-900/40">
+          <div className="file-list">
             <table className="file-table text-left border-collapse">
               <thead>
-                <tr className="border-b border-zinc-800 bg-zinc-900/70 text-zinc-400 text-xs uppercase tracking-wider font-semibold">
+                <tr className="border-b border-zinc-800 bg-zinc-900 text-zinc-400 text-xs font-medium">
                   <th className="px-4 py-3 w-10">
                     <input
                       type="checkbox"
@@ -606,7 +608,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
               className="flex items-center space-x-1 px-3 py-1.5 bg-gale-teal text-on-accent hover:bg-deep-current hover:text-white rounded-lg text-sm font-semibold transition-colors"
             >
               <Upload className="w-4 h-4" />
-              <span>Upload to Remote</span>
+              <span>Upload selected</span>
             </button>
           </div>
         </div>
