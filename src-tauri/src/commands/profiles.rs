@@ -29,13 +29,15 @@ pub async fn save_profile(
     let secret_key = profile.secret_key.clone();
     let protocol = profile.protocol.as_deref().unwrap_or("s3");
     // Save storage credentials independently from the optional bastion password.
+    // Every non-S3 protocol keeps a single secret in the password slot — the
+    // same rule profile_io/secrets.rs uses on import.
     if protocol == "s3" {
         if let (Some(ak), Some(sk)) = (&access_key, &secret_key) {
             if !ak.is_empty() && !sk.is_empty() {
                 credentials::save_credentials_to_keyring(&profile.id, ak, sk)?;
             }
         }
-    } else if protocol == "sftp" || protocol == "ftp" || protocol == "ftps" {
+    } else {
         if let Some(pw) = password.as_ref().filter(|value| !value.is_empty()) {
             credentials::save_password_to_keyring(&profile.id, pw)?;
         } else {

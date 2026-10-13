@@ -632,6 +632,7 @@ mod tests {
             port: None,
             username: None,
             key_path: None,
+            credential_path: None,
             passive_mode: None,
             encrypt: None,
             bandwidth_rules: None,

@@ -27,7 +27,7 @@ pub async fn connect_bucket(
             storage_class,
             danger_disable_ssl_verification,
         },
-        s3_connect::S3LayerConfig {
+        s3_connect::OperatorLayerConfig {
             max_bandwidth_bytes_per_sec: max_bandwidth.filter(|&l| l > 0),
         },
         "Connection check failed",
@@ -89,7 +89,7 @@ pub async fn connect_storage(
                     storage_class: profile.storage_class.clone(),
                     danger_disable_ssl_verification: profile.danger_disable_ssl_verification,
                 },
-                s3_connect::S3LayerConfig {
+                s3_connect::OperatorLayerConfig {
                     max_bandwidth_bytes_per_sec: resolve_bandwidth_limit_bytes_per_sec(
                         &profile,
                         now_ms(),
@@ -240,8 +240,84 @@ pub async fn connect_storage(
             }
             Ok(session_uuid)
         }
+        "webdav" => {
+            let op = http_connect::open_webdav_operator(
+                http_connect::WebdavConnectParams {
+                    endpoint: profile.endpoint.clone(),
+                    username: profile.username.clone(),
+                    password: password.clone(),
+                    danger_disable_ssl_verification: profile.danger_disable_ssl_verification,
+                },
+                s3_connect::OperatorLayerConfig {
+                    max_bandwidth_bytes_per_sec: resolve_bandwidth_limit_bytes_per_sec(
+                        &profile,
+                        now_ms(),
+                    ),
+                },
+                "WebDAV connection check failed",
+            )
+            .await?;
+
+            let session_uuid = Uuid::new_v4().to_string();
+            let mut sessions = state.active_sessions.write().await;
+            sessions.insert(session_uuid.clone(), StorageSession::OpenDAL(op));
+            drop(sessions);
+            // SSH tunnels never open for these protocols (destination_for_profile
+            // rejects them), so there is no tunnel to keep alive here.
+            Ok(session_uuid)
+        }
+        "azure" => {
+            let op = http_connect::open_azblob_operator(
+                http_connect::AzureConnectParams {
+                    endpoint: profile.endpoint.clone(),
+                    container: profile.bucket.clone(),
+                    account_name: profile.username.clone(),
+                    account_key: password.clone(),
+                    danger_disable_ssl_verification: profile.danger_disable_ssl_verification,
+                },
+                s3_connect::OperatorLayerConfig {
+                    max_bandwidth_bytes_per_sec: resolve_bandwidth_limit_bytes_per_sec(
+                        &profile,
+                        now_ms(),
+                    ),
+                },
+                "Azure connection check failed",
+            )
+            .await?;
+
+            let session_uuid = Uuid::new_v4().to_string();
+            let mut sessions = state.active_sessions.write().await;
+            sessions.insert(session_uuid.clone(), StorageSession::OpenDAL(op));
+            drop(sessions);
+            Ok(session_uuid)
+        }
+        "gcs" => {
+            let op = http_connect::open_gcs_operator(
+                http_connect::GcsConnectParams {
+                    endpoint: profile.endpoint.clone(),
+                    bucket: profile.bucket.clone(),
+                    credential_path: profile.credential_path.clone(),
+                    credential: password.clone(),
+                    danger_disable_ssl_verification: profile.danger_disable_ssl_verification,
+                },
+                s3_connect::OperatorLayerConfig {
+                    max_bandwidth_bytes_per_sec: resolve_bandwidth_limit_bytes_per_sec(
+                        &profile,
+                        now_ms(),
+                    ),
+                },
+                "GCS connection check failed",
+            )
+            .await?;
+
+            let session_uuid = Uuid::new_v4().to_string();
+            let mut sessions = state.active_sessions.write().await;
+            sessions.insert(session_uuid.clone(), StorageSession::OpenDAL(op));
+            drop(sessions);
+            Ok(session_uuid)
+        }
         other => Err(format!(
-            "Unsupported protocol: {}. Use 's3', 'sftp', 'ftp', or 'ftps'.",
+            "Unsupported protocol: {}. Use 's3', 'sftp', 'ftp', 'ftps', 'webdav', 'azure', or 'gcs'.",
             other
         )),
     }
@@ -301,7 +377,7 @@ pub async fn auto_reconnect(
                     danger_disable_ssl_verification: profile.danger_disable_ssl_verification,
                 },
                 // Auto-reconnect: retry only (no bandwidth throttle).
-                s3_connect::S3LayerConfig {
+                s3_connect::OperatorLayerConfig {
                     max_bandwidth_bytes_per_sec: None,
                 },
                 "Auto-reconnect connection check failed",
@@ -375,7 +451,70 @@ pub async fn get_protocol_capabilities(protocol: String) -> Result<ProtocolCapab
             supports_bucket_concept: false,
             supports_bulk_delete: false,
         }),
+        // Verified against the OpenDAL 0.59 service sources: azblob and gcs
+        // set `write_can_multi` (parallel multipart) and implement `sign`
+        // (presigned URLs); azblob batches deletes (256-op limit), gcs (100).
+        // WebDAV is single-stream write, single delete, unsigned.
+        "webdav" => Ok(ProtocolCapabilities {
+            supports_presigned_urls: false,
+            supports_multipart: false,
+            supports_storage_class: false,
+            supports_virtual_host_style: false,
+            supports_bucket_concept: false,
+            supports_bulk_delete: false,
+        }),
+        "azure" => Ok(ProtocolCapabilities {
+            supports_presigned_urls: true,
+            supports_multipart: true,
+            supports_storage_class: false,
+            supports_virtual_host_style: false,
+            supports_bucket_concept: true,
+            supports_bulk_delete: true,
+        }),
+        "gcs" => Ok(ProtocolCapabilities {
+            supports_presigned_urls: true,
+            supports_multipart: true,
+            supports_storage_class: true,
+            supports_virtual_host_style: false,
+            supports_bucket_concept: true,
+            supports_bulk_delete: true,
+        }),
         _ => Err(format!("Unknown protocol: {}", protocol)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn capabilities_match_opendal_service_support() {
+        let webdav = get_protocol_capabilities("webdav".to_string())
+            .await
+            .unwrap();
+        assert!(!webdav.supports_presigned_urls);
+        assert!(!webdav.supports_multipart);
+        assert!(!webdav.supports_bucket_concept);
+
+        let azure = get_protocol_capabilities("azure".to_string())
+            .await
+            .unwrap();
+        assert!(azure.supports_presigned_urls);
+        assert!(azure.supports_multipart);
+        assert!(azure.supports_bucket_concept);
+        assert!(azure.supports_bulk_delete);
+        // Azblob exposes no default storage class in OpenDAL 0.59.
+        assert!(!azure.supports_storage_class);
+
+        let gcs = get_protocol_capabilities("gcs".to_string()).await.unwrap();
+        assert!(gcs.supports_presigned_urls);
+        assert!(gcs.supports_multipart);
+        assert!(gcs.supports_storage_class);
+        assert!(gcs.supports_bucket_concept);
+
+        assert!(get_protocol_capabilities("carrier-pigeon".to_string())
+            .await
+            .is_err());
     }
 }
 

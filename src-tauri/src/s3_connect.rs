@@ -218,6 +218,18 @@ pub fn sanitize_profile_for_storage(profile: &mut crate::ConnectionProfile) {
         } else if let Some(ref mut ep) = profile.endpoint {
             let _ = normalize_endpoint(ep, "");
         }
+    } else if matches!(protocol.as_str(), "webdav" | "azure" | "gcs") {
+        // HTTP storage protocols: endpoint-first (like S3), no host/port pair.
+        // Azure/GCS keep the container/bucket in `bucket`; GCS additionally
+        // carries an optional service-account JSON path.
+        profile.endpoint = clean_connection_opt(profile.endpoint.take());
+        profile.bucket = clean_connection_opt(profile.bucket.take());
+        profile.username = clean_connection_opt(profile.username.take());
+        profile.credential_path = clean_connection_opt(profile.credential_path.take());
+
+        if let Some(ref mut ep) = profile.endpoint {
+            let _ = normalize_endpoint(ep, "");
+        }
     } else {
         // sftp / ftp / ftps
         profile.host = clean_connection_opt(profile.host.take());
@@ -241,12 +253,14 @@ pub fn sanitize_profile_for_storage(profile: &mut crate::ConnectionProfile) {
 /// backed by a reqwest client that accepts self-signed / invalid TLS certificates
 /// (common on private MinIO endpoints). Matches boto3's `verify=False`.
 ///
-/// OpenDAL 0.56 removed the service-builder `http_client` hook, so the bypass now
-/// rides the layered transport API: the operator is rebuilt around a custom
-/// `OperationContext` with layers preserved (`with_context` replays them).
-/// Kept as a separate step after `apply_s3_operator_layers` so the transport swap
-/// never interferes with retry/throttle composition.
-pub fn apply_s3_ssl_settings(
+/// Works for every HTTP-based OpenDAL service (S3, WebDAV, Azure, GCS), not just
+/// S3, because the swap rides the layered transport API rather than a service
+/// builder. OpenDAL 0.56 removed the service-builder `http_client` hook, so the
+/// operator is rebuilt around a custom `OperationContext` with layers preserved
+/// (`with_context` replays them). Kept as a separate step after
+/// `apply_operator_layers` so the transport swap never interferes with
+/// retry/throttle composition.
+pub fn apply_tls_bypass(
     op: Operator,
     danger_disable_ssl: Option<bool>,
 ) -> Result<Operator, String> {
@@ -269,7 +283,7 @@ pub fn apply_s3_ssl_settings(
 /// TLS advice is only added when the error text mentions certificate/SSL/TLS
 /// (or closely related handshake terms). Bare "error sending request" /
 /// "client error (connect)" alone do **not** trigger the SSL hint.
-pub fn format_s3_connect_error(prefix: &str, err: impl std::fmt::Display) -> String {
+pub fn format_connect_error(prefix: &str, err: impl std::fmt::Display) -> String {
     let msg = err.to_string();
     let lower = msg.to_lowercase();
     if lower.contains("invalid uri") || lower.contains("invalid uri character") {
@@ -331,7 +345,7 @@ pub struct ConfiguredS3 {
 /// Retry is always applied (3 attempts). Bandwidth throttle is optional
 /// (`None` or `0` = unlimited).
 #[derive(Clone, Debug, Default)]
-pub struct S3LayerConfig {
+pub struct OperatorLayerConfig {
     pub max_bandwidth_bytes_per_sec: Option<u64>,
 }
 
@@ -379,8 +393,9 @@ pub fn configure_s3_service(params: S3ConnectParams) -> Result<(S3, ConfiguredS3
     ))
 }
 
-/// Apply RetryLayer and optional ThrottleLayer (matches prior call-site behavior).
-pub fn apply_s3_operator_layers(op: Operator, layers: &S3LayerConfig) -> Operator {
+/// Apply RetryLayer and optional ThrottleLayer. Shared by every OpenDAL
+/// protocol (S3, WebDAV, Azure, GCS) so transfer behavior stays uniform.
+pub fn apply_operator_layers(op: Operator, layers: &OperatorLayerConfig) -> Operator {
     use opendal::layers::RetryLayer;
     let mut op = op.layer(RetryLayer::new().with_max_times(3));
 
@@ -400,7 +415,7 @@ pub fn apply_s3_operator_layers(op: Operator, layers: &S3LayerConfig) -> Operato
 /// Build OpenDAL S3 operator: sanitize → configure → finish → layers → check.
 pub async fn open_s3_operator(
     params: S3ConnectParams,
-    layers: S3LayerConfig,
+    layers: OperatorLayerConfig,
     check_error_prefix: &str,
 ) -> Result<(Operator, ConfiguredS3), String> {
     let (builder, configured) = configure_s3_service(params.clone())?;
@@ -408,12 +423,12 @@ pub async fn open_s3_operator(
     // OpenDAL 0.58+: `Operator::new` returns a finished operator directly.
     let op = Operator::new(builder).map_err(|e| format!("Failed to create S3 builder: {}", e))?;
 
-    let op = apply_s3_operator_layers(op, &layers);
-    let op = apply_s3_ssl_settings(op, params.danger_disable_ssl_verification)?;
+    let op = apply_operator_layers(op, &layers);
+    let op = apply_tls_bypass(op, params.danger_disable_ssl_verification)?;
 
     op.check()
         .await
-        .map_err(|e| format_s3_connect_error(check_error_prefix, e))?;
+        .map_err(|e| format_connect_error(check_error_prefix, e))?;
 
     Ok((op, configured))
 }
@@ -462,7 +477,7 @@ mod tests {
 
     #[test]
     fn format_error_invalid_uri_hint() {
-        let msg = format_s3_connect_error(
+        let msg = format_connect_error(
             "S3 connection check failed",
             "building http request, source: invalid uri character",
         );
@@ -471,7 +486,7 @@ mod tests {
 
     #[test]
     fn format_error_generic_connect_not_ssl_hint() {
-        let msg = format_s3_connect_error(
+        let msg = format_connect_error(
             "Connection check failed",
             "error sending request for url (https://example.com): client error (Connect)",
         );
@@ -484,7 +499,7 @@ mod tests {
 
     #[test]
     fn format_error_certificate_gets_ssl_hint() {
-        let msg = format_s3_connect_error(
+        let msg = format_connect_error(
             "Connection check failed",
             "error sending request: invalid peer certificate: UnknownIssuer",
         );

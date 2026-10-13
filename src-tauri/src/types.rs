@@ -39,7 +39,7 @@ pub struct TransferProgressPayload {
 pub struct ConnectionProfile {
     pub id: String,
     pub name: String,
-    // Protocol: s3 (default) or sftp
+    // Protocol: s3 (default), sftp, ftp/ftps, webdav, azure, or gcs
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
     // S3 fields
@@ -64,6 +64,11 @@ pub struct ConnectionProfile {
     pub username: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key_path: Option<String>,
+    /// GCS service-account JSON path. The file (a secret) stays on disk; only
+    /// its path is stored here. When absent, a pasted JSON credential lives in
+    /// the keyring like any other protocol password.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential_path: Option<String>,
     // FTP/FTPS fields
     #[serde(skip_serializing_if = "Option::is_none")]
     pub passive_mode: Option<bool>,
