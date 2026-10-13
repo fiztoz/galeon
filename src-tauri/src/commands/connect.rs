@@ -329,6 +329,9 @@ pub struct ReconnectResult {
     pub session_id: String,
     pub bucket: String,
     pub profile_id: String,
+    /// Protocol the reopened session speaks. Sent so the frontend can load the
+    /// right capability flags (previously defaulted to "s3" for every reopen).
+    pub protocol: String,
 }
 
 #[tauri::command]
@@ -347,13 +350,26 @@ pub async fn auto_reconnect(
         let profile_id = &entry.profile_id;
         let config = read_config(&app_handle)?;
         if let Some(profile) = config.profiles.iter().find(|p| &p.id == profile_id) {
+            let protocol = profile
+                .protocol
+                .as_deref()
+                .unwrap_or("s3")
+                .trim()
+                .to_ascii_lowercase();
+            // Auto-reconnect currently covers the OpenDAL protocols only.
+            // Native sessions (sftp/ftp/ftps) have no reopen path here, so
+            // their queued transfers stay queued until the user connects.
+            if !matches!(protocol.as_str(), "s3" | "webdav" | "azure" | "gcs") {
+                return Ok(None);
+            }
+            let profile_id = profile_id.clone();
             // Load credentials from session cache or keyring (lazy, on-demand)
             let cache = &state.credential_cache;
             let (access_key, secret_key) =
-                credentials::load_credentials_cached(cache, profile_id, now_ms())?;
+                credentials::load_credentials_cached(cache, &profile_id, now_ms())?;
 
             let tunnel_password = if profile.ssh_tunnel_profile_id.is_none() {
-                credentials::load_ssh_tunnel_password_cached(cache, profile_id, now_ms())?
+                credentials::load_ssh_tunnel_password_cached(cache, &profile_id, now_ms())?
             } else {
                 None
             };
@@ -365,62 +381,183 @@ pub async fn auto_reconnect(
             )?;
             let (mut profile, ssh_tunnel) =
                 ssh_tunnel::open_for_profile(profile, tunnel_password).await?;
-            let (op, configured) = s3_connect::open_s3_operator(
-                s3_connect::S3ConnectParams {
-                    endpoint: profile.endpoint.clone(),
-                    region: profile.region.clone(),
-                    access_key,
-                    secret_key,
-                    bucket: profile.bucket.clone(),
-                    use_virtual_host_style: profile.use_virtual_host_style,
-                    storage_class: profile.storage_class.clone(),
-                    danger_disable_ssl_verification: profile.danger_disable_ssl_verification,
-                },
-                // Auto-reconnect: retry only (no bandwidth throttle).
-                s3_connect::OperatorLayerConfig {
-                    max_bandwidth_bytes_per_sec: None,
-                },
-                "Auto-reconnect connection check failed",
-            )
-            .await?;
 
-            profile.endpoint = configured.endpoint.clone();
-            profile.region = configured.region.clone();
-            profile.access_key = configured.access_key.clone();
-            profile.secret_key = configured.secret_key.clone();
-            profile.bucket = Some(configured.bucket.clone());
-            let bucket = configured.bucket.clone();
+            match protocol.as_str() {
+                "s3" => {
+                    let (op, configured) = s3_connect::open_s3_operator(
+                        s3_connect::S3ConnectParams {
+                            endpoint: profile.endpoint.clone(),
+                            region: profile.region.clone(),
+                            access_key,
+                            secret_key,
+                            bucket: profile.bucket.clone(),
+                            use_virtual_host_style: profile.use_virtual_host_style,
+                            storage_class: profile.storage_class.clone(),
+                            danger_disable_ssl_verification: profile
+                                .danger_disable_ssl_verification,
+                        },
+                        s3_connect::OperatorLayerConfig {
+                            max_bandwidth_bytes_per_sec: None,
+                        },
+                        "Auto-reconnect connection check failed",
+                    )
+                    .await?;
 
-            let session_uuid = Uuid::new_v4().to_string();
-            let s3_config = build_s3_session_config(
-                &profile,
-                configured
-                    .access_key
-                    .ok_or_else(|| "S3 access key is required.".to_string())?,
-                configured
-                    .secret_key
-                    .ok_or_else(|| "S3 secret key is required.".to_string())?,
-            )?;
-            let mut sessions = state.active_sessions.write().await;
-            sessions.insert(session_uuid.clone(), StorageSession::OpenDAL(op));
-            drop(sessions);
-            store_s3_session_config(&state, &session_uuid, s3_config).await;
-            if let Some(tunnel) = ssh_tunnel {
-                state
-                    .ssh_tunnels
-                    .write()
-                    .await
-                    .insert(session_uuid.clone(), tunnel);
+                    profile.endpoint = configured.endpoint.clone();
+                    profile.region = configured.region.clone();
+                    profile.access_key = configured.access_key.clone();
+                    profile.secret_key = configured.secret_key.clone();
+                    profile.bucket = Some(configured.bucket.clone());
+                    let bucket = configured.bucket.clone();
+
+                    let session_uuid = Uuid::new_v4().to_string();
+                    let s3_config = build_s3_session_config(
+                        &profile,
+                        configured
+                            .access_key
+                            .ok_or_else(|| "S3 access key is required.".to_string())?,
+                        configured
+                            .secret_key
+                            .ok_or_else(|| "S3 secret key is required.".to_string())?,
+                    )?;
+                    let mut sessions = state.active_sessions.write().await;
+                    sessions.insert(session_uuid.clone(), StorageSession::OpenDAL(op));
+                    drop(sessions);
+                    store_s3_session_config(&state, &session_uuid, s3_config).await;
+                    if let Some(tunnel) = ssh_tunnel {
+                        state
+                            .ssh_tunnels
+                            .write()
+                            .await
+                            .insert(session_uuid.clone(), tunnel);
+                    }
+
+                    return Ok(Some(ReconnectResult {
+                        session_id: session_uuid,
+                        bucket,
+                        profile_id: profile_id.to_string(),
+                        protocol: "s3".to_string(),
+                    }));
+                }
+                "webdav" => {
+                    let op = http_connect::open_webdav_operator(
+                        http_connect::WebdavConnectParams {
+                            endpoint: profile.endpoint.clone(),
+                            username: profile.username.clone(),
+                            password: secret_key,
+                            danger_disable_ssl_verification: profile
+                                .danger_disable_ssl_verification,
+                        },
+                        s3_connect::OperatorLayerConfig {
+                            max_bandwidth_bytes_per_sec: None,
+                        },
+                        "Auto-reconnect connection check failed",
+                    )
+                    .await?;
+                    let bucket = profile.endpoint.clone().unwrap_or_default();
+                    let session_uuid = Uuid::new_v4().to_string();
+                    let mut sessions = state.active_sessions.write().await;
+                    sessions.insert(session_uuid.clone(), StorageSession::OpenDAL(op));
+                    drop(sessions);
+                    if let Some(tunnel) = ssh_tunnel {
+                        state
+                            .ssh_tunnels
+                            .write()
+                            .await
+                            .insert(session_uuid.clone(), tunnel);
+                    }
+
+                    return Ok(Some(ReconnectResult {
+                        session_id: session_uuid,
+                        bucket,
+                        profile_id: profile_id.to_string(),
+                        protocol: "webdav".to_string(),
+                    }));
+                }
+                "azure" => {
+                    let op = http_connect::open_azblob_operator(
+                        http_connect::AzureConnectParams {
+                            endpoint: profile.endpoint.clone(),
+                            container: profile.bucket.clone(),
+                            account_name: profile.username.clone(),
+                            account_key: secret_key,
+                            danger_disable_ssl_verification: profile
+                                .danger_disable_ssl_verification,
+                        },
+                        s3_connect::OperatorLayerConfig {
+                            max_bandwidth_bytes_per_sec: None,
+                        },
+                        "Auto-reconnect connection check failed",
+                    )
+                    .await?;
+                    let bucket = profile
+                        .bucket
+                        .clone()
+                        .unwrap_or_else(|| profile.endpoint.clone().unwrap_or_default());
+                    let session_uuid = Uuid::new_v4().to_string();
+                    let mut sessions = state.active_sessions.write().await;
+                    sessions.insert(session_uuid.clone(), StorageSession::OpenDAL(op));
+                    drop(sessions);
+                    if let Some(tunnel) = ssh_tunnel {
+                        state
+                            .ssh_tunnels
+                            .write()
+                            .await
+                            .insert(session_uuid.clone(), tunnel);
+                    }
+
+                    return Ok(Some(ReconnectResult {
+                        session_id: session_uuid,
+                        bucket,
+                        profile_id: profile_id.to_string(),
+                        protocol: "azure".to_string(),
+                    }));
+                }
+                "gcs" => {
+                    let op = http_connect::open_gcs_operator(
+                        http_connect::GcsConnectParams {
+                            endpoint: profile.endpoint.clone(),
+                            bucket: profile.bucket.clone(),
+                            credential_path: profile.credential_path.clone(),
+                            credential: secret_key,
+                            danger_disable_ssl_verification: profile
+                                .danger_disable_ssl_verification,
+                        },
+                        s3_connect::OperatorLayerConfig {
+                            max_bandwidth_bytes_per_sec: None,
+                        },
+                        "Auto-reconnect connection check failed",
+                    )
+                    .await?;
+                    let bucket = profile
+                        .bucket
+                        .clone()
+                        .unwrap_or_else(|| profile.endpoint.clone().unwrap_or_default());
+                    let session_uuid = Uuid::new_v4().to_string();
+                    let mut sessions = state.active_sessions.write().await;
+                    sessions.insert(session_uuid.clone(), StorageSession::OpenDAL(op));
+                    drop(sessions);
+                    if let Some(tunnel) = ssh_tunnel {
+                        state
+                            .ssh_tunnels
+                            .write()
+                            .await
+                            .insert(session_uuid.clone(), tunnel);
+                    }
+
+                    return Ok(Some(ReconnectResult {
+                        session_id: session_uuid,
+                        bucket,
+                        profile_id: profile_id.to_string(),
+                        protocol: "gcs".to_string(),
+                    }));
+                }
+                _ => {
+                    return Ok(None);
+                }
             }
-
-            return Ok(Some(ReconnectResult {
-                session_id: session_uuid,
-                bucket,
-                profile_id: profile_id.clone(),
-            }));
         }
     }
-
     Ok(None)
 }
 

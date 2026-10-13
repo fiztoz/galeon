@@ -247,6 +247,7 @@ fn test_reconnect_result_serialization() {
         session_id: "session-123".to_string(),
         bucket: "my-bucket".to_string(),
         profile_id: "profile-456".to_string(),
+        protocol: "s3".to_string(),
     };
 
     let json = serde_json::to_string(&result).unwrap();
