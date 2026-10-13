@@ -379,6 +379,11 @@ html[data-theme='light'] .connection-field { background: #fff; }
 .file-table tbody { font-size: 13px; }
 .file-table th:nth-child(3), .file-table td:nth-child(3), .file-table th:nth-child(4), .file-table td:nth-child(4) { text-align: right; }
 .file-table td[colspan] { padding: 56px 24px; }
+/* Windowed-render spacers: their height *is* the scroll offset, so the normal
+   cell padding and row divider must not apply or the list grows on each scroll. */
+.file-table tr.galeon-spacer td { padding: 0; height: 0; border: 0; }
+.file-table tr.galeon-spacer { border: 0; }
+.file-table tr.galeon-spacer:hover { background: transparent; }
 .file-table .file-name > svg { width: 16px; height: 16px; }
 .pane-filter-button { padding: 4px 9px; border-radius: 4px; color: var(--color-zinc-500); font-size: 11px; line-height: 16px; font-weight: 500; }
 .pane-filter-button:hover { color: var(--color-zinc-200); background: var(--color-zinc-800); }

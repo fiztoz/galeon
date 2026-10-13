@@ -64,6 +64,11 @@ pub(crate) fn compute_chunk_ranges(
 
 /// Whole-transfer retries with backoff + UI `transfer-retrying` events.
 /// Downloads already resume from `.part`; uploads restart (OpenDAL multipart has no mid-resume).
+///
+/// Always returns `Result`, never unwinds: callers run this inside `tokio::spawn`,
+/// where a panic would be discarded silently and leave the queue entry stuck at
+/// `active`. `catch_transfer_panic` turns that into a normal failure so
+/// `finalize_transfer_job` always emits `transfer-failed`.
 pub(crate) async fn run_transfer_with_retries<F, Fut>(
     handle: AppHandleType,
     remote_key: String,
@@ -75,7 +80,12 @@ where
     Fut: std::future::Future<Output = Result<(), String>>,
 {
     use tauri::Emitter;
-    transfer_retry::with_transient_retries(
+    // Boxed deliberately: transfer futures carry an 8 MiB chunk buffer
+    // (`CHUNK_SIZE`) in their async state machine. Unboxed, the whole
+    // retry-and-finalize chain is laid out in this caller's stack frame, which
+    // overflows a 2 MiB thread stack (the libtest default) in the boundary
+    // tests. Boxing keeps that state on the heap.
+    transfer_retry::catch_transfer_panic(Box::pin(transfer_retry::with_transient_retries(
         transfer_retry::TRANSFER_MAX_ATTEMPTS,
         |attempt, delay, err| {
             if control.cancel.is_cancelled() {
@@ -102,7 +112,7 @@ where
                 fut.await
             }
         },
-    )
+    )))
     .await
 }
 

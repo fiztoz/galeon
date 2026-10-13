@@ -1,5 +1,24 @@
 ## [Unreleased]
 
+### Fixed
+
+- A render error no longer blanks the window. An error boundary wraps the app and offers Try again
+  or Reload, and states that profiles and keychain credentials are untouched.
+- A panic inside a transfer body no longer leaves a transfer spinning forever. Transfer jobs run in
+  `tokio::spawn`, where an unwinding task is discarded silently — no failure event, and the queue
+  entry stayed `active` until the next app launch. Panics are now converted into an ordinary
+  failure so the job always finalizes.
+- Remote directory listing no longer duplicates its protocol logic: `list_directory` and the sync
+  tree walker share one implementation.
+
+### Changed
+
+- The Explorer list is windowed, so a flat prefix with tens of thousands of objects no longer
+  mounts every row. Row heights are measured, because the compact layout renders a second date line.
+- `list_directory` is capped at 20,000 objects per call and reports `truncated`. The UI shows
+  "showing the first N" rather than silently presenting a partial bucket as complete. Sync
+  deliberately does not cap — a truncated plan would omit files the user believes are backed up.
+
 ### Added
 
 - WebDAV connections: connect to Nextcloud/ownCloud, NAS boxes, and shared-hosting DAV URLs with optional username/password (anonymous shares work too).

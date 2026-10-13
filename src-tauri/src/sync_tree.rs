@@ -149,7 +149,10 @@ async fn walk_remote_tree_bfs(
     let base = prefix.trim_end_matches('/').to_string();
     let mut queue: Vec<String> = vec![prefix.to_string()];
     while let Some(dir) = queue.pop() {
-        let objects = list_remote_dir(session, &dir).await?;
+        // No cap: a truncated directory listing here would produce a sync plan that
+        // silently omits files the user believes are backed up. The UI path
+        // caps separately and says so (see `list_directory`).
+        let objects = list_remote_dir(session, &dir, None).await?;
         for obj in objects {
             match obj.object_type {
                 ObjectType::Folder => {

@@ -17,12 +17,22 @@ pub(crate) fn remote_key_relative_to(full_key: &str, base: &str) -> String {
     normalize_rel_path(rel)
 }
 
-/// List a single remote directory, reusing the exact per-protocol logic from
-/// `list_directory` (kept as a free fn so the recursive walker and the command
-/// share one code path).
+/// List a single remote directory across every session protocol.
+///
+/// This is the one implementation of directory listing: the `list_directory`
+/// command delegates here, and so does the sync tree walker. Keep per-protocol
+/// branching in this function rather than at the call sites — two copies of
+/// this match arm is exactly the divergence bug AGENTS.md 3.1 warns about.
+///
+/// `max_objects` stops the walk early so a huge flat prefix cannot allocate
+/// without bound. Pass `None` when the listing must be complete: the sync
+/// walker uses this to build a plan, and a silently truncated plan would skip
+/// files the user believes are synced. The UI passes `Some(MAX_LISTING_OBJECTS)`
+/// and reports the truncation to the user instead.
 pub(crate) async fn list_remote_dir(
     session: &StorageSession,
     prefix: &str,
+    max_objects: Option<usize>,
 ) -> Result<Vec<GaleonObject>, String> {
     match session {
         StorageSession::OpenDAL(op) => {
@@ -45,6 +55,13 @@ pub(crate) async fn list_remote_dir(
                 .await
                 .map_err(|e| format!("Stream error: {}", e))?
             {
+                // Stop one past the cap: seeing the (cap + 1)th entry is how
+                // the caller learns the listing was truncated.
+                if let Some(cap) = max_objects {
+                    if list.len() > cap {
+                        break;
+                    }
+                }
                 let path = entry.path().to_string();
                 if path == prefix_str {
                     continue;
@@ -80,6 +97,9 @@ pub(crate) async fn list_remote_dir(
                     last_modified,
                 });
             }
+            if let Some(cap) = max_objects {
+                list.truncate(cap);
+            }
             Ok(list)
         }
         StorageSession::NativeSFTP(sftp_arc) => {
@@ -91,20 +111,23 @@ pub(crate) async fn list_remote_dir(
             };
             let dir_path = sftp_native::collapse_slashes(&dir_path);
             let entries = sftp.list_dir(&dir_path)?;
-            Ok(entries
-                .into_iter()
-                .map(|e| GaleonObject {
-                    name: e.name,
-                    full_key: e.path,
-                    object_type: if e.is_dir {
-                        ObjectType::Folder
-                    } else {
-                        ObjectType::File
-                    },
-                    size_bytes: Some(e.size),
-                    last_modified: e.last_modified,
-                })
-                .collect())
+            Ok(cap_objects(
+                entries
+                    .into_iter()
+                    .map(|e| GaleonObject {
+                        name: e.name,
+                        full_key: e.path,
+                        object_type: if e.is_dir {
+                            ObjectType::Folder
+                        } else {
+                            ObjectType::File
+                        },
+                        size_bytes: Some(e.size),
+                        last_modified: e.last_modified,
+                    })
+                    .collect(),
+                max_objects,
+            ))
         }
         StorageSession::FTP(ftp_arc) => {
             let mut ftp = ftp_arc.lock().map_err(|e| format!("Lock error: {}", e))?;
@@ -115,20 +138,34 @@ pub(crate) async fn list_remote_dir(
             };
             let dir_path = sftp_native::collapse_slashes(&dir_path);
             let entries = ftp.list_dir(&dir_path)?;
-            Ok(entries
-                .into_iter()
-                .map(|e| GaleonObject {
-                    name: e.name,
-                    full_key: e.path,
-                    object_type: if e.is_dir {
-                        ObjectType::Folder
-                    } else {
-                        ObjectType::File
-                    },
-                    size_bytes: Some(e.size),
-                    last_modified: e.last_modified,
-                })
-                .collect())
+            Ok(cap_objects(
+                entries
+                    .into_iter()
+                    .map(|e| GaleonObject {
+                        name: e.name,
+                        full_key: e.path,
+                        object_type: if e.is_dir {
+                            ObjectType::Folder
+                        } else {
+                            ObjectType::File
+                        },
+                        size_bytes: Some(e.size),
+                        last_modified: e.last_modified,
+                    })
+                    .collect(),
+                max_objects,
+            ))
         }
     }
+}
+
+/// Truncate a listing to `max_objects`.
+///
+/// SFTP and FTP hand back the whole directory at once, so the cap is applied
+/// here rather than during the walk.
+fn cap_objects(mut list: Vec<GaleonObject>, max_objects: Option<usize>) -> Vec<GaleonObject> {
+    if let Some(cap) = max_objects {
+        list.truncate(cap);
+    }
+    list
 }

@@ -7,7 +7,7 @@ pub async fn list_directory(
     state: tauri::State<'_, GaleonEngine>,
     session_id: String,
     prefix: String,
-) -> Result<Vec<GaleonObject>, String> {
+) -> Result<DirectoryListing, String> {
     let sessions = state.active_sessions.read().await;
     let session = sessions
         .get(&session_id)
@@ -15,117 +15,21 @@ pub async fn list_directory(
         .clone();
     drop(sessions);
 
-    match session {
-        StorageSession::OpenDAL(op) => {
-            let prefix_str = if prefix.is_empty() {
-                String::new()
-            } else if prefix.ends_with('/') {
-                prefix.clone()
-            } else {
-                format!("{}/", prefix)
-            };
+    // One listing implementation lives in `listing::list_remote_dir`; the sync
+    // tree walker shares it. Do not re-inline the protocol match here.
+    let limit = MAX_LISTING_OBJECTS;
+    let objects = list_remote_dir(&session, &prefix, Some(limit)).await?;
+    let returned = objects.len();
 
-            let mut lister = op
-                .lister_with(&prefix_str)
-                .await
-                .map_err(|e| format!("Lister error: {}", e))?;
-
-            let mut list = Vec::new();
-            while let Some(entry) = lister
-                .try_next()
-                .await
-                .map_err(|e| format!("Stream error: {}", e))?
-            {
-                let path = entry.path().to_string();
-                if path == prefix_str {
-                    continue;
-                }
-
-                let meta = entry.metadata();
-                let is_dir = meta.mode().is_dir();
-                let name = if is_dir {
-                    path.trim_end_matches('/')
-                        .split('/')
-                        .next_back()
-                        .unwrap_or("")
-                        .to_string()
-                } else {
-                    path.split('/').next_back().unwrap_or("").to_string()
-                };
-
-                let (size_bytes, last_modified) = if is_dir {
-                    (None, None)
-                } else {
-                    let size = meta.content_length();
-                    let last_mod = meta.last_modified().map(|t| t.into_inner().to_string());
-                    (Some(size), last_mod)
-                };
-
-                list.push(GaleonObject {
-                    name,
-                    full_key: path,
-                    object_type: if is_dir {
-                        ObjectType::Folder
-                    } else {
-                        ObjectType::File
-                    },
-                    size_bytes,
-                    last_modified,
-                });
-            }
-
-            Ok(list)
-        }
-        StorageSession::NativeSFTP(sftp_arc) => {
-            let sftp = sftp_arc.lock().map_err(|e| format!("Lock error: {}", e))?;
-            // For empty prefix, use pwd to get current directory
-            let dir_path = if prefix.is_empty() {
-                sftp.pwd().unwrap_or_else(|_| "/".to_string())
-            } else {
-                prefix.clone()
-            };
-            let dir_path = sftp_native::collapse_slashes(&dir_path);
-            let entries = sftp.list_dir(&dir_path)?;
-            Ok(entries
-                .into_iter()
-                .map(|e| GaleonObject {
-                    name: e.name,
-                    full_key: e.path,
-                    object_type: if e.is_dir {
-                        ObjectType::Folder
-                    } else {
-                        ObjectType::File
-                    },
-                    size_bytes: Some(e.size),
-                    last_modified: e.last_modified,
-                })
-                .collect())
-        }
-        StorageSession::FTP(ftp_arc) => {
-            let mut ftp = ftp_arc.lock().map_err(|e| format!("Lock error: {}", e))?;
-            let dir_path = if prefix.is_empty() {
-                ftp.pwd().unwrap_or_else(|_| "/".to_string())
-            } else {
-                prefix.clone()
-            };
-            let dir_path = sftp_native::collapse_slashes(&dir_path);
-            let entries = ftp.list_dir(&dir_path)?;
-            Ok(entries
-                .into_iter()
-                .map(|e| GaleonObject {
-                    name: e.name,
-                    full_key: e.path,
-                    object_type: if e.is_dir {
-                        ObjectType::Folder
-                    } else {
-                        ObjectType::File
-                    },
-                    size_bytes: Some(e.size),
-                    last_modified: e.last_modified,
-                })
-                .collect())
-        }
-    }
+    // Re-listing without a cap just to confirm overflow would double the IPC
+    // cost this cap exists to avoid. A completely full page is the honest
+    // signal available that the prefix holds more than the cap.
+    Ok(DirectoryListing {
+        truncated: returned >= limit,
+        objects,
+        returned,
+        limit,
+    })
 }
 
 // 4. File System Helpers
