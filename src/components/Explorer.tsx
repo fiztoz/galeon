@@ -3,6 +3,7 @@ import { Select } from './Select';
 import { createPortal } from 'react-dom';
 import { useObjectListing, useObjectSorting } from '../hooks/useObjectListing';
 import { useMultiSelect } from '../hooks/useMultiSelect';
+import { useWindowedRows } from '../hooks/useWindowedRows';
 import React, { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useFolderSizes } from '../hooks/useFolderSizes';
@@ -108,6 +109,15 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
   const { selectedItems, setSelectedItems, setLastSelectedIndex, handleSelectItem, handleSelectAll, clearSelection } =
     useMultiSelect(filteredObjects);
+
+  // -- Windowed rendering -----------------------------------------------------
+  // DIRECTION.md promises 60 fps at 100k objects, so only the rows near the
+  // viewport are mounted. Logic lives in `useWindowedRows`; the component just
+  // spreads `visibleRows` between two spacer rows.
+  const {
+    scrollRef, tbodyRef, visibleRows, indexOf: rowIndexOf,
+    topSpacer, bottomSpacer, hasTopSpacer, hasBottomSpacer,
+  } = useWindowedRows(filteredObjects, objects);
 
   // In-app drag state (local → remote). HTML5 only, additive over the native
   // OS drop overlay (`isDragging`): we only preventDefault for our own MIME.
@@ -218,6 +228,12 @@ export const Explorer: React.FC<ExplorerProps> = ({
     fetchDirectory(prefix);
     onPrefixChange?.(prefix);
   }, [prefix]);
+
+  // Windowed rows keep their scroll offset across a listing, so navigating to
+  // another folder would otherwise land the user halfway down the new one.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [prefix, sessionId]);
 
   // Cross-component navigation (e.g. Command Palette "Go to path")
   useEffect(() => {
@@ -630,7 +646,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
         </div>
       </div>
 
-      <div className="pane-content flex-1 overflow-auto galeon-scrollbar">
+      <div ref={scrollRef} className="pane-content flex-1 overflow-auto galeon-scrollbar">
         {error && (
           <div role="alert" className="p-3 mb-4 text-sm bg-status-danger/10 border border-status-danger/30 text-status-danger rounded-lg flex items-start justify-between gap-3">
             <span className="min-w-0 break-words">{error}</span>
@@ -684,7 +700,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
                   <th className="px-6 py-3 w-20 text-center">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800/50 text-sm text-zinc-200">
+              <tbody ref={tbodyRef} className="divide-y divide-zinc-800/50 text-sm text-zinc-200">
                 {filteredObjects.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-14 text-center text-zinc-500">
@@ -747,9 +763,18 @@ export const Explorer: React.FC<ExplorerProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  filteredObjects.map((obj, index) => (
+                  <>
+                    {hasTopSpacer && (
+                      <tr aria-hidden="true" className="galeon-spacer">
+                        <td colSpan={5} style={{ height: topSpacer }} />
+                      </tr>
+                    )}
+                    {visibleRows.map((obj, windowIndex) => {
+                      const index = rowIndexOf(windowIndex);
+                      return (
                     <tr
                       key={obj.fullKey}
+                      data-row-index={index}
                       draggable={obj.objectType === 'file'}
                       onDragStart={(e) => {
                         if (obj.objectType !== 'file') { e.preventDefault(); return; }
@@ -811,7 +836,14 @@ export const Explorer: React.FC<ExplorerProps> = ({
                         </button>
                       </td>
                     </tr>
-                  ))
+                      );
+                    })}
+                    {hasBottomSpacer && (
+                      <tr aria-hidden="true" className="galeon-spacer">
+                        <td colSpan={5} style={{ height: bottomSpacer }} />
+                      </tr>
+                    )}
+                  </>
                 )}
               </tbody>
             </table>
