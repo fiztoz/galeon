@@ -117,6 +117,7 @@ If you need “clean a string for connection fields,” **do not** invent `clean
 - **Do not** mix pure rustfmt/prettier of unrelated files with feature work in the same commit.
 - Keep versions in sync when bumping: `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json` (build scripts enforce this).
 - Commit style in this repo: short imperative subject (`feat:`, `fix:`, `refactor:`, `docs:`), body explains why when non-obvious.
+- **No AI/model attribution.** Never add `Co-Authored-By`, `Co-authored-by`, `Generated with`, or any trailer naming an AI model, vendor, or agent identity. The human owner's own trailer (`Hanafee Hama <fiztoz@users.noreply.github.com>`) is fine — it is a person. Attribution is not a credit decision an agent may make on the repo owner's behalf. `.githooks/commit-msg` rejects such messages (`git config core.hooksPath .githooks` to enable).
 - Do not commit secrets, app-specific passwords, or notarization credentials.
 
 ### 3.8 Tests

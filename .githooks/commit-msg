@@ -1,0 +1,38 @@
+#!/bin/sh
+# Reject commit messages that attribute the change to an AI model or agent.
+#
+# Why: commit authorship is the repo owner's decision, not an agent's. Galeon is a
+# public repo, so a bogus trailer ("Co-Authored-By: <model name>") is permanent
+# history that misrepresents who reviewed and stood behind the code. PR #39
+# shipped one by mistake; this hook keeps it from recurring.
+#
+# Enable once per clone:
+#   git config core.hooksPath .githooks
+#
+# The owner's own trailer is allowed. Everything else naming a model, vendor, or
+# agent is not.
+
+msg_file="$1"
+[ -f "$msg_file" ] || exit 0
+
+OWNER_RE='fiztoz@users\.noreply\.github\.com'
+
+# Any Co-Authored-By / Signed-off-by trailer naming something other than the owner.
+if grep -iE '^(co-authored-by|co-authored|signed-off-by):' "$msg_file" \
+   | grep -vE "$OWNER_RE" \
+   | grep -q .; then
+  echo "commit-msg: AI/agent attribution in a trailer is not allowed (see AGENTS.md §3.7)." >&2
+  echo "            Only the human owner's trailer is permitted." >&2
+  exit 1
+fi
+
+# Trailers or prose naming a model / vendor / agent, wherever they appear.
+if grep -iE 'co-authored-by:|generated with|claude|gpt-[0-9]|chatgpt|gemini|copilot|anthropic|openai|codex|cursor ai|aider|space bunny|cat jam|step-5|sonnet|opus|haiku' "$msg_file" \
+   | grep -vE "$OWNER_RE" \
+   | grep -q .; then
+  echo "commit-msg: commit message names an AI model, vendor, or agent (see AGENTS.md §3.7)." >&2
+  echo "            Describe the change; do not sign it with a model identity." >&2
+  exit 1
+fi
+
+exit 0
