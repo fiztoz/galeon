@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { GaleonObject } from '../types';
+import type { DirectoryListing, GaleonObject } from '../types';
 
 export function useObjectListing(sessionId: string) {
   const [prefix, setPrefix] = useState('');
@@ -10,6 +10,9 @@ export function useObjectListing(sessionId: string) {
   // Distinct from `error`, which any action (delete, rename…) can set: this means the
   // current listing failed, so the rows we show are unknown rather than empty.
   const [listFailed, setListFailed] = useState(false);
+  // Set when the backend capped the listing, so the UI can say "showing the
+  // first N" instead of letting a partial bucket look complete.
+  const [truncated, setTruncated] = useState<{ returned: number; limit: number } | null>(null);
 
   const listNonceRef = useRef(0);
 
@@ -22,25 +25,27 @@ export function useObjectListing(sessionId: string) {
     setError('');
     setListFailed(false);
     try {
-      const res = await invoke<GaleonObject[]>('list_directory', {
+      const res = await invoke<DirectoryListing>('list_directory', {
         sessionId,
         prefix: currentPrefix,
       });
       if (nonce !== listNonceRef.current) return;
-      setObjects(res);
+      setObjects(res.objects);
+      setTruncated(res.truncated ? { returned: res.returned, limit: res.limit } : null);
     } catch (err: unknown) {
       if (nonce !== listNonceRef.current) return;
       const msg = typeof err === 'string' ? err : err instanceof Error ? err.message : String(err);
       setError(msg.replace(/^Error:\s*/i, '') || 'Failed to list directory.');
       setListFailed(true);
       setObjects([]);
+      setTruncated(null);
     } finally {
       // A newer request owns the spinner from here on.
       if (nonce === listNonceRef.current) setLoading(false);
     }
   };
 
-  return { prefix, setPrefix, objects, loading, error, setError, listFailed, fetchDirectory };
+  return { prefix, setPrefix, objects, loading, error, setError, listFailed, truncated, fetchDirectory };
 }
 
 export function useObjectSorting(objects: GaleonObject[], folderSizes: Record<string, { totalBytes?: number }>) {

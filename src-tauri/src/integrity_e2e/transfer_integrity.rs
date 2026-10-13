@@ -406,12 +406,15 @@ async fn test_tier1_f25_list_directory() {
     op.write("tier1_f25/dir1/file2.txt", "data2").await.unwrap();
 
     let state = ctx.app.state::<GaleonEngine>();
-    let list = list_directory(state, ctx.session_id.clone(), "tier1_f25/dir1/".to_string())
+    let listing = list_directory(state, ctx.session_id.clone(), "tier1_f25/dir1/".to_string())
         .await
         .unwrap();
 
-    assert!(list.len() >= 2);
-    let names: Vec<String> = list.iter().map(|o| o.name.clone()).collect();
+    // Two files in a tiny prefix: well under the cap, so nothing is hidden.
+    assert!(!listing.truncated);
+    assert_eq!(listing.returned, listing.objects.len());
+    assert!(listing.objects.len() >= 2);
+    let names: Vec<String> = listing.objects.iter().map(|o| o.name.clone()).collect();
     assert!(names.contains(&"file1.txt".to_string()));
     assert!(names.contains(&"file2.txt".to_string()));
     ctx.cleanup().await;

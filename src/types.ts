@@ -98,3 +98,18 @@ export interface GaleonObject {
   sizeBytes: number | null;
   lastModified: string | null;
 }
+
+/**
+ * Mirrors `types::DirectoryListing` (camelCase).
+ *
+ * The backend caps a single directory listing so one IPC message cannot carry
+ * an entire flat prefix. When `truncated` is set the UI must say so — silently
+ * showing a partial bucket reads as "this is everything", which is worse than
+ * a long wait.
+ */
+export interface DirectoryListing {
+  objects: GaleonObject[];
+  returned: number;
+  truncated: boolean;
+  limit: number;
+}

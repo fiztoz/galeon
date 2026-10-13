@@ -7,7 +7,7 @@ pub async fn list_directory(
     state: tauri::State<'_, GaleonEngine>,
     session_id: String,
     prefix: String,
-) -> Result<Vec<GaleonObject>, String> {
+) -> Result<DirectoryListing, String> {
     let sessions = state.active_sessions.read().await;
     let session = sessions
         .get(&session_id)
@@ -17,7 +17,19 @@ pub async fn list_directory(
 
     // One listing implementation lives in `listing::list_remote_dir`; the sync
     // tree walker shares it. Do not re-inline the protocol match here.
-    list_remote_dir(&session, &prefix).await
+    let limit = MAX_LISTING_OBJECTS;
+    let objects = list_remote_dir(&session, &prefix, Some(limit)).await?;
+    let returned = objects.len();
+
+    // Re-listing without a cap just to confirm overflow would double the IPC
+    // cost this cap exists to avoid. A completely full page is the honest
+    // signal available that the prefix holds more than the cap.
+    Ok(DirectoryListing {
+        truncated: returned >= limit,
+        objects,
+        returned,
+        limit,
+    })
 }
 
 // 4. File System Helpers

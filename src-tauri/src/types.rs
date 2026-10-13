@@ -22,6 +22,29 @@ pub struct GaleonObject {
     pub last_modified: Option<String>,
 }
 
+/// Maximum objects returned by one `list_directory` call.
+///
+/// A flat prefix on a real bucket can hold hundreds of thousands of keys
+/// (log/media buckets especially). Returning all of them meant one IPC message
+/// carrying the entire listing, which the frontend then had to allocate and
+/// parse in one go. The cap bounds that; `truncated` lets the UI say so rather
+/// than silently showing a partial bucket.
+pub const MAX_LISTING_OBJECTS: usize = 20_000;
+
+/// What `list_directory` returns: the rows to render plus enough context for
+/// the UI to be honest about a capped listing.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DirectoryListing {
+    pub objects: Vec<GaleonObject>,
+    /// Objects actually read before the cap stopped the walk.
+    pub returned: usize,
+    /// True when the prefix held more than `MAX_LISTING_OBJECTS` entries.
+    pub truncated: bool,
+    /// The cap that applied, so the UI can name it ("first 20,000").
+    pub limit: usize,
+}
+
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferProgressPayload {

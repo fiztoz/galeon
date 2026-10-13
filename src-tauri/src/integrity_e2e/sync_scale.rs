@@ -218,10 +218,10 @@ async fn test_tier4_s04_recursive_directory_transfer() {
     let mut dirs_to_list = vec!["tier4_s04/nested/".to_string()];
 
     while let Some(dir) = dirs_to_list.pop() {
-        let list = list_directory(state.clone(), ctx.session_id.clone(), dir)
+        let listing = list_directory(state.clone(), ctx.session_id.clone(), dir)
             .await
             .unwrap();
-        for obj in list {
+        for obj in listing.objects {
             match obj.object_type {
                 ObjectType::File => {
                     files_to_download.push(obj);

@@ -10,7 +10,7 @@ import { useFolderSizes } from '../hooks/useFolderSizes';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { useUploadPipeline, type PendingConflict } from '../hooks/useUploadPipeline';
 import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, MoreVertical, Loader2, AlertTriangle, Search, RotateCw } from 'lucide-react';
-import { ProtocolCapabilities, GaleonObject, StorageProtocol } from '../types';
+import { ProtocolCapabilities, DirectoryListing, GaleonObject, StorageProtocol } from '../types';
 import {
   ConflictDialog,
   ConfirmDialog,
@@ -80,7 +80,8 @@ export const Explorer: React.FC<ExplorerProps> = ({
 }) => {
   const isS3 = !protocol || protocol === 's3';
   const isFsProtocol = protocol === 'sftp' || protocol === 'ftp' || protocol === 'ftps';
-  const { prefix, setPrefix, objects, loading, error, setError, listFailed, fetchDirectory } = useObjectListing(sessionId);
+  const { prefix, setPrefix, objects, loading, error, setError, listFailed, truncated, fetchDirectory } =
+    useObjectListing(sessionId);
 
   // Modal states
   const [showCreateFolder, setShowCreateFolder] = useState(false);
@@ -342,11 +343,11 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
   const fetchAllFolders = async () => {
     try {
-      const result = await invoke<GaleonObject[]>('list_directory', {
+      const result = await invoke<DirectoryListing>('list_directory', {
         sessionId,
         prefix: '',
       });
-      const folders = result
+      const folders = result.objects
         .filter(obj => obj.objectType === 'folder')
         .map(obj => obj.fullKey);
       setAvailableFolders(folders);
@@ -658,6 +659,15 @@ export const Explorer: React.FC<ExplorerProps> = ({
             >
               <CloseIcon size={16} aria-hidden="true" />
             </button>
+          </div>
+        )}
+        {truncated && (
+          <div
+            role="status"
+            className="m-3 px-3 py-2 text-sm bg-status-warning/10 border border-status-warning/30 text-status-warning rounded-lg"
+          >
+            Showing the first {truncated.returned.toLocaleString()} objects.{' '}
+            This folder holds more — use search or filters to narrow it down.
           </div>
         )}
         {loading ? (
