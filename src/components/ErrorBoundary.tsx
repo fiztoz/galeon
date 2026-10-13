@@ -4,11 +4,13 @@ import React from 'react';
  * Catches render-time throws so a bad listing or a malformed profile cannot
  * leave the user staring at a blank window with no way back.
  *
- * Deliberately says nothing about the error's contents on screen: Galeon holds
- * credentials, and an OpenDAL or keyring error string can carry endpoint or
- * account detail. The message states what happened and what to try (DESIGN.md:
- * "state what happened and what to try"), and the details stay behind a
- * deliberate "copy details" so a user can report them if they choose.
+ * The headline states what happened and what to try (DESIGN.md: "state what
+ * happened and what to try") and names no error text. The message and component
+ * stack do render, but only inside a collapsed `<details>` and on an explicit
+ * "copy details" click — this boundary catches render errors, which are shape
+ * and type faults in the UI, not the OpenDAL or keyring error strings that can
+ * carry endpoint or account detail. Keep it that way: if this is ever widened to
+ * wrap backend calls, the disclosure has to go.
  */
 
 interface ErrorBoundaryState {
