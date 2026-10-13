@@ -59,6 +59,10 @@ function App() {
   const [syncProfiles, setSyncProfiles] = useState<SyncProfile[]>([]);
   const [syncPanelOpen, setSyncPanelOpen] = useState(false);
   const [syncPrefillProfile, setSyncPrefillProfile] = useState<SyncProfile | null>(null);
+  // "Run sync profile now" asks SyncPanel to compute the diff as soon as the
+  // profile is loaded. Execution still only happens through the panel's diff +
+  // delete-confirmation flow — never via a direct run_sync_profile_now invoke.
+  const [syncRunNow, setSyncRunNow] = useState(false);
 
   // Phase 12 — scheduled sync run notifications
   const [scheduleToast, setScheduleToast] = useState<string | null>(null);
@@ -616,20 +620,28 @@ function App() {
           keywords: 'editor external edit close stop watch',
           run: () => handleStopEditor(s.editorId),
         })),
-        { id: 'sync-open', label: 'Open Sync', keywords: 'sync mirror upload download diff', run: () => { setSyncPrefillProfile(null); setSyncPanelOpen(true); } },
+        { id: 'sync-open', label: 'Open Sync', keywords: 'sync mirror upload download diff', run: () => { setSyncPrefillProfile(null); setSyncRunNow(false); setSyncPanelOpen(true); } },
         ...syncProfiles.map((sp) => ({
           id: `run-sync-${sp.id}`,
           label: `Run sync: ${sp.name}`,
           hint: sp.direction === 'localToRemote' ? '→ remote' : '← local',
           keywords: 'sync mirror profile run',
-          run: () => { setSyncPrefillProfile(sp); setSyncPanelOpen(true); },
+          run: () => { setSyncPrefillProfile(sp); setSyncRunNow(false); setSyncPanelOpen(true); },
         })),
+        // "Run now" deliberately does NOT invoke run_sync_profile_now here: that
+        // path executes the profile's delete_extraneous deletions with no diff
+        // preview and no confirmation, and failures only hit console.error
+        // (DIRECTION.md: destructive actions always confirmed). The quick re-run
+        // affordance is kept by loading the profile and auto-computing the diff
+        // in SyncPanel — one keystroke still lands on the reviewed plan, and
+        // Apply reuses the existing delete-confirmation block, so the count the
+        // user approves is the count that runs. Errors surface in the panel.
         ...syncProfiles.map((sp) => ({
           id: `run-sync-now-${sp.id}`,
           label: `Run sync profile now: ${sp.name}`,
-          hint: sp.direction === 'localToRemote' ? '→ remote' : '← local',
-          keywords: 'sync mirror profile run now schedule immediate',
-          run: () => { invoke('run_sync_profile_now', { profileId: sp.id }).catch((err) => console.error('Run sync profile now failed:', err)); },
+          hint: sp.direction === 'localToRemote' ? '→ remote · previews diff' : '← local · previews diff',
+          keywords: 'sync mirror profile run now immediate',
+          run: () => { setSyncPrefillProfile(sp); setSyncRunNow(true); setSyncPanelOpen(true); },
         })),
         { id: 'settings', label: 'Open Settings', keywords: 'preferences config about privacy', run: () => setSettingsOpen(true) },
         { id: 'onboarding', label: 'Show Onboarding', keywords: 'welcome tutorial intro', run: handleShowOnboardingAgain },
@@ -733,7 +745,7 @@ function App() {
             onStopAll={handleStopAllEditors}
           />
           <button
-            onClick={() => { setSyncPrefillProfile(null); setSyncPanelOpen(true); }}
+            onClick={() => { setSyncPrefillProfile(null); setSyncRunNow(false); setSyncPanelOpen(true); }}
             title="Sync"
             className="ui-button ui-button-ghost"
           >
@@ -883,13 +895,14 @@ function App() {
       {/* Phase 11 — Sync Panel */}
       <SyncPanel
         open={syncPanelOpen}
-        onClose={() => { setSyncPanelOpen(false); setSyncPrefillProfile(null); }}
+        onClose={() => { setSyncPanelOpen(false); setSyncPrefillProfile(null); setSyncRunNow(false); }}
         sessionId={session.sessionId}
         connectionProfileId={session.profileId}
         profiles={profiles}
         syncProfiles={syncProfiles}
         currentRemotePrefix={recentPaths[0] ?? ''}
         prefillProfile={syncPrefillProfile}
+        runNow={syncRunNow}
         onSaveSyncProfile={handleSaveSyncProfile}
         onDeleteSyncProfile={handleDeleteSyncProfile}
         onSyncComplete={() => explorerCmdsRef.current?.refresh()}

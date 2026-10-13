@@ -7,6 +7,19 @@
   empty, every remote object then looks "extraneous", and they were deleted unattended on a
   timer and reported as a successful run. The planner now never deletes from an empty source
   in either direction and says why it skipped.
+- "Run sync profile now" in the command palette no longer executes a profile directly. It
+  performed the profile's deletions with no diff preview and no confirmation, and a failure
+  only reached the console. It now opens the Sync panel, previews the diff, and routes Apply
+  through the existing delete confirmation.
+- A sync diff can no longer be applied against settings it was not computed for. Back-editing
+  the form left the old plan in place, so Apply could delete files resolved against a different
+  folder than the one reviewed — while the confirmation banner counted deletions from the stale
+  plan. The diff is now marked stale when any input that feeds it changes, and Apply is blocked
+  until it is recomputed.
+- A corrupt or half-written `sync_profiles.json` no longer silently kills every scheduled sync
+  forever. The store is written via a same-directory temp file and an atomic rename.
+- Concurrent writes to the sync-profiles store no longer lose updates, which could revert
+  `next_run_ms` to an already-due value and re-fire a profile unattended on the next tick.
 - Saving a profile after changing its endpoint, bucket, or protocol no longer rebinds the old
   secrets to the new host. The form pre-fills keys from the keyring, so editing the target
   silently sent credentials intended for one host to another. Manual saves now clear the vault
