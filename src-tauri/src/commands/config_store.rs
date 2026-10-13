@@ -46,7 +46,8 @@ pub(crate) fn write_config(
     let config_str = serde_json::to_string_pretty(config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-    std::fs::write(&config_path, config_str)
+    // config.json holds presigned URLs — owner-only, never umask default.
+    store_io::write_private(&config_path, config_str)
         .map_err(|e| format!("Failed to write config: {}", e))?;
 
     Ok(())
@@ -101,5 +102,5 @@ pub(crate) fn write_app_settings(
     let path = get_app_settings_path(app_handle)?;
     let raw = serde_json::to_string_pretty(settings)
         .map_err(|e| format!("Failed to serialize app settings: {}", e))?;
-    std::fs::write(&path, raw).map_err(|e| format!("Failed to write app settings: {}", e))
+    store_io::write_private(&path, raw).map_err(|e| format!("Failed to write app settings: {}", e))
 }

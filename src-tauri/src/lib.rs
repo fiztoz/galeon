@@ -52,6 +52,7 @@ pub mod engine;
 pub mod listing;
 pub mod prefix_size;
 pub mod schedule;
+pub mod store_io;
 pub mod sync_plan;
 pub mod sync_store;
 pub mod sync_tree;

@@ -2,6 +2,20 @@
 
 ### Fixed
 
+- A failed download no longer destroys the file it was replacing. The finished `.part` is
+  verified before it is renamed over the destination; previously the rename happened first, so
+  a checksum or size mismatch left a corrupt file where a good one had been, with the only trace
+  being a failed-transfer event. A failed verification also leaves the `.part` behind, so the
+  retry can still resume.
+- Expired presigned URLs are pruned from the history instead of lingering until the 50-entry
+  cap. They are bearer tokens for the object, and `config.json` kept them past their validity
+  window. An unparseable timestamp keeps the entry — losing a live URL the user still needs
+  costs more than keeping a stale one.
+- The app's on-disk state stores (`config.json`, `app_settings.json`, `transfers.json`,
+  `sync_profiles.json`, `ssh_tunnel_profiles.json`) are written owner-only (0600 on unix)
+  instead of at the umask default, and pre-existing loose files are tightened on their next
+  write. Credentials are not in these files — they stay in the OS keyring — so this is
+  defence-in-depth for the presigned URLs, local paths and remote prefixes they do contain.
 - A scheduled sync profile with delete-extraneous enabled could erase an entire remote
   prefix. An unmounted volume, a renamed folder, or a typo makes the local tree walk return
   empty, every remote object then looks "extraneous", and they were deleted unattended on a

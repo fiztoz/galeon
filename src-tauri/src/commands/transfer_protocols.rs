@@ -242,18 +242,39 @@ pub(crate) async fn perform_download(
     file.flush().await.map_err(|e| e.to_string())?;
     drop(file);
 
-    // Atomic rename from .part to final
-    tokio::fs::rename(&part_path, &local_path)
-        .await
-        .map_err(|e| e.to_string())?;
-
     let _ = app_handle.emit("transfer-verifying", &remote_key);
-
-    verify_integrity(&local_path, total_bytes, meta.etag()).await?;
+    finalize_download(&part_path, &local_path, total_bytes, meta.etag()).await?;
 
     let _ = app_handle.emit("transfer-complete", remote_key);
 
     Ok(())
+}
+
+/// Verify a completed `.part`, then swap it into place atomically.
+///
+/// ORDERING IS THE POINT: the destination must not be touched until the new
+/// bytes are proven good. Renaming first and verifying second meant a checksum
+/// or size mismatch destroyed the user's existing file and then left a corrupt
+/// one in its place, with the only trace being a transfer-failed event and the
+/// previous good copy unrecoverable.
+///
+/// Verifying the `.part` first keeps both properties that made the rename worth
+/// having: the destination is swapped in atomically, and a failure leaves the
+/// `.part` on disk so the next attempt resumes from it.
+///
+/// Extracted from `perform_download` so the ordering is directly testable —
+/// an end-to-end run cannot induce a verification failure deterministically.
+pub(crate) async fn finalize_download(
+    part_path: &str,
+    local_path: &str,
+    expected_size: u64,
+    expected_etag: Option<&str>,
+) -> Result<(), String> {
+    verify_integrity(part_path, expected_size, expected_etag).await?;
+
+    tokio::fs::rename(part_path, local_path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // Upload implementation with parallel chunking for large files
@@ -931,4 +952,74 @@ pub(crate) async fn perform_ftp_upload(
     let _ = app_handle.emit("transfer-complete", remote_key);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::finalize_download;
+
+    fn tmp(tag: &str) -> std::path::PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("galeon-finalize-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[tokio::test]
+    async fn a_failed_verification_leaves_the_existing_file_untouched() {
+        // THE regression guard: verify first, rename second. Before this ordering
+        // existed, a mismatch destroyed the user's file and left a corrupt one
+        // behind.
+        let dir = tmp("mismatch");
+        let part = dir.join("a.bin.part");
+        let dest = dir.join("a.bin");
+
+        std::fs::write(&part, b"corrupted payload").unwrap();
+        std::fs::write(&dest, b"THE PREVIOUS GOOD COPY").unwrap();
+
+        let err = finalize_download(
+            part.to_str().unwrap(),
+            dest.to_str().unwrap(),
+            999, // expected size, deliberately wrong
+            None,
+        )
+        .await;
+
+        assert!(err.is_err(), "verification must fail");
+        assert_eq!(
+            std::fs::read_to_string(&dest).unwrap(),
+            "THE PREVIOUS GOOD COPY",
+            "a failed verification must not have replaced the destination"
+        );
+        assert!(
+            part.exists(),
+            "the .part must survive so the next attempt can resume"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[tokio::test]
+    async fn a_verified_part_is_swapped_into_place() {
+        let dir = tmp("ok");
+        let part = dir.join("b.bin.part");
+        let dest = dir.join("b.bin");
+
+        std::fs::write(&part, b"fresh payload").unwrap();
+        std::fs::write(&dest, b"old").unwrap();
+
+        finalize_download(
+            part.to_str().unwrap(),
+            dest.to_str().unwrap(),
+            b"fresh payload".len() as u64,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "fresh payload");
+        assert!(!part.exists(), "the .part is consumed by the rename");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

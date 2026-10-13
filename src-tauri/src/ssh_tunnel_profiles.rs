@@ -68,7 +68,9 @@ fn write_store(app_handle: &AppHandleType, store: &SshTunnelProfilesStore) -> Re
     let path = store_path(app_handle)?;
     let raw = serde_json::to_string_pretty(store)
         .map_err(|e| format!("Failed to serialize SSH tunnel profiles: {e}"))?;
-    std::fs::write(path, raw).map_err(|e| format!("Failed to write SSH tunnel profiles: {e}"))
+    // Owner-only on disk (defence-in-depth; the password itself is keyring-only).
+    crate::store_io::write_private(&path, raw)
+        .map_err(|e| format!("Failed to write SSH tunnel profiles: {e}"))
 }
 
 fn sanitize_profile(mut profile: SshTunnelProfile) -> Result<SshTunnelProfile, String> {
