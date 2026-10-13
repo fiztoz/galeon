@@ -107,9 +107,25 @@ pub async fn execute_sync_plan(
         return Err("Path traversal detected".to_string());
     }
 
+    // The plan arrives from the frontend. Every entry carries the direction it
+    // was computed for; a plan whose entries disagree was not produced by our
+    // planner, so refuse it rather than resolving deletes against mismatched
+    // roots. Cheap coherence check — it is not a substitute for re-deriving the
+    // plan from the two trees, but it catches a plan assembled from two diffs.
+    if let Some(direction) = plan_coherent_direction(&plan) {
+        if direction.is_none() {
+            return Err("Sync plan mixes directions; recompute the diff.".to_string());
+        }
+    }
+
     let total = plan.iter().filter(|e| e.action != "skip").count() as u64;
     let mut done: u64 = 0;
     let mut failures: Vec<String> = Vec::new();
+    // Transfer ids started by this run. `initiate_upload` / `initiate_download`
+    // spawn and return immediately, so without collecting these the command
+    // would report success before a single byte moved — and the scheduler would
+    // record `success: true` for a run that then failed.
+    let mut transfer_ids: Vec<String> = Vec::new();
 
     for entry in &plan {
         if entry.action == "skip" {
@@ -141,7 +157,7 @@ pub async fn execute_sync_plan(
                 profile_id.clone(),
             )
             .await
-            .map(|_| ()),
+            .map(|id| transfer_ids.push(id)),
             "download" => {
                 // Ensure the destination directory exists before downloading.
                 if let Some(parent) = std::path::Path::new(&abs_local).parent() {
@@ -156,7 +172,7 @@ pub async fn execute_sync_plan(
                     profile_id.clone(),
                 )
                 .await
-                .map(|_| ())
+                .map(|id| transfer_ids.push(id))
             }
             "deleteRemote" => {
                 if delete_extraneous {
@@ -187,7 +203,94 @@ pub async fn execute_sync_plan(
         );
     }
 
+    // Everything above only proves the transfers were QUEUED. Wait for the real
+    // outcomes so the returned failure count — and the schedule-run record the
+    // caller derives from it — reflects what actually happened.
+    //
+    // The transfers themselves already run concurrently (each was spawned by
+    // `initiate_*`), so awaiting them here costs no throughput; it only delays
+    // the report until the work is done.
+    for (id, remote_key) in await_transfers(&app_handle, transfer_ids).await {
+        failures.push(format!("{}: transfer failed ({})", remote_key, id));
+    }
+
     Ok(failures.len() as u32)
+}
+
+/// `Some(None)` when a plan's entries disagree about direction, `Some(Some(d))`
+/// when they agree, `None` for an empty plan. Pure — unit-tested.
+fn plan_coherent_direction(plan: &[SyncPlanEntry]) -> Option<Option<String>> {
+    let mut iter = plan.iter().map(|e| e.direction.as_str());
+    let first = iter.next()?;
+    Some(if iter.all(|d| d == first) {
+        Some(first.to_string())
+    } else {
+        None
+    })
+}
+
+/// How long to wait for this run's transfers before giving up and reporting
+/// whatever is still outstanding as a failure.
+const SYNC_TRANSFER_WAIT_TIMEOUT_SECS: u64 = 60 * 60; // an hour for a whole sync
+
+/// Wait for every transfer started by this run to reach a terminal state.
+///
+/// The transfer queue is the correlation point: `initiate_*` returns a transfer
+/// id and `finalize_transfer_job` moves that id's queue entry to
+/// completed/failed/cancelled. Event correlation by remote key is not used here
+/// because a background transfer on the same key would be indistinguishable.
+///
+/// Returns `(id, remote_key)` for each transfer that failed, was cancelled, or
+/// never finished before the timeout.
+async fn await_transfers(app_handle: &AppHandleType, ids: Vec<String>) -> Vec<(String, String)> {
+    if ids.is_empty() {
+        return Vec::new();
+    }
+    let mut outstanding: std::collections::HashSet<String> = ids.iter().cloned().collect();
+    let mut failed: Vec<(String, String)> = Vec::new();
+    let start = std::time::Instant::now();
+
+    while !outstanding.is_empty() {
+        if start.elapsed().as_secs() > SYNC_TRANSFER_WAIT_TIMEOUT_SECS {
+            for id in outstanding {
+                failed.push((id, String::from("timed out")));
+            }
+            break;
+        }
+        let queue = match get_transfer_queue(app_handle.clone()).await {
+            Ok(q) => q,
+            Err(e) => {
+                failed.push((
+                    String::from("-"),
+                    format!("transfer queue unreadable: {}", e),
+                ));
+                break;
+            }
+        };
+        for entry in &queue.entries {
+            if !outstanding.contains(&entry.id) {
+                continue;
+            }
+            match entry.status.as_str() {
+                "completed" => {
+                    outstanding.remove(&entry.id);
+                }
+                "failed" | "cancelled" => {
+                    outstanding.remove(&entry.id);
+                    failed.push((
+                        entry.id.clone(),
+                        entry.error.clone().unwrap_or_else(|| entry.status.clone()),
+                    ));
+                }
+                _ => {}
+            }
+        }
+        if !outstanding.is_empty() {
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        }
+    }
+
+    failed
 }
 
 /// List saved sync profiles.
@@ -373,4 +476,46 @@ pub(crate) async fn run_sync_profile_internal(
     remove_s3_session_config(&state, &session_id).await;
 
     Ok(failure_count)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::plan_coherent_direction;
+    use crate::{SyncPlanEntry, DIR_LOCAL_TO_REMOTE, DIR_REMOTE_TO_LOCAL};
+
+    fn entry(direction: &str) -> SyncPlanEntry {
+        SyncPlanEntry {
+            relative_path: "f".into(),
+            action: "upload".into(),
+            reason: "new".into(),
+            local_size: Some(1),
+            remote_size: None,
+            local_modified: None,
+            remote_modified: None,
+            direction: direction.into(),
+        }
+    }
+
+    #[test]
+    fn an_empty_plan_has_no_direction() {
+        assert!(plan_coherent_direction(&[]).is_none());
+    }
+
+    #[test]
+    fn a_plan_whose_entries_agree_is_coherent() {
+        let plan = vec![entry(DIR_LOCAL_TO_REMOTE), entry(DIR_LOCAL_TO_REMOTE)];
+        assert_eq!(
+            plan_coherent_direction(&plan),
+            Some(Some(DIR_LOCAL_TO_REMOTE.to_string()))
+        );
+    }
+
+    #[test]
+    fn a_plan_that_mixes_directions_is_rejected() {
+        // Can only happen if a plan was assembled from two separate diffs, or
+        // edited in flight — the roots would then resolve the deletes against
+        // the wrong side.
+        let plan = vec![entry(DIR_LOCAL_TO_REMOTE), entry(DIR_REMOTE_TO_LOCAL)];
+        assert_eq!(plan_coherent_direction(&plan), Some(None));
+    }
 }

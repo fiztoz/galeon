@@ -202,7 +202,12 @@ pub async fn export_profiles(
     let exported_at = chrono::Utc::now().to_rfc3339();
     let file = build_export_file(profiles, include_secrets, exported_at);
     let json = serialize_export(&file)?;
-    std::fs::write(&path, json).map_err(|e| format!("Failed to write export file: {}", e))?;
+    // Owner-only: a secrets export is plaintext credentials on disk, and this
+    // is the one file the user is explicitly told to delete when done — so it
+    // should not be readable by every account on the machine while it sits in
+    // their Downloads folder. Secrets-less exports are harmless either way.
+    crate::store_io::write_private(std::path::Path::new(&path), json)
+        .map_err(|e| format!("Failed to write export file: {}", e))?;
     Ok(())
 }
 
