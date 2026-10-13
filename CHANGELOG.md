@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- WebDAV connections: connect to Nextcloud, ownCloud, NAS, and shared-hosting DAV URLs with optional username/password (anonymous shares work too).
+- Azure Blob connections: account name + account key, with the container in the bucket field. The endpoint is derived from the account name unless a custom URL (sovereign clouds) is entered.
+- Google Cloud Storage: connect with a service-account JSON file (stored as a path — the key file stays on disk) or paste the JSON contents into the keyring.
+- The three new protocols appear in the connect form and onboarding, carry protocol capabilities (multipart, presigned URLs, bulk delete match OpenDAL's actual service support), and work with the explorer, transfers, drag-and-drop, preview, edit-in-place, and one-way sync.
+
 ### Fixed
 
 - Unify status colors in both themes, radio and time controls, focus outlines, disclosure/close icons, and older dialog size limits.

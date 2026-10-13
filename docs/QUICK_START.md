@@ -24,7 +24,7 @@ page (unsigned NSIS `.exe`, `.deb`, AppImage). See the README install sections.
 On a fresh install, Galeon shows a short onboarding wizard:
 
 1. **Welcome** — what Galeon is
-2. **Choose your isle** — pick S3-compatible, SFTP, or FTP/FTPS
+2. **Choose your isle** — pick S3-compatible, SFTP, FTP/FTPS, or WebDAV
 3. **Secure by default** — saved credentials live in your Mac's secure password system
 4. **Offline by design** — no tracking, telemetry, or crash-report upload
 5. **Start sailing** — create your first profile or skip for now
@@ -39,7 +39,7 @@ Existing users who already have saved profiles skip onboarding automatically on 
 2. Select a protocol and fill in host/bucket details. For S3, pick a provider
    preset (AWS, R2, B2, MinIO, Wasabi, Spaces, or Custom) so endpoint / region /
    URL-style conventions fill in.
-3. Enter credentials. SFTP, FTP/FTPS, and SSH tunnels use password authentication by default; SFTP can also use an SSH key.
+3. Enter credentials. SFTP, FTP/FTPS, WebDAV, Azure, and SSH tunnels use password authentication by default; SFTP can also use an SSH key, and GCS uses a service-account JSON file (or its pasted contents).
 4. Click the save icon or **Save as new profile** to persist the connection.
 
 Saved credentials are stored in the macOS secure password system — not in Galeon's config files. Galeon may ask for your Mac login password or Touch ID the first time it reads a secret in a session.

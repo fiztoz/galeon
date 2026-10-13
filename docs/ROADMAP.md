@@ -66,7 +66,10 @@ The transfer engine grew up before anything widened. All landed:
 Cash in the OpenDAL bet — generalize the connection model from "S3 profile" to "storage profile."
 
 - ✅ **SFTP** and **FTP/FTPS** (the Cyberduck-parity must-haves) — in tree, with native password/key session tests and `~/.ssh/config` import
-- **WebDAV**, **Azure Blob**, **Google Cloud Storage**, **Backblaze B2 native** — still open
+- ✅ **WebDAV** — endpoint-root URLs (Nextcloud/ownCloud, NAS boxes), optional username/password for anonymous shares
+- ✅ **Azure Blob** — account name + account key (shared-key auth), container in the bucket field, URL derived from the account name or overridden for sovereign clouds
+- ✅ **Google Cloud Storage** — service-account JSON file on disk (path stored, key stays local) or pasted JSON into the keyring
+- **Backblaze B2 native** — still open; B2's S3-compatible API already works through its provider preset, so the native API adds little for a desktop client. Revisit only if a user reports a B2 feature the S3 path can't reach.
 - ✅ **Provider presets**: AWS / Cloudflare R2 / MinIO / Wasabi / B2 / DigitalOcean Spaces pre-fill endpoint quirks (`src/components/connection/presets.ts`)
 - ✅ Protocol-agnostic capabilities model (`ProtocolCapabilities` travels with the profile)
 
