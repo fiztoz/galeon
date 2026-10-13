@@ -2,6 +2,39 @@
 
 ### Fixed
 
+- A scheduled sync profile with delete-extraneous enabled could erase an entire remote
+  prefix. An unmounted volume, a renamed folder, or a typo makes the local tree walk return
+  empty, every remote object then looks "extraneous", and they were deleted unattended on a
+  timer and reported as a successful run. The planner now never deletes from an empty source
+  in either direction and says why it skipped.
+- "Run sync profile now" in the command palette no longer executes a profile directly. It
+  performed the profile's deletions with no diff preview and no confirmation, and a failure
+  only reached the console. It now opens the Sync panel, previews the diff, and routes Apply
+  through the existing delete confirmation.
+- A sync diff can no longer be applied against settings it was not computed for. Back-editing
+  the form left the old plan in place, so Apply could delete files resolved against a different
+  folder than the one reviewed — while the confirmation banner counted deletions from the stale
+  plan. The diff is now marked stale when any input that feeds it changes, and Apply is blocked
+  until it is recomputed.
+- A corrupt or half-written `sync_profiles.json` no longer silently kills every scheduled sync
+  forever. The store is written via a same-directory temp file and an atomic rename.
+- Concurrent writes to the sync-profiles store no longer lose updates, which could revert
+  `next_run_ms` to an already-due value and re-fire a profile unattended on the next tick.
+- Saving a profile after changing its endpoint, bucket, or protocol no longer rebinds the old
+  secrets to the new host. The form pre-fills keys from the keyring, so editing the target
+  silently sent credentials intended for one host to another. Manual saves now clear the vault
+  entry on an identity change, matching what the import path already did.
+- "Lock credentials now" only cleared the profile-secret cache. `S3SessionConfig` holds the
+  secret key in plaintext per session, and live sessions carry credentials inside their OpenDAL
+  operator or ssh2 session, so those copies survived for the life of the process. Lock now
+  clears sessions, S3 configs, and tunnels as well — note that this disconnects open sessions
+  and stops in-flight transfers.
+- Cached credentials never expired. `loaded_at_ms` was written on every cache entry and never
+  read, so plaintext secrets sat in memory for the whole session. Entries now expire after 15
+  minutes and the next read re-fetches from the keyring.
+- The profile-import TOCTOU hash used MD5, a practical collision primitive. Now SHA-256, and the
+  verification policy is extracted into a tested function — it was previously an untested block
+  inside the command.
 - A render error no longer blanks the window. An error boundary wraps the app and offers Try again
   or Reload, and states that profiles and keychain credentials are untouched.
 - A panic inside a transfer body no longer leaves a transfer spinning forever. Transfer jobs run in

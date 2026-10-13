@@ -98,6 +98,44 @@ function isDeleteAction(action: SyncPlanEntry['action']): boolean {
 
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
+// ── Diff staleness ──────────────────────────────────────────────────────────
+
+/**
+ * The exact inputs a sync plan was computed from. `execute_sync_plan` resolves
+ * every `deleteLocal` / `deleteRemote` entry against the LIVE local path and
+ * remote prefix, so a plan computed from different inputs must never run — the
+ * deletions it lists (and the count the confirmation shows) would not describe
+ * the deletions performed.
+ */
+export interface SyncDiffInputs {
+  localPath: string;
+  remotePrefix: string;
+  direction: 'localToRemote' | 'remoteToLocal';
+  verifyChecksum: boolean;
+  deleteExtraneous: boolean;
+}
+
+/**
+ * A plan is stale when it exists but was computed from other inputs.
+ * `recorded === null` (no successful diff yet) counts as stale for a non-empty
+ * plan — fail closed, never fail open.
+ */
+export function isSyncPlanStale(
+  recorded: SyncDiffInputs | null,
+  current: SyncDiffInputs,
+  planLength: number,
+): boolean {
+  if (planLength === 0) return false; // no plan, nothing to invalidate
+  if (!recorded) return true;
+  return (
+    recorded.localPath !== current.localPath ||
+    recorded.remotePrefix !== current.remotePrefix ||
+    recorded.direction !== current.direction ||
+    recorded.verifyChecksum !== current.verifyChecksum ||
+    recorded.deleteExtraneous !== current.deleteExtraneous
+  );
+}
+
 function defaultSchedule(): SyncSchedule {
   return {
     enabled: false,
@@ -132,6 +170,9 @@ interface SyncPanelProps {
   currentRemotePrefix: string;
   /** Prefill form from a saved sync profile for a one-click run */
   prefillProfile?: SyncProfile | null;
+  /** Auto-compute the diff once the prefilled profile is loaded ("run now");
+   *  execution still goes through the diff + delete-confirmation flow */
+  runNow?: boolean;
   onSaveSyncProfile: (profile: SyncProfile) => Promise<void>;
   onDeleteSyncProfile: (profileId: string) => Promise<void>;
   /** Called when sync execution completes so Explorer can refresh */
@@ -151,6 +192,7 @@ export function SyncPanel({
   syncProfiles,
   currentRemotePrefix,
   prefillProfile,
+  runNow,
   onSaveSyncProfile,
   onDeleteSyncProfile,
   onSyncComplete,
@@ -167,8 +209,14 @@ export function SyncPanel({
 
   // ── Diff state ──────────────────────────────────────────────────────────
   const [plan, setPlan] = useState<SyncPlanEntry[]>([]);
+  // Inputs the current plan was computed from — compared against the live form
+  // to detect a stale plan (see isSyncPlanStale).
+  const [planInputs, setPlanInputs] = useState<SyncDiffInputs | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffError, setDiffError] = useState<string | null>(null);
+  // Set when "Run sync profile now" prefills the panel; consumed by the
+  // auto-run effect below so the diff is computed with the loaded inputs.
+  const [autoRunPending, setAutoRunPending] = useState(false);
 
   // ── Apply state ─────────────────────────────────────────────────────────
   const [applyLoading, setApplyLoading] = useState(false);
@@ -186,6 +234,18 @@ export function SyncPanel({
   const [expandedSchedules, setExpandedSchedules] = useState<Set<string>>(new Set());
   const [scheduleEdits, setScheduleEdits] = useState<Record<string, SyncSchedule>>({});
   const [savingScheduleId, setSavingScheduleId] = useState<string | null>(null);
+
+  // ── Staleness derivation ────────────────────────────────────────────────
+  // Any input that feeds compute_sync_diff changing invalidates the reviewed
+  // plan — Apply is blocked until the diff is recomputed from these inputs.
+  const currentDiffInputs: SyncDiffInputs = {
+    localPath,
+    remotePrefix,
+    direction,
+    verifyChecksum,
+    deleteExtraneous,
+  };
+  const planStale = isSyncPlanStale(planInputs, currentDiffInputs, plan.length);
 
   // Apply prefill when panel opens or prefillProfile changes
   useEffect(() => {
@@ -205,6 +265,7 @@ export function SyncPanel({
     }
     // Always reset computed state on open
     setPlan([]);
+    setPlanInputs(null);
     setDiffError(null);
     setApplyError(null);
     setConfirmDeleteOpen(false);
@@ -215,7 +276,9 @@ export function SyncPanel({
     setExpandedSchedules(new Set());
     setScheduleEdits({});
     setSavingScheduleId(null);
-  }, [isOpen, prefillProfile]); // eslint-disable-line react-hooks/exhaustive-deps
+    // "Run now" requests a diff as soon as the prefill state has landed.
+    setAutoRunPending(Boolean(runNow && prefillProfile));
+  }, [isOpen, prefillProfile, runNow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Subscribe to sync-progress events while panel is open
   useEffect(() => {
@@ -241,6 +304,7 @@ export function SyncPanel({
     setDiffLoading(true);
     setDiffError(null);
     setPlan([]);
+    setPlanInputs(null);
     try {
       const result = await invoke<SyncPlanEntry[]>('compute_sync_diff', {
         sessionId,
@@ -250,15 +314,36 @@ export function SyncPanel({
         options: { verifyChecksum, deleteExtraneous },
       });
       setPlan(result);
+      // Record exactly what this plan was computed from, so later input edits
+      // mark it stale instead of silently running against new paths.
+      setPlanInputs({ localPath, remotePrefix, direction, verifyChecksum, deleteExtraneous });
       setView('diff');
     } catch (err) {
       setDiffError(String(err));
+      // diffError only renders on the form view — land there when a recompute
+      // started from the diff view fails, so the failure is never invisible.
+      setView('form');
     } finally {
       setDiffLoading(false);
     }
   }, [sessionId, localPath, remotePrefix, direction, verifyChecksum, deleteExtraneous]);
 
+  // "Run sync profile now": once the prefill effect has loaded the profile's
+  // inputs, compute the diff so the run lands on a reviewable plan. The pending
+  // flag is consumed synchronously; a failure stays on the form with diffError.
+  useEffect(() => {
+    if (!isOpen || !autoRunPending) return;
+    setAutoRunPending(false);
+    void handleComputeDiff();
+  }, [isOpen, autoRunPending, handleComputeDiff]);
+
   const handleApply = useCallback(async () => {
+    // Never execute a plan that no longer describes the current inputs — the
+    // user would confirm one set of deletions and run another.
+    if (planStale) {
+      setApplyError('Sync settings changed after this diff was computed. Recompute the diff before applying.');
+      return;
+    }
     const hasDeletes = plan.some((e) => isDeleteAction(e.action));
     if (hasDeletes && !confirmDeleteOpen) {
       setConfirmDeleteOpen(true);
@@ -288,7 +373,7 @@ export function SyncPanel({
     } finally {
       setApplyLoading(false);
     }
-  }, [plan, sessionId, deleteExtraneous, localPath, remotePrefix, connectionProfileId, confirmDeleteOpen, onSyncComplete, onClose]);
+  }, [plan, planStale, sessionId, deleteExtraneous, localPath, remotePrefix, connectionProfileId, confirmDeleteOpen, onSyncComplete, onClose]);
 
   const handleSaveProfile = async () => {
     if (!saveProfileName.trim()) return;
@@ -367,6 +452,9 @@ export function SyncPanel({
     {} as Record<SyncPlanEntry['action'], number>,
   );
   const deleteCount = (counts.deleteRemote ?? 0) + (counts.deleteLocal ?? 0);
+  // The delete-confirmation block must never show for a stale plan: its count
+  // comes from a plan that no longer describes the current inputs.
+  const showConfirmBlock = confirmDeleteOpen && !planStale;
 
   // Group plan entries by action
   const groups: Record<string, SyncPlanEntry[]> = {};
@@ -392,13 +480,14 @@ export function SyncPanel({
                   key={v}
                   onClick={() => setView(v)}
                   disabled={v === 'diff' && plan.length === 0}
+                  title={v === 'diff' && planStale ? 'Settings changed since this diff — recompute it before applying' : undefined}
                   className={`px-3 py-1 text-xs rounded-full transition-colors font-medium
                     ${view === v
                       ? 'bg-gale-teal text-on-accent'
                       : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed'
                     }`}
                 >
-                  {v === 'form' ? 'Configure' : v === 'diff' ? `Diff${plan.length > 0 ? ` (${plan.length})` : ''}` : 'Saved Profiles'}
+                  {v === 'form' ? 'Configure' : v === 'diff' ? `Diff${plan.length > 0 ? ` (${plan.length})` : ''}${planStale ? ' ⚠' : ''}` : 'Saved Profiles'}
                 </button>
               ))}
             </div>
@@ -571,7 +660,7 @@ export function SyncPanel({
                     <span className="tabular-nums">{deleteCount}</span>
                   </span>
                 )}
-                {deleteCount > 0 && (
+                {deleteCount > 0 && !planStale && (
                   <span className="flex items-center space-x-1.5 text-status-warning text-xs bg-amber-400/10 border border-amber-400/30 rounded px-2 py-0.5">
                     <AlertTriangle className="w-3 h-3" />
                     <span>{deleteCount} file{deleteCount !== 1 ? 's' : ''} will be deleted</span>
@@ -579,6 +668,32 @@ export function SyncPanel({
                 )}
                 <span className="ml-auto text-zinc-500 text-xs">{plan.length} total</span>
               </div>
+
+              {/* Stale plan — an input feeding this diff changed */}
+              {planStale && (
+                <div className="px-6 py-3 border-b border-zinc-800 shrink-0 bg-amber-500/5 flex items-start space-x-2">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-status-warning" />
+                  <div id="sync-stale-warning" className="flex-1 text-xs text-zinc-300 leading-relaxed">
+                    <span className="text-status-warning font-semibold">This diff is out of date.</span>{' '}
+                    The sync settings changed after it was computed
+                    {deleteCount > 0 ? ` — it listed ${deleteCount} file${deleteCount === 1 ? '' : 's'} to delete` : ''},
+                    so it no longer describes what Apply would run. Recompute the diff before applying.
+                  </div>
+                  <button
+                    onClick={() => void handleComputeDiff()}
+                    disabled={diffLoading}
+                    className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-gale-teal text-on-accent font-semibold hover:bg-deep-current hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    {diffLoading ? 'Recomputing…' : 'Recompute diff'}
+                  </button>
+                  <button
+                    onClick={() => setView('form')}
+                    className="shrink-0 px-3 py-1.5 text-xs rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors"
+                  >
+                    Edit settings
+                  </button>
+                </div>
+              )}
 
               {/* Plan entries */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -619,7 +734,9 @@ export function SyncPanel({
                 {plan.length === 0 && (
                   <div className="text-center py-12 text-zinc-500">
                     <Minus className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                    <p>Everything is in sync</p>
+                    {diffLoading
+                      ? <p>Computing diff…</p>
+                      : <p>Everything is in sync</p>}
                   </div>
                 )}
               </div>
@@ -639,8 +756,8 @@ export function SyncPanel({
                   </div>
                 )}
 
-                {/* Delete confirmation */}
-                {confirmDeleteOpen && (
+                {/* Delete confirmation — only for a fresh plan (showConfirmBlock) */}
+                {showConfirmBlock && (
                   <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/40">
                     <p className="text-sm text-status-warning font-medium mb-1 flex items-center space-x-2">
                       <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -667,11 +784,13 @@ export function SyncPanel({
                   </div>
                 )}
 
-                {!confirmDeleteOpen && (
+                {!showConfirmBlock && (
                   <div className="flex items-center space-x-3">
                     <button
                       onClick={handleApply}
-                      disabled={applyLoading || plan.length === 0}
+                      disabled={applyLoading || plan.length === 0 || planStale}
+                      title={planStale ? 'Sync settings changed — recompute the diff first' : undefined}
+                      aria-describedby={planStale ? 'sync-stale-warning' : undefined}
                       className="flex items-center space-x-2 px-5 py-2 bg-gale-teal text-on-accent rounded-lg font-semibold text-sm hover:bg-deep-current hover:text-white transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {applyLoading

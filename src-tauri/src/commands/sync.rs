@@ -35,6 +35,16 @@ pub async fn compute_sync_diff(
         .clone();
     drop(sessions);
 
+    // `walk_local_tree` treats a missing root as an empty tree so a first-time
+    // remoteToLocal download into a new folder works. That is only ever correct
+    // when the LOCAL side is the destination. For localToRemote the local root
+    // is the source: a missing one means an unmounted volume or a typo, and
+    // reporting "0 files to upload" would hide a broken profile until a
+    // scheduled run tried to delete the whole remote prefix.
+    if direction == DIR_LOCAL_TO_REMOTE && !std::path::Path::new(&local_path).exists() {
+        return Err(format!("Local folder does not exist: {}", local_path));
+    }
+
     let local = walk_local_tree(std::path::Path::new(&local_path)).await?;
     let remote = walk_remote_tree(&session, &remote_prefix).await?;
 
@@ -201,6 +211,10 @@ pub async fn save_sync_profile(
             sched.next_run_ms = Some(compute_next_run_ms(now_ms(), sched));
         }
     }
+    // Under the store lock so a scheduler write landing mid-run cannot revert
+    // this edit (see `update_sync_profile`). The lock is released before this
+    // command returns; nothing long-running happens under it.
+    let _lock = sync_store::SYNC_STORE_LOCK.lock().await;
     let mut store = read_sync_profiles(&app_handle)?;
     if let Some(existing) = store.profiles.iter_mut().find(|p| p.id == profile.id) {
         *existing = profile;
@@ -226,11 +240,11 @@ pub async fn run_sync_profile_now(
 
     let failures = run_sync_profile_internal(&app_handle, &profile).await?;
 
-    let mut store = read_sync_profiles(&app_handle)?;
-    if let Some(p) = store.profiles.iter_mut().find(|p| p.id == profile_id) {
-        p.last_run_ms = Some(now_ms());
-    }
-    write_sync_profiles(&app_handle, &store)?;
+    // Locked read-modify-write, and it must NOT clobber the schedule fields:
+    // only last_run_ms changes here, so the profile's next_run_ms the scheduler
+    // may have advanced during this run is preserved.
+    sync_store::update_sync_profile(&app_handle, &profile_id, |p| p.last_run_ms = Some(now_ms()))
+        .await?;
 
     if failures > 0 {
         return Err(format!("{} sync item(s) failed", failures));
@@ -244,6 +258,7 @@ pub async fn delete_sync_profile(
     app_handle: AppHandleType,
     profile_id: String,
 ) -> Result<(), String> {
+    let _lock = sync_store::SYNC_STORE_LOCK.lock().await;
     let mut store = read_sync_profiles(&app_handle)?;
     store.profiles.retain(|p| p.id != profile_id);
     write_sync_profiles(&app_handle, &store)

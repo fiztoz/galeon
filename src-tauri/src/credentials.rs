@@ -46,6 +46,23 @@ pub struct CredentialMigrationResult {
     pub missing_profile_count: usize,
 }
 
+/// How long a cached secret stays readable before it is treated as a miss and
+/// re-fetched from the keyring on the next access.
+///
+/// The cache exists so macOS does not prompt on every action, which is a
+/// minutes-scale concern; the TTL exists so the plaintext copies do not sit in
+/// the process heap for the whole session. 15 minutes bounds exposure without
+/// making routine browsing re-prompt, and matches the `prefix_size` cache's
+/// shape (see `PREFIX_SIZE_CACHE_TTL_MS`).
+pub const CREDENTIAL_CACHE_TTL_MS: u64 = 15 * 60 * 1000;
+
+/// True when a cache entry is older than [`CREDENTIAL_CACHE_TTL_MS`] and should
+/// be discarded. Pure — unit-tested.
+fn is_cache_entry_expired(loaded_at_ms: u64, now_ms: u64) -> bool {
+    // Saturating: a clock that jumped backwards must not pin a secret forever.
+    now_ms.saturating_sub(loaded_at_ms) >= CREDENTIAL_CACHE_TTL_MS
+}
+
 /// Session-only in-memory cache for profile credentials.
 #[derive(Clone)]
 pub struct CredentialCache {
@@ -69,11 +86,33 @@ impl CredentialCache {
         Self::default()
     }
 
+    /// Raw cache read. Does NOT apply the TTL — use [`Self::get_at`] on the
+    /// credential load paths. Kept separate so the container stays clock-free
+    /// and tests can drive it with an injected time.
     pub fn get(&self, profile_id: &str) -> Option<CachedSecret> {
         self.secrets
             .lock()
             .ok()
             .and_then(|guard| guard.get(profile_id).cloned())
+    }
+
+    /// Read a cached secret, honouring the TTL.
+    ///
+    /// An expired entry is dropped on access and reported as a miss so the
+    /// caller re-reads the keyring. `loaded_at_ms` used to be written and never
+    /// read, which left plaintext secrets resident for the whole session.
+    pub fn get_at(&self, profile_id: &str, now_ms: u64) -> Option<CachedSecret> {
+        let mut guard = self.secrets.lock().ok()?;
+        let entry = guard.get(profile_id).cloned()?;
+        if is_cache_entry_expired(entry.loaded_at_ms, now_ms) {
+            guard.remove(profile_id);
+            // The whole vault was loaded together, so one entry going stale
+            // means the rest are too; `vault_loaded` must reset or the next
+            // read would trust a cache that no longer holds what it claims.
+            self.vault_loaded.store(false, Ordering::SeqCst);
+            return None;
+        }
+        Some(entry)
     }
 
     pub fn insert(
@@ -110,6 +149,11 @@ impl CredentialCache {
         self.vault_loaded.store(false, Ordering::SeqCst);
     }
 
+    /// Report how many plaintext secret copies this cache is holding.
+    ///
+    /// This covers the profile->secret cache ONLY. Live sessions keep their own
+    /// copies inside OpenDAL operators and ssh2 sessions, so Settings should
+    /// describe this as the cached-profile count, not as total exposure.
     pub fn status(&self) -> CredentialUnlockStatus {
         let count = self.secrets.lock().map(|guard| guard.len()).unwrap_or(0);
         CredentialUnlockStatus {
@@ -443,7 +487,7 @@ pub fn load_credentials_cached(
     profile_id: &str,
     loaded_at_ms: u64,
 ) -> Result<(Option<String>, Option<String>), String> {
-    if let Some(cached) = cache.get(profile_id) {
+    if let Some(cached) = cache.get_at(profile_id, loaded_at_ms) {
         if cached.access_key.is_some() || cached.secret_key.is_some() {
             return Ok((cached.access_key.clone(), cached.secret_key.clone()));
         }
@@ -452,7 +496,7 @@ pub fn load_credentials_cached(
 
     if !cache.has_loaded_vault() {
         load_vault_once(cache, loaded_at_ms)?;
-        if let Some(cached) = cache.get(profile_id) {
+        if let Some(cached) = cache.get_at(profile_id, loaded_at_ms) {
             if cached.access_key.is_some() || cached.secret_key.is_some() {
                 return Ok((cached.access_key.clone(), cached.secret_key.clone()));
             }
@@ -531,13 +575,13 @@ pub fn load_ssh_tunnel_password_cached(
     profile_id: &str,
     loaded_at_ms: u64,
 ) -> Result<Option<String>, String> {
-    if let Some(cached) = cache.get(profile_id) {
+    if let Some(cached) = cache.get_at(profile_id, loaded_at_ms) {
         return Ok(cached.ssh_tunnel_password);
     }
 
     if !cache.has_loaded_vault() {
         load_vault_once(cache, loaded_at_ms)?;
-        if let Some(cached) = cache.get(profile_id) {
+        if let Some(cached) = cache.get_at(profile_id, loaded_at_ms) {
             return Ok(cached.ssh_tunnel_password);
         }
     }
@@ -557,6 +601,68 @@ mod tests {
     fn fresh_cache() -> CredentialCache {
         MOCK_KEYRING.lock().unwrap().clear();
         CredentialCache::new()
+    }
+
+    #[test]
+    fn cache_entry_expires_after_the_ttl() {
+        let t0 = 1_000_000_000_000u64;
+        assert!(!is_cache_entry_expired(t0, t0));
+        assert!(!is_cache_entry_expired(
+            t0,
+            t0 + CREDENTIAL_CACHE_TTL_MS - 1
+        ));
+        assert!(is_cache_entry_expired(t0, t0 + CREDENTIAL_CACHE_TTL_MS));
+        assert!(is_cache_entry_expired(
+            t0,
+            t0 + CREDENTIAL_CACHE_TTL_MS * 10
+        ));
+    }
+
+    #[test]
+    fn cache_entry_does_not_expire_when_the_clock_moves_backwards() {
+        // A backwards clock must not make an entry look infinitely old (which
+        // would be fine) nor infinitely new (which would pin the secret).
+        let t0 = 1_000_000_000_000u64;
+        assert!(!is_cache_entry_expired(t0 + 60_000, t0));
+    }
+
+    #[test]
+    fn reading_an_expired_secret_is_a_miss_and_drops_the_plaintext() {
+        let cache = CredentialCache::new();
+        let t0 = 1_000_000_000_000u64;
+        cache.insert("p1", Some("AK".into()), Some("SK".into()), None, t0);
+
+        // Fresh read hits, and a plain read is clock-free.
+        assert!(cache.get("p1").is_some());
+        assert!(cache.get_at("p1", t0 + 1000).is_some());
+
+        // Past the TTL it is a miss, and the copy is released.
+        let later = t0 + CREDENTIAL_CACHE_TTL_MS + 1;
+        assert!(cache.get_at("p1", later).is_none());
+        assert_eq!(cache.status().cached_secret_count, 0);
+        assert!(
+            !cache.has_loaded_vault(),
+            "expiring an entry must reset vault_loaded, or the next read would \
+             trust a cache that no longer holds what it claims"
+        );
+    }
+
+    #[test]
+    fn expiry_is_per_entry_not_all_or_nothing() {
+        let cache = CredentialCache::new();
+        let t0 = 1_000_000_000_000u64;
+        cache.insert("old", Some("A".into()), Some("B".into()), None, t0);
+        cache.insert(
+            "new",
+            Some("A".into()),
+            Some("B".into()),
+            None,
+            t0 + CREDENTIAL_CACHE_TTL_MS / 2,
+        );
+
+        let now = t0 + CREDENTIAL_CACHE_TTL_MS + 1;
+        assert!(cache.get_at("old", now).is_none());
+        assert!(cache.get_at("new", now).is_some());
     }
 
     #[test]

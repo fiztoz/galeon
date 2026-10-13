@@ -10,7 +10,8 @@ use opendal::Operator;
 ///   - both present, source newer → copy, reason "newer"
 ///   - both present, equal        → `skip`, reason "identical"
 ///   - dest-only path             → `skip` (reason "extraneous") unless
-///     `delete_extraneous`, then delete dest.
+///     `delete_extraneous` **and the source tree is non-empty**, then delete
+///     dest. An empty source never deletes: see the SAFETY note below.
 ///
 /// For `localToRemote`, local is source and copies are `upload`; dest-only
 /// deletes are `deleteRemote`. For `remoteToLocal`, remote is source and copies
@@ -54,6 +55,19 @@ pub fn compute_sync_plan(
         (&remote_map, &local_map)
     };
 
+    // SAFETY: never delete the destination just because the source came back
+    // empty. `walk_local_tree` deliberately treats a non-existent root as an
+    // empty tree (so a first-time remoteToLocal download into a new folder
+    // still works), which makes an unmounted volume, a renamed folder, or a
+    // typo indistinguishable from "the user emptied the folder". With
+    // `delete_extraneous` set, that turned a scheduled profile into an
+    // unattended wipe of the entire destination, reported as a successful run.
+    //
+    // The planner cannot tell those cases apart, so it refuses and says why.
+    // Clearing a destination is a deliberate act: delete the files directly, or
+    // empty the source first and re-run.
+    let source_is_empty = source_map.is_empty();
+
     let mut out: Vec<SyncPlanEntry> = Vec::new();
 
     // Pass 1: every source path → copy or skip.
@@ -86,8 +100,10 @@ pub fn compute_sync_plan(
         if source_map.contains_key(rel) {
             continue;
         }
-        let (action, reason) = if options.delete_extraneous {
+        let (action, reason) = if options.delete_extraneous && !source_is_empty {
             (delete_dest_action, "extraneous")
+        } else if source_is_empty {
+            ("skip", "extraneous (source is empty, not deleting)")
         } else {
             ("skip", "extraneous")
         };

@@ -115,8 +115,16 @@ pub(crate) fn read_import_file_limited(path: &Path) -> Result<String, String> {
     String::from_utf8(buf).map_err(|e| format!("Import file is not valid UTF-8: {}", e))
 }
 
+/// Fingerprint of the exact import bytes, used to detect a file swapped between
+/// preview and apply.
+///
+/// SHA-256, not MD5: MD5 chosen-prefix collisions are practical, so MD5 would
+/// make this control bypassable by anyone who can write the import file. The
+/// input is capped at `MAX_IMPORT_FILE_BYTES`, so the stronger hash is free.
 pub(crate) fn content_hash(raw: &str) -> String {
-    format!("{:x}", md5::compute(raw.as_bytes()))
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(raw.as_bytes());
+    format!("{digest:x}")
 }
 
 pub(crate) fn build_import_preview(

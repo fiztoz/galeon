@@ -685,6 +685,90 @@ fn test_sync_plan_delete_extraneous_on() {
     assert_plan(&plan2, "stale.txt", "deleteLocal", "extraneous");
 }
 
+#[test]
+fn test_sync_plan_empty_local_source_never_wipes_the_remote() {
+    // Regression: an unmounted volume, a renamed folder, or a typo makes the
+    // local tree walk return empty (sync_tree.rs treats a missing root as an
+    // empty tree). With delete_extraneous set that used to mark every remote
+    // object extraneous and delete the whole prefix -- unattended, on a
+    // scheduled run, reported as success.
+    let opts = SyncOptions {
+        verify_checksum: false,
+        delete_extraneous: true,
+    };
+    let local: Vec<SyncFileEntry> = vec![];
+    let remote = vec![
+        entry("a.bin", 5, 5),
+        entry("b.bin", 5, 5),
+        entry("c.bin", 5, 5),
+    ];
+
+    let plan = compute_sync_plan(&local, &remote, DIR_LOCAL_TO_REMOTE, &opts);
+
+    assert!(
+        !plan.iter().any(|e| e.action.starts_with("delete")),
+        "an empty source must never produce deletes, got: {:?}",
+        plan.iter()
+            .map(|e| (&e.relative_path, &e.action))
+            .collect::<Vec<_>>()
+    );
+    // Every remote object is still reported, just not as a delete, so the UI
+    // can explain itself instead of silently doing nothing.
+    assert_eq!(plan.len(), 3);
+    assert!(plan.iter().all(|e| e.action == "skip"));
+    assert!(
+        plan.iter().all(|e| e.reason.contains("source is empty")),
+        "each skip must say why: {:?}",
+        plan.iter().map(|e| &e.reason).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_sync_plan_empty_remote_source_never_wipes_the_local_folder() {
+    // Same hazard mirrored: a remote prefix that lists as empty (permissions,
+    // a wrong prefix, a bucket that just went away) must not delete the
+    // user's local copies.
+    let opts = SyncOptions {
+        verify_checksum: false,
+        delete_extraneous: true,
+    };
+    let local = vec![entry("keep.txt", 1, 1), entry("other.txt", 2, 2)];
+    let remote: Vec<SyncFileEntry> = vec![];
+
+    let plan = compute_sync_plan(&local, &remote, DIR_REMOTE_TO_LOCAL, &opts);
+
+    assert!(
+        !plan.iter().any(|e| e.action.starts_with("delete")),
+        "an empty source must never produce deletes in either direction"
+    );
+    assert!(plan.iter().all(|e| e.reason.contains("source is empty")));
+}
+
+#[test]
+fn test_sync_plan_non_empty_source_still_deletes_extraneous() {
+    // The guard must not neuter the feature: a populated source still
+    // deletes dest-only files as before.
+    let opts = SyncOptions {
+        verify_checksum: false,
+        delete_extraneous: true,
+    };
+    let local = vec![entry("keep.txt", 1, 1)];
+    let remote = vec![entry("keep.txt", 1, 1), entry("gone.txt", 5, 5)];
+
+    let plan = compute_sync_plan(&local, &remote, DIR_LOCAL_TO_REMOTE, &opts);
+    assert_plan(&plan, "gone.txt", "deleteRemote", "extraneous");
+}
+
+#[test]
+fn test_sync_plan_both_sides_empty_produces_nothing() {
+    let opts = SyncOptions {
+        verify_checksum: false,
+        delete_extraneous: true,
+    };
+    let plan = compute_sync_plan(&[], &[], DIR_LOCAL_TO_REMOTE, &opts);
+    assert!(plan.is_empty());
+}
+
 fn plan_entry(reason: &str, local_size: Option<u64>, remote_size: Option<u64>) -> SyncPlanEntry {
     SyncPlanEntry {
         relative_path: "x".into(),
