@@ -311,7 +311,7 @@ async fn test_tier4_s05_execute_sync_plan_reports_real_transfer_outcomes() {
         },
     ];
 
-    let failures = execute_sync_plan(
+    let outcome = execute_sync_plan(
         ctx.handle.clone(),
         state,
         ctx.session_id.clone(),
@@ -325,9 +325,15 @@ async fn test_tier4_s05_execute_sync_plan_reports_real_transfer_outcomes() {
     .unwrap();
 
     assert_eq!(
-        failures, 1,
+        outcome.failures.len(),
+        1,
         "the missing local file must be counted as a failure, not reported as a clean run"
     );
+    // And the outcome now carries what the run actually did, which is what the
+    // run log records.
+    assert_eq!(outcome.uploads, 1, "the one good file should have uploaded");
+    assert_eq!(outcome.downloads, 0);
+    assert_eq!(outcome.deletes, 0);
 
     // The good one really did land, so we know the run executed rather than
     // simply erroring out early.

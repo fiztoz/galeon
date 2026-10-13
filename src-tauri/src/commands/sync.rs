@@ -85,10 +85,30 @@ pub async fn compute_sync_diff(
 /// usual `transfer-failed` events). Deletes are synchronous and their failures
 /// are reported directly.
 ///
-/// On success, returns the number of sync items that failed (0 if everything
-/// succeeded). A non-zero success value means the plan ran to completion but
-/// individual transfers failed; the caller can surface the count without
-/// parsing an error string.
+/// What a sync run actually did, as opposed to what it was asked to do.
+///
+/// Returned instead of a bare failure count so the caller can record a run log:
+/// the deletion count and the deleted paths are the part a user needs if a
+/// scheduled run surprises them.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncRunOutcome {
+    pub uploads: u32,
+    pub downloads: u32,
+    /// Permanent, unrecoverable deletions performed.
+    pub deletes: u32,
+    /// The relative paths that were deleted, so the caller can write a run log
+    /// entry. On the outcome rather than in engine state: the caller already
+    /// receives it, and a second channel through shared state is one more thing
+    /// to get right when two syncs can overlap.
+    pub deleted_paths: Vec<String>,
+    /// One entry per failed item, "<relative path>: <error>".
+    pub failures: Vec<String>,
+}
+
+/// On success, returns what the run actually did. `failures` empty means the
+/// whole plan completed; non-empty means it ran to completion with individual
+/// items failing.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn execute_sync_plan(
@@ -100,7 +120,7 @@ pub async fn execute_sync_plan(
     local_path: String,
     remote_prefix: String,
     profile_id: Option<String>,
-) -> Result<u32, String> {
+) -> Result<SyncRunOutcome, String> {
     use tauri::Emitter;
 
     if is_unsafe_root_path(&local_path) || is_unsafe_root_path(&remote_prefix) {
@@ -121,11 +141,21 @@ pub async fn execute_sync_plan(
     let total = plan.iter().filter(|e| e.action != "skip").count() as u64;
     let mut done: u64 = 0;
     let mut failures: Vec<String> = Vec::new();
-    // Transfer ids started by this run. `initiate_upload` / `initiate_download`
-    // spawn and return immediately, so without collecting these the command
-    // would report success before a single byte moved — and the scheduler would
-    // record `success: true` for a run that then failed.
-    let mut transfer_ids: Vec<String> = Vec::new();
+    // Recorded so the caller can build a run log entry: deletions are permanent
+    // and unrecoverable, so the user needs to know which paths went.
+    let mut deleted_paths: Vec<String> = Vec::new();
+    let mut uploads = 0u32;
+    let mut downloads = 0u32;
+    let mut deletes = 0u32;
+    // Transfers started by this run, as (id, relative path, direction).
+    //
+    // `initiate_upload` / `initiate_download` spawn and return immediately, so
+    // without collecting these the command would report success before a single
+    // byte moved. The path and direction are kept so a failure surfaced by
+    // `await_transfers` can be attributed back to the right counter: counting an
+    // upload as done at ENQUEUE time would report a failed upload as a success,
+    // because enqueueing succeeds for a file that turns out to be unreadable.
+    let mut started: Vec<(String, String, &'static str)> = Vec::new();
 
     for entry in &plan {
         if entry.action == "skip" {
@@ -157,7 +187,7 @@ pub async fn execute_sync_plan(
                 profile_id.clone(),
             )
             .await
-            .map(|id| transfer_ids.push(id)),
+            .map(|id| started.push((id, entry.relative_path.clone(), "upload"))),
             "download" => {
                 // Ensure the destination directory exists before downloading.
                 if let Some(parent) = std::path::Path::new(&abs_local).parent() {
@@ -172,7 +202,7 @@ pub async fn execute_sync_plan(
                     profile_id.clone(),
                 )
                 .await
-                .map(|id| transfer_ids.push(id))
+                .map(|id| started.push((id, entry.relative_path.clone(), "download")))
             }
             "deleteRemote" => {
                 if delete_extraneous {
@@ -192,8 +222,21 @@ pub async fn execute_sync_plan(
             other => Err(format!("Unknown sync action: {}", other)),
         };
 
-        if let Err(e) = result {
-            failures.push(format!("{}: {}", entry.relative_path, e));
+        match result {
+            Ok(()) => match entry.action.as_str() {
+                // Counted provisionally; a transfer that later fails is
+                // subtracted by the attribution below.
+                "upload" => uploads += 1,
+                "download" => downloads += 1,
+                // Only count a delete that actually ran: with
+                // `delete_extraneous` off these are no-ops that return Ok.
+                "deleteRemote" | "deleteLocal" if delete_extraneous => {
+                    deletes += 1;
+                    deleted_paths.push(entry.relative_path.clone());
+                }
+                _ => {}
+            },
+            Err(e) => failures.push(format!("{}: {}", entry.relative_path, e)),
         }
 
         done += 1;
@@ -210,11 +253,29 @@ pub async fn execute_sync_plan(
     // The transfers themselves already run concurrently (each was spawned by
     // `initiate_*`), so awaiting them here costs no throughput; it only delays
     // the report until the work is done.
-    for (id, remote_key) in await_transfers(&app_handle, transfer_ids).await {
-        failures.push(format!("{}: transfer failed ({})", remote_key, id));
+    let ids: Vec<String> = started.iter().map(|(id, _, _)| id.clone()).collect();
+    for failed_id in await_transfers(&app_handle, ids).await {
+        let (_, rel_path, dir) = started
+            .iter()
+            .find(|(id, _, _)| *id == failed_id.0)
+            .map(|(_, p, d)| (failed_id.0.clone(), p.clone(), *d))
+            .unwrap_or((failed_id.0.clone(), String::from("?"), "unknown"));
+        // The upload was counted when enqueued; it did not succeed.
+        match dir {
+            "upload" => uploads = uploads.saturating_sub(1),
+            "download" => downloads = downloads.saturating_sub(1),
+            _ => {}
+        }
+        failures.push(format!("{}: transfer failed ({})", rel_path, failed_id.1));
     }
 
-    Ok(failures.len() as u32)
+    Ok(SyncRunOutcome {
+        uploads,
+        downloads,
+        deletes,
+        deleted_paths,
+        failures,
+    })
 }
 
 /// `Some(None)` when a plan's entries disagree about direction, `Some(Some(d))`
@@ -414,6 +475,7 @@ pub(crate) async fn run_sync_profile_internal(
     profile: &SyncProfile,
 ) -> Result<u32, String> {
     let state = app_handle.state::<GaleonEngine>();
+    let started_at_ms = now_ms();
 
     let config = read_config(app_handle)?;
     let conn_template = config
@@ -459,7 +521,7 @@ pub(crate) async fn run_sync_profile_internal(
 
     // Execute the sync plan; ensure the session is removed from active_sessions
     // on both success and error paths to avoid a session leak.
-    let failure_count = execute_sync_plan(
+    let outcome = execute_sync_plan(
         app_handle.clone(),
         state.clone(),
         session_id.clone(),
@@ -475,7 +537,26 @@ pub(crate) async fn run_sync_profile_internal(
     state.active_sessions.write().await.remove(&session_id);
     remove_s3_session_config(&state, &session_id).await;
 
-    Ok(failure_count)
+    // Record what actually happened, including every deleted path. An
+    // unattended run that removed files is otherwise invisible once the app is
+    // closed — and the scheduler is exactly where deletions happen without a
+    // user watching.
+    let record = sync_log::build_run_record(
+        &profile.id,
+        &profile.name,
+        &profile.direction,
+        "schedule",
+        started_at_ms,
+        now_ms(),
+        &outcome,
+        outcome.deleted_paths.clone(),
+    );
+    if let Err(e) = sync_log::record_sync_run(app_handle, record).await {
+        // Never fail a completed run because its history could not be written.
+        eprintln!("sync: failed to record run log: {}", e);
+    }
+
+    Ok(outcome.failures.len() as u32)
 }
 
 #[cfg(test)]

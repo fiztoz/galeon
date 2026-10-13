@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+### Added
+
+- **Sync run history.** Every run — scheduled or manual — is recorded to `sync_runs.json` with
+  what it uploaded, downloaded, **deleted**, and failed, plus the paths it removed. Previously a
+  scheduled run's only trace was a transient event, so if the app was closed there was no way to
+  answer "did that job delete my files last Tuesday?". Runs that deleted anything are flagged
+  prominently, and unattended runs are distinguished from manual ones. Keep the last 100 runs;
+  per-run detail lists are capped so one large deletion cannot bloat the file.
+
 ### Changed
 
 - A sync run now reports what actually happened instead of what it queued. `execute_sync_plan`

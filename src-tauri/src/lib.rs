@@ -53,6 +53,7 @@ pub mod listing;
 pub mod prefix_size;
 pub mod schedule;
 pub mod store_io;
+pub mod sync_log;
 pub mod sync_plan;
 pub mod sync_store;
 pub mod sync_tree;
@@ -69,6 +70,7 @@ pub use engine::*;
 pub(crate) use listing::*;
 pub(crate) use prefix_size::*;
 pub use schedule::*;
+pub use sync_log::*;
 pub use sync_plan::*;
 pub(crate) use sync_store::*;
 pub use sync_tree::*;
@@ -170,6 +172,8 @@ pub fn run() {
             compute_sync_diff,
             execute_sync_plan,
             get_sync_profiles,
+            get_sync_runs,
+            clear_sync_runs,
             save_sync_profile,
             delete_sync_profile,
             run_sync_profile_now,

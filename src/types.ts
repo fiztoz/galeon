@@ -113,3 +113,38 @@ export interface DirectoryListing {
   truncated: boolean;
   limit: number;
 }
+
+/**
+ * Mirrors `sync_log::SyncRunRecord` (camelCase): what one sync run actually
+ * did, as opposed to the plan it was approved from.
+ *
+ * `deletes` / `deletedPaths` are the point of the record — permanent,
+ * unrecoverable removals at the destination, which is otherwise unanswerable
+ * after an unattended (scheduled) run.
+ */
+export interface SyncRunRecord {
+  id: string;
+  profileId: string;
+  profileName: string;
+  /** "localToRemote" | "remoteToLocal". */
+  direction: 'localToRemote' | 'remoteToLocal';
+  /** "schedule" for an unattended run, "manual" for one the user started. */
+  trigger: 'schedule' | 'manual';
+  /** Unix epoch milliseconds. */
+  startedAtMs: number;
+  finishedAtMs: number;
+  /** True only when the run had no failures at all. */
+  succeeded: boolean;
+  uploads: number;
+  downloads: number;
+  /** Permanent deletions. The number that matters. */
+  deletes: number;
+  failures: number;
+  /**
+   * Relative paths that were deleted. Capped by the backend, so it can be
+   * shorter than `deletes` — the count stays authoritative.
+   */
+  deletedPaths: string[];
+  /** Human-readable failure messages. Capped by the backend the same way. */
+  errors: string[];
+}
