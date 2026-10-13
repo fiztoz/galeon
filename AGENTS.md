@@ -25,6 +25,7 @@ Product intent lives in [`docs/DIRECTION.md`](docs/DIRECTION.md). UI tokens and 
 | Brand / logo | `branding/BRANDING.md` |
 | macOS ship / notarization | `docs/RELEASE_MACOS.md` |
 | S3 connect, sanitize, SSL, OpenDAL operator | `src-tauri/src/s3_connect.rs` |
+| WebDAV / Azure / GCS connect (non-S3 OpenDAL services) | `src-tauri/src/http_connect.rs` |
 | Profile export/import | `src-tauri/src/profile_io.rs` |
 | S3 metadata (AWS SDK) | `src-tauri/src/s3_metadata.rs` |
 | Credentials / keyring / cache | `src-tauri/src/credentials.rs` |
@@ -88,7 +89,8 @@ Agents must treat these as **default blockers**, not optional nits.
 | Validate bucket / normalize endpoint | `s3_connect::validate_bucket_name` / `normalize_endpoint` / `sanitize_s3_connection` |
 | Soft-clean profile before config write | `s3_connect::sanitize_profile_for_storage` |
 | Open S3 OpenDAL operator + layers | `s3_connect::open_s3_operator` |
-| TLS bypass for OpenDAL | `s3_connect::apply_s3_ssl_settings` (via open path) |
+| Open WebDAV / Azure / GCS OpenDAL operator (shares the same layers + TLS bypass) | `http_connect::open_webdav_operator` / `open_azblob_operator` / `open_gcs_operator` |
+| TLS bypass for OpenDAL | `s3_connect::apply_tls_bypass` (via open path) |
 | TLS bypass for AWS metadata client | `s3_metadata::build_s3_client` honors `danger_disable_ssl_verification` |
 | Profile merge / import / export | `profile_io` |
 | Keyring load/save/delete | `credentials` |
@@ -133,11 +135,17 @@ All live S3 sessions go through **`s3_connect`**:
 
 1. Sanitize fields  
 2. Build OpenDAL `S3` service  
-3. Apply SSL settings if requested  
-4. Operator + retry (+ optional throttle)  
-5. `check()` with `format_s3_connect_error` (TLS hints only when cert/ssl/tls keywords appear — not every network error)
+3. Apply TLS bypass if requested (`apply_tls_bypass`)  
+4. Operator + retry (+ optional throttle) — shared with the non-S3 OpenDAL protocols via `apply_operator_layers`  
+5. `check()` with `format_connect_error` (TLS hints only when cert/ssl/tls keywords appear — not every network error)
 
 `S3SessionConfig` must keep `danger_disable_ssl_verification` consistent with OpenDAL **and** AWS SDK metadata client.
+
+The non-S3 OpenDAL protocols (**WebDAV, Azure Blob, GCS**) build through
+**`http_connect`** with the same tail (sanitize → builder → layers → TLS bypass →
+`check()`), reusing `s3_connect`'s field cleaners, layer/throttle, and TLS-bypass
+helpers. Do not fork a second copy of the layer/TLS wiring for them. SFTP/FTP
+are native Rust sessions (`sftp_native` / `ftp_native`) and never touch these helpers.
 
 ### 4.2 Profiles
 

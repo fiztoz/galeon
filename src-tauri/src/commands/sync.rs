@@ -278,8 +278,12 @@ pub(crate) fn build_connection_for_sync(
             }
         }
         "ftp" | "ftps" => Ok((conn_template.clone(), secret.or(access))),
+        // HTTP storage protocols share the single-secret model: WebDAV's password
+        // and Azure's account key live in the secret slot; GCS normally needs no
+        // secret at all because its credential is a file path (credential_path).
+        "webdav" | "azure" | "gcs" => Ok((conn_template.clone(), secret.or(access))),
         other => Err(format!(
-            "Unsupported protocol: {}. Use 's3', 'sftp', 'ftp', or 'ftps'.",
+            "Unsupported protocol: {}. Use 's3', 'sftp', 'ftp', 'ftps', 'webdav', 'azure', or 'gcs'.",
             other
         )),
     }

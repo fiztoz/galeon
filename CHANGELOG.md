@@ -1,10 +1,13 @@
-# Changelog
-
-All notable changes to Galeon are documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-
 ## [Unreleased]
+
+### Added
+
+- WebDAV connections: connect to Nextcloud/ownCloud, NAS boxes, and shared-hosting DAV URLs with optional username/password (anonymous shares work too).
+- Azure Blob connections: account name + account key, container in the bucket field; the endpoint derives from the account name or is overridden for sovereign clouds.
+- Google Cloud Storage: service-account JSON on disk (path stored; key stays outside the keyring) or pasted JSON into the keyring.
+- Auto-reconnect resumes queued transfers on app restart for WebDAV, Azure, and GCS (not only S3); the reopened session now reports its protocol.
+- Per-protocol capabilities for the three new protocols mirror OpenDAL 0.59's actual service support (multipart, presigned URLs, bulk delete).
+
 
 ## [1.0.0-alpha.5] - 2026-10-07
 

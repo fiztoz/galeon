@@ -1,3 +1,5 @@
+import type { StorageProtocol } from '../types';
+
 export interface SshTunnelFormValue {
   enabled: boolean;
   host: string;
@@ -16,7 +18,7 @@ export interface SavedSshTunnelValue {
   password?: string;
 }
 
-export type TunnelProtocol = 's3' | 'sftp' | 'ftp' | 'ftps';
+export type TunnelProtocol = StorageProtocol;
 
 export const EMPTY_SSH_TUNNEL: SshTunnelFormValue = {
   enabled: false,

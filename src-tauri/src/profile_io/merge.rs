@@ -63,6 +63,29 @@ pub fn connection_identity_changed(
     false
 }
 
+/// Reject clearly unparseable schemes / empty hosts without requiring a full
+/// URL crate. Shared by every endpoint-based protocol (S3, WebDAV, Azure, GCS).
+fn validate_endpoint_host(endpoint: &str, profile_name: &str) -> Result<(), String> {
+    if endpoint.chars().any(|c| c.is_whitespace()) {
+        return Err(format!(
+            "Profile {:?}: endpoint contains whitespace.",
+            profile_name
+        ));
+    }
+    let without_scheme = endpoint
+        .strip_prefix("https://")
+        .or_else(|| endpoint.strip_prefix("http://"))
+        .unwrap_or(endpoint);
+    let host = without_scheme.split('/').next().unwrap_or("");
+    if host.is_empty() {
+        return Err(format!(
+            "Profile {:?}: endpoint host is empty.",
+            profile_name
+        ));
+    }
+    Ok(())
+}
+
 /// Clean and validate a single imported profile (non-secret metadata).
 /// Returns the cleaned profile with secrets still attached (caller extracts them).
 ///
@@ -85,7 +108,10 @@ pub fn sanitize_imported_profile(
         .unwrap_or("s3")
         .trim()
         .to_ascii_lowercase();
-    if !matches!(protocol.as_str(), "s3" | "sftp" | "ftp" | "ftps") {
+    if !matches!(
+        protocol.as_str(),
+        "s3" | "sftp" | "ftp" | "ftps" | "webdav" | "azure" | "gcs"
+    ) {
         return Err(format!(
             "Profile {:?}: unsupported protocol {:?}.",
             profile.name, protocol
@@ -111,24 +137,7 @@ pub fn sanitize_imported_profile(
         validate_bucket_name(bucket).map_err(|e| format!("Profile {:?}: {}", profile.name, e))?;
 
         if let Some(ref ep) = profile.endpoint {
-            if ep.chars().any(|c| c.is_whitespace()) {
-                return Err(format!(
-                    "Profile {:?}: endpoint contains whitespace.",
-                    profile.name
-                ));
-            }
-            // Reject clearly unparseable schemes / empty hosts without requiring a full URL crate.
-            let without_scheme = ep
-                .strip_prefix("https://")
-                .or_else(|| ep.strip_prefix("http://"))
-                .unwrap_or(ep.as_str());
-            let host = without_scheme.split('/').next().unwrap_or("");
-            if host.is_empty() {
-                return Err(format!(
-                    "Profile {:?}: endpoint host is empty.",
-                    profile.name
-                ));
-            }
+            validate_endpoint_host(ep, &profile.name)?;
         }
 
         // Force SSL bypass off on import (MITM risk with untrusted files).
@@ -141,6 +150,74 @@ pub fn sanitize_imported_profile(
         profile.port = None;
         profile.username = None;
         profile.key_path = None;
+        profile.passive_mode = None;
+        profile.encrypt = None;
+    } else if matches!(protocol.as_str(), "webdav" | "azure" | "gcs") {
+        // HTTP storage protocols: endpoint-first like S3, but the container /
+        // bucket stays in `bucket` and Azure's account name in `username`.
+        profile.endpoint = clean_connection_opt(profile.endpoint.take());
+        profile.bucket = clean_connection_opt(profile.bucket.take());
+        profile.username = clean_connection_opt(profile.username.take());
+        profile.credential_path = clean_connection_opt(profile.credential_path.take());
+        // Password lives in secret_key like every other non-S3 protocol.
+        // Preserve whitespace because it may be part of the secret; connection
+        // metadata is sanitized separately.
+        profile.secret_key = profile.secret_key.take().filter(|s| !s.is_empty());
+        profile.access_key = None;
+
+        // Force SSL bypass off on import (same MITM rule as S3).
+        if profile.danger_disable_ssl_verification.unwrap_or(false) {
+            profile.danger_disable_ssl_verification = Some(false);
+        }
+
+        if protocol == "webdav" {
+            if profile.endpoint.is_none() {
+                return Err(format!(
+                    "Profile {:?}: WebDAV server URL is required.",
+                    profile.name
+                ));
+            }
+            if let Some(ref ep) = profile.endpoint {
+                validate_endpoint_host(ep, &profile.name)?;
+            }
+            // WebDAV has no container; the endpoint root is the import root.
+            profile.bucket = None;
+        } else {
+            // Azure + GCS both carry a container/bucket.
+            if profile.bucket.is_none() {
+                let label = if protocol == "azure" {
+                    "Azure container"
+                } else {
+                    "GCS bucket"
+                };
+                return Err(format!(
+                    "Profile {:?}: {} is required.",
+                    profile.name, label
+                ));
+            }
+            if protocol == "azure" {
+                if profile.username.is_none() {
+                    return Err(format!(
+                        "Profile {:?}: Azure account name is required.",
+                        profile.name
+                    ));
+                }
+                if profile.secret_key.is_none() {
+                    return Err(format!(
+                        "Profile {:?}: Azure account key is required.",
+                        profile.name
+                    ));
+                }
+            }
+        }
+
+        // Clear fields that belong to the S3-only and file-protocol families.
+        profile.host = None;
+        profile.port = None;
+        profile.key_path = None;
+        profile.region = None;
+        profile.storage_class = None;
+        profile.use_virtual_host_style = None;
         profile.passive_mode = None;
         profile.encrypt = None;
     } else {
@@ -168,10 +245,13 @@ pub fn sanitize_imported_profile(
     }
 
     if let Some(tunnel) = profile.ssh_tunnel.take() {
-        if matches!(protocol.as_str(), "ftp" | "ftps") {
+        if matches!(
+            protocol.as_str(),
+            "ftp" | "ftps" | "webdav" | "azure" | "gcs"
+        ) {
             return Err(format!(
-                "Profile {:?}: SSH tunneling is not supported for FTP/FTPS.",
-                profile.name
+                "Profile {:?}: SSH tunneling is not supported for {}.",
+                profile.name, protocol
             ));
         }
         if protocol == "s3" && profile.endpoint.is_none() {

@@ -20,6 +20,7 @@ fn sample_s3(id: &str, name: &str) -> ConnectionProfile {
         port: None,
         username: None,
         key_path: None,
+        credential_path: None,
         passive_mode: None,
         encrypt: None,
         bandwidth_rules: None,
@@ -47,6 +48,7 @@ fn sample_sftp(id: &str, name: &str) -> ConnectionProfile {
         port: Some(22),
         username: Some("deploy".to_string()),
         key_path: None,
+        credential_path: None,
         passive_mode: None,
         encrypt: None,
         bandwidth_rules: None,
@@ -355,6 +357,166 @@ fn sanitize_sftp_requires_host() {
     assert!(sanitize_imported_profile(p).is_err());
 }
 
+fn sample_webdav(id: &str, name: &str) -> ConnectionProfile {
+    ConnectionProfile {
+        id: id.to_string(),
+        name: name.to_string(),
+        protocol: Some("webdav".to_string()),
+        endpoint: Some("https://cloud.example.com/remote.php/dav/files/me".to_string()),
+        region: None,
+        access_key: None,
+        secret_key: None,
+        bucket: None,
+        danger_disable_ssl_verification: Some(true),
+        use_virtual_host_style: None,
+        storage_class: None,
+        max_bandwidth: None,
+        host: None,
+        port: None,
+        username: Some("me".to_string()),
+        key_path: None,
+        credential_path: None,
+        passive_mode: None,
+        encrypt: None,
+        bandwidth_rules: None,
+        ssh_tunnel: None,
+        ssh_tunnel_profile_id: None,
+        has_saved_credentials: None,
+    }
+}
+
+fn sample_azure(id: &str, name: &str) -> ConnectionProfile {
+    ConnectionProfile {
+        id: id.to_string(),
+        name: name.to_string(),
+        protocol: Some("azure".to_string()),
+        endpoint: Some("https://mystorageaccount.blob.core.windows.net".to_string()),
+        region: None,
+        access_key: None,
+        secret_key: Some("account-key".to_string()),
+        bucket: Some("mycontainer".to_string()),
+        danger_disable_ssl_verification: None,
+        use_virtual_host_style: None,
+        storage_class: None,
+        max_bandwidth: None,
+        host: None,
+        port: None,
+        username: Some("mystorageaccount".to_string()),
+        key_path: None,
+        credential_path: None,
+        passive_mode: None,
+        encrypt: None,
+        bandwidth_rules: None,
+        ssh_tunnel: None,
+        ssh_tunnel_profile_id: None,
+        has_saved_credentials: None,
+    }
+}
+
+fn sample_gcs(id: &str, name: &str) -> ConnectionProfile {
+    ConnectionProfile {
+        id: id.to_string(),
+        name: name.to_string(),
+        protocol: Some("gcs".to_string()),
+        endpoint: None,
+        region: None,
+        access_key: None,
+        secret_key: None,
+        bucket: Some("my-bucket".to_string()),
+        danger_disable_ssl_verification: None,
+        use_virtual_host_style: None,
+        storage_class: None,
+        max_bandwidth: None,
+        host: None,
+        port: None,
+        username: None,
+        key_path: None,
+        credential_path: Some("/keys/gcs-service-account.json".to_string()),
+        passive_mode: None,
+        encrypt: None,
+        bandwidth_rules: None,
+        ssh_tunnel: None,
+        ssh_tunnel_profile_id: None,
+        has_saved_credentials: None,
+    }
+}
+
+#[test]
+fn sanitize_webdav_requires_endpoint_and_keeps_dav_path() {
+    let mut p = sample_webdav("x", "Nextcloud");
+    p.endpoint = None;
+    assert!(sanitize_imported_profile(p).is_err());
+
+    let mut p = sample_webdav("x", "Nextcloud");
+    p.endpoint = Some("  \"https://cloud.example.com/remote.php/dav/files/me/\"  ".to_string());
+    let clean = sanitize_imported_profile(p).unwrap();
+    assert_eq!(
+        clean.endpoint.as_deref(),
+        // Paste junk is stripped; trailing-slash normalization happens at
+        // connect time (http_connect::sanitize_webdav_connection), same as S3.
+        Some("https://cloud.example.com/remote.php/dav/files/me/")
+    );
+    assert!(clean.host.is_none(), "file-protocol fields must clear");
+}
+
+#[test]
+fn sanitize_webdav_forces_ssl_bypass_off() {
+    let clean = sanitize_imported_profile(sample_webdav("x", "Lab")).unwrap();
+    assert_eq!(clean.danger_disable_ssl_verification, Some(false));
+}
+
+#[test]
+fn sanitize_azure_requires_account_name_and_key() {
+    let mut p = sample_azure("x", "Azure");
+    p.username = None;
+    assert!(sanitize_imported_profile(p).is_err());
+
+    let mut p = sample_azure("x", "Azure");
+    p.secret_key = None;
+    assert!(sanitize_imported_profile(p).is_err());
+
+    let clean = sanitize_imported_profile(sample_azure("x", "Azure")).unwrap();
+    assert_eq!(clean.bucket.as_deref(), Some("mycontainer"));
+    assert_eq!(clean.username.as_deref(), Some("mystorageaccount"));
+}
+
+#[test]
+fn sanitize_gcs_requires_bucket() {
+    let mut p = sample_gcs("x", "GCS");
+    p.bucket = None;
+    assert!(sanitize_imported_profile(p).is_err());
+
+    let clean = sanitize_imported_profile(sample_gcs("x", "GCS")).unwrap();
+    assert_eq!(
+        clean.credential_path.as_deref(),
+        Some("/keys/gcs-service-account.json")
+    );
+}
+
+#[test]
+fn sanitize_imported_profile_rejects_tunnel_for_http_protocols() {
+    let cases = [
+        sample_webdav("x", "Tunneled"),
+        sample_azure("x", "Tunneled"),
+        sample_gcs("x", "Tunneled"),
+    ];
+    for mut p in cases {
+        let protocol = p.protocol.clone().unwrap();
+        p.ssh_tunnel = Some(crate::ssh_tunnel::SshTunnelConfig {
+            host: "bastion.example.com".to_string(),
+            port: 22,
+            username: "deploy".to_string(),
+            key_path: None,
+            password: None,
+        });
+        let err = sanitize_imported_profile(p).unwrap_err();
+        assert!(
+            err.contains(&format!("SSH tunneling is not supported for {}", protocol)),
+            "err={err}"
+        );
+    }
+}
+
 #[test]
 fn sanitize_cleans_s3_paste_junk() {
     let mut p = sample_s3("x", "  Prod  ");
@@ -437,5 +599,5 @@ fn sanitize_imported_profile_rejects_ftp_tunnel() {
         password: None,
     });
     let err = sanitize_imported_profile(p).unwrap_err();
-    assert!(err.contains("not supported for FTP/FTPS"));
+    assert!(err.contains("SSH tunneling is not supported for ftp"));
 }

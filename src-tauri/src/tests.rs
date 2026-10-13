@@ -72,8 +72,8 @@ fn test_sanitize_s3_rejects_internal_endpoint_whitespace() {
 }
 
 #[test]
-fn test_format_s3_connect_error_invalid_uri_hint() {
-    let msg = s3_connect::format_s3_connect_error(
+fn test_format_connect_error_invalid_uri_hint() {
+    let msg = s3_connect::format_connect_error(
         "S3 connection check failed",
         "building http request, source: invalid uri character",
     );
@@ -179,6 +179,7 @@ fn test_galeon_config_serialization_round_trip() {
             port: None,
             username: None,
             key_path: None,
+            credential_path: None,
             passive_mode: None,
             encrypt: None,
             bandwidth_rules: None,
@@ -246,6 +247,7 @@ fn test_reconnect_result_serialization() {
         session_id: "session-123".to_string(),
         bucket: "my-bucket".to_string(),
         profile_id: "profile-456".to_string(),
+        protocol: "s3".to_string(),
     };
 
     let json = serde_json::to_string(&result).unwrap();
@@ -927,6 +929,7 @@ fn test_bandwidth_rule_no_match_falls_back() {
         port: None,
         username: None,
         key_path: None,
+        credential_path: None,
         passive_mode: None,
         encrypt: None,
         bandwidth_rules: Some(rules),

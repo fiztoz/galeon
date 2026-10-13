@@ -31,6 +31,7 @@ use uuid::Uuid;
 
 pub mod credentials;
 pub mod ftp_native;
+pub mod http_connect;
 pub mod menu_bar;
 pub mod profile_io;
 pub mod s3_connect;
