@@ -50,6 +50,16 @@ pub(crate) async fn write_transfer_queue_locked(
     tokio::fs::write(&temp_path, &data)
         .await
         .map_err(|e| format!("Failed to write transfers.json.tmp: {}", e))?;
+    // `tokio::fs::write` creates at the umask default; tighten before the
+    // rename so the mode that lands on `transfers.json` is owner-only. Only
+    // runs on this (rare) write path — reads stay untouched.
+    if let Err(e) = store_io::tighten_owner_only(&temp_path) {
+        let _ = tokio::fs::remove_file(&temp_path).await;
+        return Err(format!(
+            "Failed to restrict permissions on transfers.json.tmp: {}",
+            e
+        ));
+    }
     tokio::fs::rename(&temp_path, &path)
         .await
         .map_err(|e| format!("Failed to rename transfers.json: {}", e))

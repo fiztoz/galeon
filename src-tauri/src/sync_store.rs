@@ -137,7 +137,9 @@ fn write_atomic(path: &std::path::Path, contents: &str) -> Result<(), String> {
     let tmp = dir.join(format!("{file_name}.tmp"));
 
     let write_result = (|| -> std::io::Result<()> {
-        let mut f = std::fs::File::create(&tmp)?;
+        // Owner-only temp file (0600): after the rename it *is* the store, so
+        // the mode travels with the atomic swap.
+        let mut f = store_io::create_private_file(&tmp)?;
         f.write_all(contents.as_bytes())?;
         // Flush to the OS before the rename so a crash cannot leave the renamed
         // file present but empty.
