@@ -49,6 +49,7 @@ pub async fn initiate_download(
         remote_key: remote_key.clone(),
         local_path: local_path.clone(),
         profile_id: profile_id.clone().unwrap_or_default(),
+        session_id: Some(session_id.clone()),
         status: "active".to_string(),
         bytes_transferred: 0,
         total_bytes,
@@ -198,6 +199,7 @@ pub async fn initiate_upload(
         remote_key: remote_key.clone(),
         local_path: local_path.clone(),
         profile_id: profile_id.clone().unwrap_or_default(),
+        session_id: Some(session_id.clone()),
         status: "active".to_string(),
         bytes_transferred: 0,
         total_bytes,
@@ -338,10 +340,102 @@ pub async fn resume_transfer(
         control.resume_notify.notify_one();
         use tauri::Emitter;
         let _ = app_handle.emit("transfer-resumed", &transfer_id);
-        Ok(())
-    } else {
-        Err("Transfer not found".to_string())
+        return Ok(());
     }
+
+    // Not in the in-memory registry. `finalize_transfer_job` removes the
+    // control when a transfer ENDS, so a failed transfer lands here and used to
+    // get "Transfer not found" — the only recovery was starting the transfer
+    // again by hand. Rebuild it from the queue entry instead.
+    //
+    // The rebuild needs the storage session the transfer was started against,
+    // which is why the queue entry records one.
+    retry_failed_transfer(&app_handle, &state, &transfer_id).await
+}
+
+/// Re-enqueue a failed (or cancelled) transfer from its queue entry.
+///
+/// Returns the new transfer id. A download resumes from its `.part` file, so a
+/// retry after a late failure does not re-transfer what already arrived.
+async fn retry_failed_transfer(
+    app_handle: &AppHandleType,
+    state: &tauri::State<'_, GaleonEngine>,
+    transfer_id: &str,
+) -> Result<(), String> {
+    let queue = get_transfer_queue(app_handle.clone()).await?;
+    let entry = queue
+        .entries
+        .iter()
+        .find(|e| e.id == transfer_id)
+        .cloned()
+        .ok_or_else(|| "Transfer not found".to_string())?;
+
+    if !matches!(entry.status.as_str(), "failed" | "cancelled") {
+        return Err(format!(
+            "Transfer is {} and cannot be retried",
+            entry.status
+        ));
+    }
+
+    let session_id = entry
+        .session_id
+        .clone()
+        // Older queue files predate this field, so a transfer recorded before
+        // the upgrade cannot be rebuilt. Say so rather than guessing a session.
+        .ok_or_else(|| {
+            "This transfer is too old to retry — start it again from the file list.".to_string()
+        })?;
+
+    if !state.active_sessions.read().await.contains_key(&session_id) {
+        return Err(
+            "That connection is no longer open — reconnect and start the transfer again."
+                .to_string(),
+        );
+    }
+
+    let profile_id = if entry.profile_id.is_empty() {
+        None
+    } else {
+        Some(entry.profile_id.clone())
+    };
+
+    // Clone the fields the two arms need so `entry` stays whole for the
+    // bookkeeping below.
+    let direction = entry.direction.clone();
+    let local_path = entry.local_path.clone();
+    let remote_key = entry.remote_key.clone();
+
+    match direction.as_str() {
+        "upload" => {
+            initiate_upload(
+                state.clone(),
+                app_handle.clone(),
+                session_id,
+                local_path,
+                remote_key,
+                profile_id,
+            )
+            .await?;
+        }
+        "download" => {
+            initiate_download(
+                state.clone(),
+                app_handle.clone(),
+                session_id,
+                remote_key,
+                local_path,
+                profile_id,
+            )
+            .await?;
+        }
+        other => return Err(format!("Unknown transfer direction: {}", other)),
+    }
+
+    // The old row would otherwise sit in the list next to its replacement.
+    let mut old = entry;
+    old.status = "retried".to_string();
+    let _ = update_transfer_queue_entry(app_handle.clone(), old).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -395,6 +489,9 @@ pub(crate) async fn finalize_transfer_job(
                 remote_key,
                 local_path,
                 profile_id,
+                // Preserved by update_transfer_queue_entry below; the entry
+                // being finalised already carries it from enqueue time.
+                session_id: None,
                 status,
                 bytes_transferred: 0,
                 total_bytes: 0,
@@ -411,6 +508,8 @@ pub(crate) async fn finalize_transfer_job(
                 remote_key,
                 local_path,
                 profile_id,
+                // Set at enqueue time and preserved by update_transfer_queue_entry.
+                session_id: None,
                 status: "completed".to_string(),
                 bytes_transferred: 0,
                 total_bytes: 0,

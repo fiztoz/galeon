@@ -280,6 +280,7 @@ async fn test_tier1_f19_transfer_queue_persistence() {
         direction: "download".to_string(),
         remote_key: "remote.txt".to_string(),
         local_path: "local.txt".to_string(),
+        session_id: None,
         profile_id: "profile-1".to_string(),
         status: "queued".to_string(),
         bytes_transferred: 0,
@@ -308,6 +309,7 @@ async fn test_tier1_f20_clear_completed_transfers() {
         direction: "download".to_string(),
         remote_key: "r1.txt".to_string(),
         local_path: "l1.txt".to_string(),
+        session_id: None,
         profile_id: "p1".to_string(),
         status: "completed".to_string(),
         bytes_transferred: 10,
@@ -322,6 +324,7 @@ async fn test_tier1_f20_clear_completed_transfers() {
         direction: "download".to_string(),
         remote_key: "r2.txt".to_string(),
         local_path: "l2.txt".to_string(),
+        session_id: None,
         profile_id: "p1".to_string(),
         status: "queued".to_string(),
         bytes_transferred: 0,
@@ -504,6 +507,7 @@ async fn test_tier1_f26_exposed_commands_coverage() {
         direction: "download".to_string(),
         remote_key: "dummy-key".to_string(),
         local_path: "dummy-path".to_string(),
+        session_id: None,
         profile_id: "dummy-profile".to_string(),
         status: "active".to_string(),
         bytes_transferred: 0,
@@ -760,6 +764,107 @@ async fn test_copy_object_folder() {
         .exists("test_copy_folder/source_folder/file3.txt")
         .await
         .unwrap());
+
+    ctx.cleanup().await;
+}
+
+#[tokio::test]
+async fn test_tier1_f27_failed_transfer_can_be_retried() {
+    // `finalize_transfer_job` removes a transfer's in-memory control when it
+    // ENDS, so a failed transfer was unreachable afterwards and `resume_transfer`
+    // answered "Transfer not found" — recovery meant starting over by hand.
+    let _guard = TEST_SERIAL_MUTEX.lock().await;
+    let ctx = TestContext::setup("tier1_f27").await;
+    let state = ctx.app.state::<GaleonEngine>();
+
+    let missing = ctx.temp_dir.join("does-not-exist.bin");
+    let id = initiate_download(
+        state.clone(),
+        ctx.handle.clone(),
+        ctx.session_id.clone(),
+        "tier1_f27/nope.bin".to_string(),
+        missing.to_string_lossy().to_string(),
+        None,
+    )
+    .await
+    .unwrap();
+
+    let entry = wait_for_transfer(&ctx.handle, &id, 20).await.unwrap();
+    assert_eq!(entry.status, "failed", "fixture must actually fail");
+    assert!(
+        entry.session_id.is_some(),
+        "the queue entry must name its session, or a retry cannot be rebuilt"
+    );
+
+    // Now retry it — pointing at a key that does exist this time.
+    let queue = get_transfer_queue(ctx.handle.clone()).await.unwrap();
+    let stored = queue.entries.iter().find(|e| e.id == id).unwrap().clone();
+    assert_eq!(stored.session_id.as_deref(), Some(ctx.session_id.as_str()));
+
+    // The retry path rebuilds from the queue entry, so drive it the same way a
+    // user would: fix the entry's remote key, then resume.
+    let mut fixed = stored.clone();
+    fixed.remote_key = "tier1_f27/real.bin".to_string();
+    fixed.status = "failed".to_string();
+    update_transfer_queue_entry(ctx.handle.clone(), fixed)
+        .await
+        .unwrap();
+
+    ctx.operator()
+        .write("tier1_f27/real.bin", "now it exists")
+        .await
+        .unwrap();
+
+    resume_transfer(ctx.handle.clone(), state, id.clone())
+        .await
+        .expect("a failed transfer must be retryable");
+
+    // The retry produced a NEW transfer that ran to completion.
+    let queue = get_transfer_queue(ctx.handle.clone()).await.unwrap();
+    let retried = queue
+        .entries
+        .iter()
+        .find(|e| e.id != id && e.remote_key == "tier1_f27/real.bin")
+        .expect("a new transfer should have been enqueued");
+    let done = wait_for_transfer(&ctx.handle, &retried.id, 20)
+        .await
+        .unwrap();
+    assert_eq!(done.status, "completed");
+
+    ctx.cleanup().await;
+}
+
+#[tokio::test]
+async fn test_tier1_f28_resume_refuses_a_completed_transfer() {
+    // The rebuild path must not fire for a transfer that already succeeded.
+    let _guard = TEST_SERIAL_MUTEX.lock().await;
+    let ctx = TestContext::setup("tier1_f28").await;
+    let state = ctx.app.state::<GaleonEngine>();
+    let op = ctx.operator();
+
+    op.write("tier1_f28/a.bin", "payload").await.unwrap();
+    let local = ctx.temp_dir.join("a.bin");
+    let id = initiate_download(
+        state.clone(),
+        ctx.handle.clone(),
+        ctx.session_id.clone(),
+        "tier1_f28/a.bin".to_string(),
+        local.to_string_lossy().to_string(),
+        None,
+    )
+    .await
+    .unwrap();
+    let entry = wait_for_transfer(&ctx.handle, &id, 20).await.unwrap();
+    assert_eq!(entry.status, "completed");
+
+    let err = resume_transfer(ctx.handle.clone(), state, id)
+        .await
+        .expect_err("a completed transfer must not be retried");
+    assert!(
+        err.contains("cannot be retried"),
+        "unexpected error: {}",
+        err
+    );
 
     ctx.cleanup().await;
 }
