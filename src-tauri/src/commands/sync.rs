@@ -109,6 +109,14 @@ pub struct SyncRunOutcome {
 /// On success, returns what the run actually did. `failures` empty means the
 /// whole plan completed; non-empty means it ran to completion with individual
 /// items failing.
+///
+/// Manual runs record themselves to the sync run history (trigger "manual")
+/// with the outcome they got. `sync_profile_id` / `sync_profile_name` carry
+/// the saved profile the panel attributes the run to, as sent by the UI when
+/// the form still matches the loaded profile; the internal profile pipeline
+/// must NOT pass them — it records its own run. Ad-hoc manual runs (no
+/// attribution) record under the generic name "Manual sync". A plan with no
+/// entries executes nothing, changes nothing, and is not recorded.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn execute_sync_plan(
@@ -120,8 +128,12 @@ pub async fn execute_sync_plan(
     local_path: String,
     remote_prefix: String,
     profile_id: Option<String>,
+    sync_profile_id: Option<String>,
+    sync_profile_name: Option<String>,
 ) -> Result<SyncRunOutcome, String> {
     use tauri::Emitter;
+
+    let started_at_ms = now_ms();
 
     if is_unsafe_root_path(&local_path) || is_unsafe_root_path(&remote_prefix) {
         return Err("Path traversal detected".to_string());
@@ -132,11 +144,14 @@ pub async fn execute_sync_plan(
     // planner, so refuse it rather than resolving deletes against mismatched
     // roots. Cheap coherence check — it is not a substitute for re-deriving the
     // plan from the two trees, but it catches a plan assembled from two diffs.
-    if let Some(direction) = plan_coherent_direction(&plan) {
-        if direction.is_none() {
+    // An empty plan is directionless; it also produces no history row below.
+    let plan_direction = match plan_coherent_direction(&plan) {
+        Some(Some(direction)) => Some(direction),
+        Some(None) => {
             return Err("Sync plan mixes directions; recompute the diff.".to_string());
         }
-    }
+        None => None,
+    };
 
     let total = plan.iter().filter(|e| e.action != "skip").count() as u64;
     let mut done: u64 = 0;
@@ -269,13 +284,37 @@ pub async fn execute_sync_plan(
         failures.push(format!("{}: transfer failed ({})", rel_path, failed_id.1));
     }
 
-    Ok(SyncRunOutcome {
+    let outcome = SyncRunOutcome {
         uploads,
         downloads,
         deletes,
         deleted_paths,
         failures,
-    })
+    };
+
+    // The manual run's history row — the same record the internal profile
+    // pipeline would write, with the trigger this run actually had. A failed
+    // run also records: the question "what did that run do to my destination"
+    // matters more when something went wrong, not less.
+    if let Some(direction) = plan_direction {
+        let record = sync_log::build_run_record(
+            sync_profile_id.as_deref().unwrap_or_default(),
+            sync_profile_name.as_deref().unwrap_or("Manual sync"),
+            &direction,
+            "manual",
+            started_at_ms,
+            now_ms(),
+            &outcome,
+            outcome.deleted_paths.clone(),
+            None,
+        );
+        if let Err(e) = sync_log::record_sync_run(&app_handle, record).await {
+            // Never fail a completed run because its history could not be written.
+            eprintln!("sync: failed to record manual run log: {}", e);
+        }
+    }
+
+    Ok(outcome)
 }
 
 /// `Some(None)` when a plan's entries disagree about direction, `Some(Some(d))`
@@ -522,6 +561,11 @@ pub(crate) async fn run_sync_profile_internal(
         profile.local_path.clone(),
         profile.remote_prefix.clone(),
         Some(profile.connection_profile_id.clone()),
+        // No manual-run attribution: this pipeline records its own run (the
+        // scheduled record carries the budget outcome). Passing one here
+        // would double-write the history.
+        None,
+        None,
     )
     .await?;
 

@@ -83,8 +83,11 @@ instead of stopping partway, and the run history records the refusal. `0` — th
 existing profile loads with — means scheduled runs never delete; run manually to delete after
 reviewing the diff.
 
-Every run is kept in the sync panel's history: what was uploaded, downloaded, deleted, and
-what failed, with the paths that were removed for unattended deletion.
+Every run — scheduled or manual — is kept in the sync panel's history: what was uploaded,
+downloaded, deleted, and what failed, with the paths that were removed. A manual run is
+recorded under the profile it came from as long as you applied the diff without changing
+settings; after an edit it is recorded ad-hoc (as "Manual sync"), so a profile is never
+blamed for a run it did not describe.
 
 ## Settings
 
