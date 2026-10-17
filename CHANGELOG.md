@@ -2,6 +2,14 @@
 
 ### Added
 
+- **"Risky" filter for the sync run history.** The run history now has a two-way toggle:
+  **All** (default, the full log) and **Risky** — the runs that actually touched the
+  destination irreversibly or went wrong: any deletion performed, any failure, or a
+  scheduled run whose deletions were withheld by the delete budget (the profile wanted to
+  delete and was stopped; the destination may be drifting). One click answers "did that
+  job delete my files?" without scrolling past dozens of clean nightly runs. When no run
+  qualifies, the section says so plainly. Pure helper (`filterSyncRuns`/`isRiskyRun`),
+  unit-tested including the withheld-delete case.
 - **Queue remainder + ETA in the transfer drawer header.** While transfers run, the header
   now answers "how long will this take?" beside the aggregate speed: bytes still owed by
   every unfinished transfer (queued, active, paused, retrying, verifying) rendered as
