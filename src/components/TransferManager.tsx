@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { ArrowDownToLine, ArrowUpFromLine, Loader2, CheckCircle, XCircle, Pause, Play, X, RotateCcw } from 'lucide-react';
+import { formatSize } from './Explorer';
 
 export interface TransferState {
   id: string;
@@ -69,6 +70,61 @@ const statusChip = (status: TransferState['status']) => {
       return <span className="px-2 py-0.5 rounded-full text-[10px] bg-gale-teal/15 text-gale-teal animate-pulse border border-gale-teal/20">Verifying</span>;
   }
 };
+
+/**
+ * What the drawer header reports about the queue's remaining work: bytes left
+ * to move and, when something is actually moving, how long THE CURRENT PACE
+ * needs for that. Remaining counts every unfinished transfer — queued, active,
+ * paused, retrying, verifying — because they all owe bytes; the ETA divides by
+ * the speed of ACTIVE transfers only, so a fully paused queue answers
+ * "1.2 GB left" honestly while refusing to fabricate an ETA from a
+ * standing-still line. Values clamp at zero: a retried transfer can briefly
+ * report a smaller bytesTransferred, and negative work must never render.
+ */
+export interface QueueDrain {
+  /** Bytes still owed by every non-terminal transfer. */
+  remainingBytes: number;
+  /** Current sum of active transfer speeds. */
+  throughputBytes: number;
+  /** remainingBytes ÷ throughputBytes, or null while nothing moves. */
+  etaSeconds: number | null;
+}
+
+const UNFINISHED_TRANSFER_STATUSES: TransferState['status'][] = [
+  'queued',
+  'active',
+  'paused',
+  'verifying',
+  'retrying',
+];
+
+export function queueDrain(transfers: TransferState[]): QueueDrain {
+  const remainingBytes = transfers
+    .filter((t) => UNFINISHED_TRANSFER_STATUSES.includes(t.status))
+    .reduce((sum, t) => sum + Math.max(0, t.totalBytes - t.bytesTransferred), 0);
+  const throughputBytes = transfers
+    .filter((t) => t.status === 'active')
+    .reduce((sum, t) => sum + t.bytesPerSecond, 0);
+  return {
+    remainingBytes,
+    throughputBytes,
+    etaSeconds: remainingBytes > 0 && throughputBytes > 0 ? remainingBytes / throughputBytes : null,
+  };
+}
+
+/** "~2m 14s"-style wall-clock rendering of a queue-drain ETA. */
+export function formatEta(seconds: number): string {
+  if (seconds < 60) return `${Math.max(1, Math.ceil(seconds))}s`;
+  let m = Math.floor(seconds / 60);
+  let s = Math.round(seconds % 60);
+  if (s === 60) {
+    m += 1;
+    s = 0;
+  }
+  if (m < 60) return `${m}m ${s}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
 
 interface TransferManagerProps {
   onRetry?: (transfer: TransferState) => void;
@@ -400,9 +456,9 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
 
   if (transferList.length === 0) return null;
 
-  const totalSpeed = transferList
-    .filter((t) => t.status === 'active')
-    .reduce((sum, t) => sum + t.bytesPerSecond, 0);
+  // One drain computation feeds both header segments: the live speed and the
+  // "what's left / how long" readout.
+  const drain = queueDrain(transferList);
 
   return (
     <div className={`relative shrink-0 max-h-[45dvh] bg-zinc-900 border-t border-zinc-800 flex flex-col ${isOpen ? 'h-80' : 'h-[42px]'}`}>
@@ -437,9 +493,15 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
             Transfers
           </span>
           <span className="text-xs text-zinc-500">({transferList.length} total)</span>
-          {activeCount > 0 && (
+          {activeCount > 0 && drain.throughputBytes > 0 && (
             <span className="text-xs text-doubloon font-semibold font-mono metric-text ml-2">
-              {formatSpeed(totalSpeed)}
+              {formatSpeed(drain.throughputBytes)}
+            </span>
+          )}
+          {drain.remainingBytes > 0 && (
+            <span className="text-xs text-zinc-400 font-mono metric-text">
+              {formatSize(drain.remainingBytes)} left
+              {drain.etaSeconds !== null ? ` · ~${formatEta(drain.etaSeconds)}` : ''}
             </span>
           )}
         </div>
