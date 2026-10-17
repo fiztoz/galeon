@@ -19,7 +19,7 @@ import {
   Clock,
   Loader2,
 } from 'lucide-react';
-import { ConnectionProfile } from '../types';
+import { ConnectionProfile, type SyncRunOutcome } from '../types';
 import { useSyncRunLog } from '../hooks/useSyncRunLog';
 import { SyncRunHistory } from './SyncRunHistory';
 
@@ -59,6 +59,12 @@ export interface SyncProfile {
   direction: 'localToRemote' | 'remoteToLocal';
   verifyChecksum: boolean;
   deleteExtraneous: boolean;
+  /**
+   * The most destination objects a SCHEDULED run may permanently delete.
+   * 0 = a scheduled run never deletes (safe default). Manual runs unaffected:
+   * they preview the diff and confirm before anything runs.
+   */
+  maxScheduledDeletes: number;
   lastRunMs: number | null;
   schedule?: SyncSchedule;
 }
@@ -252,6 +258,10 @@ export function SyncPanel({
   const [direction, setDirection] = useState<'localToRemote' | 'remoteToLocal'>('localToRemote');
   const [verifyChecksum, setVerifyChecksum] = useState(false);
   const [deleteExtraneous, setDeleteExtraneous] = useState(false);
+  // Unattended-delete allowance for SCHEDULED runs. 0 = never delete on a
+  // schedule — the default a new profile starts on, and what "delete
+  // extraneous" alone (no number) must fall back to.
+  const [maxScheduledDeletes, setMaxScheduledDeletes] = useState(0);
 
   // ── Diff state ──────────────────────────────────────────────────────────
   const [plan, setPlan] = useState<SyncPlanEntry[]>([]);
@@ -279,6 +289,9 @@ export function SyncPanel({
   // ── Schedule state (profiles view) ──────────────────────────────────────
   const [expandedSchedules, setExpandedSchedules] = useState<Set<string>>(new Set());
   const [scheduleEdits, setScheduleEdits] = useState<Record<string, SyncSchedule>>({});
+  // Pending per-profile edits of the scheduled-delete budget (the profile's
+  // `maxScheduledDeletes`), saved together with the schedule. Absent = unchanged.
+  const [budgetEdits, setBudgetEdits] = useState<Record<string, number>>({});
   const [savingScheduleId, setSavingScheduleId] = useState<string | null>(null);
 
   // ── Run history (profiles view) ─────────────────────────────────────────
@@ -312,6 +325,7 @@ export function SyncPanel({
       setDirection(prefillProfile.direction);
       setVerifyChecksum(prefillProfile.verifyChecksum);
       setDeleteExtraneous(prefillProfile.deleteExtraneous);
+      setMaxScheduledDeletes(prefillProfile.maxScheduledDeletes ?? 0);
       setSaveProfileName(prefillProfile.name);
     } else {
       // Default: current prefix, first connection profile selected
@@ -409,7 +423,9 @@ export function SyncPanel({
     setApplyError(null);
     setSyncProgress(null);
     try {
-      const failures = await invoke<number>('execute_sync_plan', {
+      // The backend waits for the real transfer outcomes and answers with the
+      // finished run summary (Wire: `SyncRunOutcome`).
+      const outcome = await invoke<SyncRunOutcome>('execute_sync_plan', {
         sessionId,
         plan,
         deleteExtraneous,
@@ -420,8 +436,8 @@ export function SyncPanel({
       // The backend records the run as part of executing the plan — pull the
       // new history row in so a partial run's deletions/failures are visible.
       void refreshRuns();
-      if (failures > 0) {
-        setApplyError(`${failures} sync item(s) failed`);
+      if (outcome.failures.length > 0) {
+        setApplyError(`${outcome.failures.length} sync item(s) failed`);
         return;
       }
       onSyncComplete();
@@ -446,6 +462,7 @@ export function SyncPanel({
         direction,
         verifyChecksum,
         deleteExtraneous,
+        maxScheduledDeletes,
         lastRunMs: prefillProfile?.lastRunMs ?? null,
         ...(newProfileSchedule
           ? { schedule: newProfileSchedule }
@@ -488,8 +505,17 @@ export function SyncPanel({
     const schedule = resolveSchedule(profile, scheduleEdits);
     setSavingScheduleId(profile.id);
     try {
-      await onSaveSyncProfile({ ...profile, schedule });
+      await onSaveSyncProfile({
+        ...profile,
+        schedule,
+        maxScheduledDeletes: budgetEdits[profile.id] ?? profile.maxScheduledDeletes,
+      });
       setScheduleEdits((prev) => {
+        const next = { ...prev };
+        delete next[profile.id];
+        return next;
+      });
+      setBudgetEdits((prev) => {
         const next = { ...prev };
         delete next[profile.id];
         return next;
@@ -667,6 +693,31 @@ export function SyncPanel({
                     )}
                   </span>
                 </label>
+                {deleteExtraneous && (
+                  <div className="ml-7 space-y-1.5">
+                    <label className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+                      <span className="shrink-0">Scheduled runs may delete up to</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={maxScheduledDeletes}
+                        onChange={(e) => {
+                          const v = Number.parseInt(e.target.value, 10);
+                          setMaxScheduledDeletes(Number.isNaN(v) ? 0 : Math.max(0, v));
+                        }}
+                        className="w-16 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-gale-teal"
+                        aria-label="Maximum objects a scheduled run may delete"
+                      />
+                      <span className="shrink-0">objects</span>
+                    </label>
+                    <p className="text-xs text-zinc-600">
+                      0 (default) means scheduled runs never delete. A run over its limit
+                      skips every deletion instead of stopping partway. Manual runs always
+                      preview the diff and confirm before touching anything.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Error */}
@@ -963,8 +1014,21 @@ export function SyncPanel({
                                 {sp.direction === 'localToRemote' ? '→ remote' : '← local'}
                               </span>
                               {sp.deleteExtraneous && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-amber-400/15 text-status-warning font-mono">
-                                  delete extra
+                                <span
+                                  className={`text-xs px-1.5 py-0.5 rounded font-mono ${
+                                    (sp.maxScheduledDeletes ?? 0) === 0
+                                      ? 'bg-amber-400/15 text-status-warning'
+                                      : 'bg-emerald-400/15 text-status-success'
+                                  }`}
+                                  title={
+                                    (sp.maxScheduledDeletes ?? 0) === 0
+                                      ? 'Scheduled runs will not delete anything until you allow a budget'
+                                      : `Scheduled runs may delete up to ${sp.maxScheduledDeletes} objects`
+                                  }
+                                >
+                                  {(sp.maxScheduledDeletes ?? 0) === 0
+                                    ? 'delete extra · scheduled never'
+                                    : `delete extra · scheduled ≤ ${sp.maxScheduledDeletes}`}
                                 </span>
                               )}
                               {sp.schedule?.enabled && (
@@ -994,6 +1058,7 @@ export function SyncPanel({
                                 setDirection(sp.direction);
                                 setVerifyChecksum(sp.verifyChecksum);
                                 setDeleteExtraneous(sp.deleteExtraneous);
+                                setMaxScheduledDeletes(sp.maxScheduledDeletes ?? 0);
                                 setSaveProfileName(sp.name);
                                 setView('form');
                               }}
@@ -1046,6 +1111,26 @@ export function SyncPanel({
                                 />
                                 <span className="text-xs text-zinc-300">Enable scheduled runs</span>
                               </label>
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                <label className="text-xs text-zinc-500 shrink-0">Unattended deletes ≤</label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={budgetEdits[sp.id] ?? (sp.maxScheduledDeletes ?? 0)}
+                                  onChange={(e) => {
+                                    const v = Number.parseInt(e.target.value, 10);
+                                    setBudgetEdits((prev) => ({
+                                      ...prev,
+                                      [sp.id]: Number.isNaN(v) ? 0 : Math.max(0, v),
+                                    }));
+                                  }}
+                                  className="w-16 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-gale-teal"
+                                  aria-label="Maximum objects a scheduled run may delete"
+                                />
+                                <span className="text-xs text-zinc-600">0 = a scheduled run never deletes</span>
+                              </div>
 
                               <div className="flex flex-wrap items-center gap-2">
                                 <label className="text-xs text-zinc-500 shrink-0">Frequency</label>

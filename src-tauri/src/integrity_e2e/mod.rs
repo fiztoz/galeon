@@ -240,5 +240,6 @@ mod boundaries;
 mod profiles;
 mod resume_conflicts;
 mod sync_scale;
+mod sync_scale_budget;
 mod transfer_integrity;
 mod transfer_sizes;

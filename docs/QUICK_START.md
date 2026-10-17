@@ -70,6 +70,22 @@ A storage profile remembers which tunnel profile to use, while the tunnel's SSH 
 
 For security, Galeon only connects to a bastion your computer already trusts. Its server fingerprint (host key) must already be listed in `~/.ssh/known_hosts`, usually after you connect with your normal SSH client and approve the fingerprint once. FTP/FTPS tunneling remains excluded because forwarding only its control port would leave passive data connections outside the tunnel. For S3, use an HTTP endpoint inside the encrypted tunnel when possible; HTTPS requires the explicit **Disable SSL Verify** option because the local forwarded hostname will not match the endpoint certificate.
 
+## One-way sync
+
+Sync a local folder to (or from) a destination one-way, from the sync panel. You always see a
+computed diff and confirm before anything runs. Optionally **delete extraneous** files at the
+destination so the two stay in mirror.
+
+Nothing deletes unattended by default. If you schedule runs with "delete extraneous" enabled,
+set the **unattended-delete limit**: the most objects a scheduled run may permanently delete.
+A scheduled run that plans more than its limit **skips every deletion** (uploads still happen)
+instead of stopping partway, and the run history records the refusal. `0` — the default every
+existing profile loads with — means scheduled runs never delete; run manually to delete after
+reviewing the diff.
+
+Every run is kept in the sync panel's history: what was uploaded, downloaded, deleted, and
+what failed, with the paths that were removed for unattended deletion.
+
 ## Settings
 
 Open **Settings** from the connection screen header or the connected-session header (or ⌘K → Open Settings).

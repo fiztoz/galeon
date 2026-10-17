@@ -1,5 +1,37 @@
 ## [Unreleased]
 
+### Added
+
+- **Scheduled-delete budget.** A saved sync profile with "Delete extraneous at destination"
+  now carries a separate `maxScheduledDeletes` limit: the most destination objects a
+  *scheduled* run may permanently delete. `0` (the default) means a scheduled run never
+  deletes. This closes the unattended hole in `delete_extraneous`: until now, a stale or
+  emptied source folder mirrored itself onto the destination on a timer and erased everything
+  that had gone missing from the source, with no diff, no confirmation, and no number anywhere.
+  Manual runs are unaffected — they preview the diff and confirm before anything is removed.
+  The budget is all-or-nothing: a scheduled run whose plan needs more deletions than its limit
+  allows performs **none** of them (uploads still happen) rather than stopping partway, so
+  "scheduled deletes at most N" stays literally true and the destination can never be stranded
+  half-mirrored by a run nobody was watching. Existing scheduled profiles load with the safe
+  default of `0` and must opt back into deletions deliberately.
+
+### Changed
+
+- The scheduler event and run history now say *why* nothing was deleted: a budget-refused
+  run carries `deletesBlocked` (planned/cap) in the `schedule-run-complete` event, the profile
+  badge, and the run row ("deletes withheld") with the two numbers spelled out in the detail.
+  The run still records as a success — the refusals are a policy flag, not a failure.
+- The previous profile-runner command (`run_sync_profile_now`) executed a saved profile's
+  `delete_extraneous` deletions directly with no diff preview and no confirmation. It had no
+  remaining caller after the delete-confirmation flow landed, so it has been removed rather
+  than kept as an unreviewed path.
+
+### Fixed
+
+- The sync panel's "Apply" read `execute_sync_plan`'s answer as a raw failure count, but the
+  backend (since alpha.6) returns a run summary object — so the panel could have mis-typed the
+  response and mishandled partial runs. It now reads the summary's failure list directly.
+
 ## [1.0.0-alpha.6] - 2026-10-17
 
 ### Added

@@ -388,34 +388,6 @@ pub async fn save_sync_profile(
     write_sync_profiles(&app_handle, &store)
 }
 
-/// Run a saved sync profile immediately (same pipeline as the scheduler).
-#[tauri::command]
-pub async fn run_sync_profile_now(
-    app_handle: AppHandleType,
-    profile_id: String,
-) -> Result<(), String> {
-    let store = read_sync_profiles(&app_handle)?;
-    let profile = store
-        .profiles
-        .iter()
-        .find(|p| p.id == profile_id)
-        .ok_or_else(|| format!("Sync profile not found: {}", profile_id))?
-        .clone();
-
-    let failures = run_sync_profile_internal(&app_handle, &profile).await?;
-
-    // Locked read-modify-write, and it must NOT clobber the schedule fields:
-    // only last_run_ms changes here, so the profile's next_run_ms the scheduler
-    // may have advanced during this run is preserved.
-    sync_store::update_sync_profile(&app_handle, &profile_id, |p| p.last_run_ms = Some(now_ms()))
-        .await?;
-
-    if failures > 0 {
-        return Err(format!("{} sync item(s) failed", failures));
-    }
-    Ok(())
-}
-
 /// Delete a sync profile by id.
 #[tauri::command]
 pub async fn delete_sync_profile(
@@ -468,12 +440,17 @@ pub(crate) fn build_connection_for_sync(
     }
 }
 
-/// Run a sync profile end-to-end: connect, diff, execute. Returns the number
-/// of failed sync items (0 on full success).
+/// Run a sync profile end-to-end: connect, diff, budget, execute.
+///
+/// Returns the finished `SyncRunRecord`, so the scheduler can emit the
+/// outcome — including a budget refusal — in its `schedule-run-complete`
+/// event, exactly as the history now records it.
 pub(crate) async fn run_sync_profile_internal(
     app_handle: &AppHandleType,
     profile: &SyncProfile,
-) -> Result<u32, String> {
+    trigger: SyncTrigger,
+) -> Result<SyncRunRecord, String> {
+    let mut deletes_blocked: Option<BlockedDeletes> = None;
     let state = app_handle.state::<GaleonEngine>();
     let started_at_ms = now_ms();
 
@@ -509,7 +486,7 @@ pub(crate) async fn run_sync_profile_internal(
         verify_checksum: profile.verify_checksum,
         delete_extraneous: profile.delete_extraneous,
     };
-    let plan = compute_sync_diff(
+    let mut plan = compute_sync_diff(
         state.clone(),
         session_id.clone(),
         profile.local_path.clone(),
@@ -519,6 +496,21 @@ pub(crate) async fn run_sync_profile_internal(
     )
     .await?;
 
+    // Unattended runs are bound by the profile's delete budget; nothing else
+    // consults it. All-or-nothing by design: a run over budget deletes
+    // NOTHING, so "scheduled deletes at most N" stays literally true, and a
+    // partially-mirrored destination (which no one could reconstruct from the
+    // run result) cannot happen. Manual runs execute the diff as-is.
+    let execute_deletes = match trigger {
+        SyncTrigger::Manual => profile.delete_extraneous,
+        SyncTrigger::Schedule => {
+            let (budgeted, blocked) = apply_delete_budget(plan, profile.max_scheduled_deletes);
+            plan = budgeted;
+            deletes_blocked = blocked;
+            profile.delete_extraneous && deletes_blocked.is_none()
+        }
+    };
+
     // Execute the sync plan; ensure the session is removed from active_sessions
     // on both success and error paths to avoid a session leak.
     let outcome = execute_sync_plan(
@@ -526,7 +518,7 @@ pub(crate) async fn run_sync_profile_internal(
         state.clone(),
         session_id.clone(),
         plan,
-        profile.delete_extraneous,
+        execute_deletes,
         profile.local_path.clone(),
         profile.remote_prefix.clone(),
         Some(profile.connection_profile_id.clone()),
@@ -545,18 +537,19 @@ pub(crate) async fn run_sync_profile_internal(
         &profile.id,
         &profile.name,
         &profile.direction,
-        "schedule",
+        trigger.as_str(),
         started_at_ms,
         now_ms(),
         &outcome,
         outcome.deleted_paths.clone(),
+        deletes_blocked,
     );
-    if let Err(e) = sync_log::record_sync_run(app_handle, record).await {
+    if let Err(e) = sync_log::record_sync_run(app_handle, record.clone()).await {
         // Never fail a completed run because its history could not be written.
         eprintln!("sync: failed to record run log: {}", e);
     }
 
-    Ok(outcome.failures.len() as u32)
+    Ok(record)
 }
 
 #[cfg(test)]
