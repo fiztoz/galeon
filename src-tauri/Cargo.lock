@@ -2077,7 +2077,7 @@ dependencies = [
 
 [[package]]
 name = "galeon"
-version = "1.0.0-alpha.7"
+version = "1.0.0-alpha.8"
 dependencies = [
  "aws-config",
  "aws-credential-types",
