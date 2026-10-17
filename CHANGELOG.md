@@ -1,3 +1,16 @@
+## [Unreleased]
+
+### Added
+
+- **Queue remainder + ETA in the transfer drawer header.** While transfers run, the header
+  now answers "how long will this take?" beside the aggregate speed: bytes still owed by
+  every unfinished transfer (queued, active, paused, retrying, verifying) rendered as
+  "1.8 GB left", plus "~2m 14s" computed from the current active throughput only. A fully
+  paused queue shows the remainder without fabricating an ETA; a drained queue shows
+  neither. The math lives in one pure helper (`queueDrain`), unit-tested over the awkward
+  mixes — terminal rows owing nothing, a retried counter briefly reporting more bytes than
+  the total, and minute-boundary rounding.
+
 ## [1.0.0-alpha.7] - 2026-10-17
 
 ### Added
