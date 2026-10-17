@@ -123,8 +123,16 @@ pub(crate) fn read_import_file_limited(path: &Path) -> Result<String, String> {
 /// input is capped at `MAX_IMPORT_FILE_BYTES`, so the stronger hash is free.
 pub(crate) fn content_hash(raw: &str) -> String {
     use sha2::{Digest, Sha256};
+    use std::fmt::Write as _;
     let digest = Sha256::digest(raw.as_bytes());
-    format!("{digest:x}")
+    // Hexify by hand: sha2 0.11's digest type no longer implements
+    // `LowerHex`, and the preview/apply TOCTOU check passes this string
+    // verbatim, so the rendering must stay lowercase continuous hex.
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest.iter() {
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
 }
 
 pub(crate) fn build_import_preview(
