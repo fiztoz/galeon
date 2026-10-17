@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [1.0.0-alpha.6] - 2026-10-17
+
 ### Added
 
 - A failed or cancelled transfer can be retried from the transfer list. `finalize_transfer_job`
