@@ -38,6 +38,15 @@ pub struct TransferQueueEntry {
     pub remote_key: String,
     pub local_path: String,
     pub profile_id: String,
+    /// The storage session this transfer belongs to.
+    ///
+    /// Needed to retry a failed transfer: `finalize_transfer_job` removes the
+    /// in-memory control on failure, so `resume_transfer` cannot find the
+    /// transfer and must rebuild it from the queue. Without this there is no
+    /// way to know which connection to rebuild it against. Optional so queue
+    /// files written before this field still load.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     pub status: String, // "queued", "active", "paused", "completed", "failed"
     pub bytes_transferred: u64,
     pub total_bytes: u64,
