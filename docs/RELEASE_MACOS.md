@@ -34,6 +34,11 @@ Gatekeeper or bypass a malware/damaged-app warning. See
    ```
 
    Use a new version for a new release; do not move an existing release tag.
+
+   The tag must be **annotated** (`git tag -a`), never lightweight: the release
+   workflow refuses a lightweight tag with "Release tags must be annotated," and
+   the failed run has to be cleared by deleting and re-pushing the tag before the
+   real build starts.
 4. `.github/workflows/release.yml` checks out that exact tag, validates all three
    versions, runs unit/frontend/tooling tests, and builds a universal macOS DMG
    plus the Windows NSIS installer and Linux `.deb` / AppImage.
