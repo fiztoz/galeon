@@ -25,6 +25,12 @@ export interface TransferQueueEntry {
   remote_key: string;
   local_path: string;
   profile_id: string;
+  /**
+   * Backend-owned: the storage session the transfer runs against, set at
+   * enqueue time. Retrying a failed transfer rebuilds it from this, so the
+   * queue merge never clears it — `restore_transfers` may hand it back here.
+   */
+  session_id?: string;
   status: string;
   bytes_transferred: number;
   total_bytes: number;
