@@ -2,6 +2,11 @@
 
 ### Added
 
+- A failed or cancelled transfer can be retried from the transfer list. `finalize_transfer_job`
+  removes a transfer's in-memory control when it *ends*, so a failed transfer was unreachable
+  afterwards and resuming it answered "Transfer not found" — the only recovery was starting the
+  transfer again by hand. Retrying rebuilds it from its queue entry; a download resumes from its
+  `.part` file rather than re-fetching what already arrived.
 - **Sync run history.** Every run — scheduled or manual — is recorded to `sync_runs.json` with
   what it uploaded, downloaded, **deleted**, and failed, plus the paths it removed. Previously a
   scheduled run's only trace was a transient event, so if the app was closed there was no way to
