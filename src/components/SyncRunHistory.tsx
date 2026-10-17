@@ -10,6 +10,7 @@ import {
   FileClock,
   Loader2,
   ShieldAlert,
+  ShieldCheck,
   Trash2,
 } from 'lucide-react';
 import type { SyncRunRecord } from '../types';
@@ -70,6 +71,24 @@ function formatDuration(ms: number): string {
   const secs = ms / 1000;
   if (secs < 60) return `${secs.toFixed(1)}s`;
   return `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s`;
+}
+
+/**
+ * A run is RISKY — the question this log exists to answer — when it touched
+ * the destination irreversibly or went wrong: any deletion actually performed,
+ * any failure, or a scheduled run whose deletions were withheld by the budget
+ * (the profile wanted to delete but was stopped; the destination may be
+ * drifting, and that is exactly what the user came to look for).
+ */
+export type RunHistoryFilter = 'all' | 'risky';
+
+export function isRiskyRun(run: SyncRunRecord): boolean {
+  return run.deletes > 0 || run.failures > 0 || run.deletesBlocked != null;
+}
+
+export function filterSyncRuns(runs: SyncRunRecord[], mode: RunHistoryFilter): SyncRunRecord[] {
+  if (mode === 'all') return runs;
+  return runs.filter(isRiskyRun);
 }
 
 // ── Row pieces ───────────────────────────────────────────────────────────────
@@ -293,6 +312,9 @@ function RunRow({
 export function SyncRunHistory({ log }: { log: SyncRunLog }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [confirmClear, setConfirmClear] = useState(false);
+  // Defaults to the full log; "Risky" is one click for the answer the log
+  // exists to give. Local UI state: the choice survives new runs arriving.
+  const [filter, setFilter] = useState<RunHistoryFilter>('all');
   // Relative labels ("5m ago") must not go stale while the panel sits open.
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -321,17 +343,43 @@ export function SyncRunHistory({ log }: { log: SyncRunLog }) {
 
   const busy = log.loading || log.clearing;
   const hasRows = !log.loading && log.runs.length > 0;
+  const filteredRuns = filterSyncRuns(log.runs, filter);
 
   return (
     <section aria-labelledby="sync-run-history-heading" className="mt-6 pt-4 border-t border-zinc-800">
       <div className="flex items-center justify-between mb-3">
-        <h3
-          id="sync-run-history-heading"
-          className="flex items-center space-x-2 text-sm font-semibold text-zinc-200"
-        >
-          <FileClock className="w-4 h-4 text-gale-teal" />
-          <span>Run history</span>
-        </h3>
+        <div className="flex items-center space-x-3">
+          <h3
+            id="sync-run-history-heading"
+            className="flex items-center space-x-2 text-sm font-semibold text-zinc-200"
+          >
+            <FileClock className="w-4 h-4 text-gale-teal" />
+            <span>Run history</span>
+          </h3>
+          {log.runs.length > 0 && (
+            <div
+              role="group"
+              aria-label="Filter runs"
+              className="flex rounded-lg border border-zinc-700 overflow-hidden"
+            >
+              {(['all', 'risky'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={filter === mode}
+                  onClick={() => setFilter(mode)}
+                  className={`px-2.5 py-1 text-xs transition-colors ${
+                    filter === mode
+                      ? 'bg-zinc-800 text-zinc-100'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {mode === 'all' ? 'All' : 'Risky'}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {log.runs.length > 0 && !confirmClear && (
           <button
             type="button"
@@ -430,17 +478,27 @@ export function SyncRunHistory({ log }: { log: SyncRunLog }) {
               </button>
             </div>
           )}
-          <ul className={`space-y-1.5 ${hasRows ? '' : 'opacity-60'}`}>
-            {log.runs.map((run) => (
-              <RunRow
-                key={run.id}
-                run={run}
-                nowMs={nowMs}
-                expanded={expanded.has(run.id)}
-                onToggle={() => toggle(run.id)}
-              />
-            ))}
-          </ul>
+          {filteredRuns.length === 0 ? (
+            <div className="py-6 text-center text-xs text-zinc-500">
+              <ShieldCheck className="w-6 h-6 mx-auto mb-1.5 opacity-40" />
+              <p>No risky runs</p>
+              <p className="mt-1 text-zinc-600">
+                Every recorded run completed without deletions or failures.
+              </p>
+            </div>
+          ) : (
+            <ul className={`space-y-1.5 ${hasRows ? '' : 'opacity-60'}`}>
+              {filteredRuns.map((run) => (
+                <RunRow
+                  key={run.id}
+                  run={run}
+                  nowMs={nowMs}
+                  expanded={expanded.has(run.id)}
+                  onToggle={() => toggle(run.id)}
+                />
+              ))}
+            </ul>
+          )}
         </>
       )}
     </section>

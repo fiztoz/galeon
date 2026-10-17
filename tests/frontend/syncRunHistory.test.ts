@@ -1,5 +1,5 @@
-import { expect, test } from 'bun:test';
-import { runAgeLabel, summarizeRun } from '../../src/components/SyncRunHistory';
+import { describe, expect, test } from 'bun:test';
+import { runAgeLabel, summarizeRun, filterSyncRuns, isRiskyRun } from '../../src/components/SyncRunHistory';
 import type { SyncRunRecord } from '../../src/types';
 
 const NOW = 1_700_000_000_000;
@@ -87,4 +87,33 @@ test('run age labels cover each unit and fall back to a date when old', () => {
   expect(runAgeLabel(NOW - 3 * 3_600_000, NOW)).toBe('3h ago');
   expect(runAgeLabel(NOW - 2 * 86_400_000, NOW)).toBe('2d ago');
   expect(runAgeLabel(NOW - 400 * 86_400_000, NOW)).toBe(new Date(NOW - 400 * 86_400_000).toLocaleDateString());
+});
+
+describe('filterSyncRuns — the risky view', () => {
+  test('deletions, failures, or withheld deletes make a run risky', () => {
+    expect(isRiskyRun(record({ deletes: 1, deletedPaths: ['old' ] }))).toBe(true);
+    expect(isRiskyRun(record({ failures: 1, errors: ['a.bin: timeout' ], succeeded: false }))).toBe(true);
+    expect(isRiskyRun(record({ deletesBlocked: { planned: 40, cap: 5 } }))).toBe(true);
+    expect(isRiskyRun(record())).toBe(false);
+  });
+
+  test('"all" returns every run in order; "risky" keeps only the risky ones', () => {
+    const clean = record({ id: 'run-clean' });
+    const deleting = record({ id: 'run-deleting', deletes: 2, deletedPaths: ['old'] });
+    const blocked = record({ id: 'run-blocked', deletesBlocked: { planned: 40, cap: 0 } });
+    const failed = record({ id: 'run-failed', failures: 1, succeeded: false, errors: ['x'] });
+    const runs = [clean, deleting, blocked, failed];
+
+    expect(filterSyncRuns(runs, 'all')).toEqual(runs);
+    expect(filterSyncRuns(runs, 'risky').map((r) => r.id)).toEqual([
+      'run-deleting',
+      'run-blocked',
+      'run-failed',
+    ]);
+  });
+
+  test('the risky view of a fully clean log is empty', () => {
+    const runs = [record({ id: 'a' }), record({ id: 'b' })];
+    expect(filterSyncRuns(runs, 'risky')).toEqual([]);
+  });
 });
