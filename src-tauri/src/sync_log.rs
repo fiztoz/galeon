@@ -48,6 +48,11 @@ pub struct SyncRunRecord {
     pub deleted_paths: Vec<String>,
     /// Human-readable errors, capped.
     pub errors: Vec<String>,
+    /// Set when a scheduled run withheld deletions because the plan exceeded
+    /// the profile's `maxScheduledDeletes` budget. Absent on runs that were
+    /// never capped (and on every record written before the budget existed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deletes_blocked: Option<BlockedDeletes>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -128,7 +133,8 @@ pub async fn clear_sync_runs(app_handle: AppHandleType) -> Result<(), String> {
 ///
 /// Pure — unit-tested. `deleted_paths` are recorded per delete action so the
 /// log answers "what did this run remove", which is the only question worth
-/// answering after an unattended run.
+/// answering after an unattended run. `deletes_blocked` carries the budget
+/// refusal for scheduled runs that withheld their deletions.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_run_record(
     profile_id: &str,
@@ -139,6 +145,7 @@ pub(crate) fn build_run_record(
     finished_at_ms: u64,
     outcome: &SyncRunOutcome,
     deleted_paths: Vec<String>,
+    deletes_blocked: Option<BlockedDeletes>,
 ) -> SyncRunRecord {
     SyncRunRecord {
         id: Uuid::new_v4().to_string(),
@@ -167,6 +174,7 @@ pub(crate) fn build_run_record(
             }
             errors
         },
+        deletes_blocked,
     }
 }
 
@@ -194,6 +202,7 @@ mod tests {
             2000,
             &outcome(3, 0, deletes, failures),
             paths.iter().map(|s| s.to_string()).collect(),
+            None,
         )
     }
 
@@ -236,7 +245,7 @@ mod tests {
             .map(|i| format!("f{i}"))
             .collect();
         let o = outcome(0, 0, 999, &[]);
-        let r = build_run_record("p", "n", "localToRemote", "schedule", 0, 1, &o, paths);
+        let r = build_run_record("p", "n", "localToRemote", "schedule", 0, 1, &o, paths, None);
         assert_eq!(
             r.deleted_paths.len(),
             MAX_RUN_DETAIL_ENTRIES,
@@ -260,7 +269,17 @@ mod tests {
             deleted_paths: Vec::new(),
             failures,
         };
-        let r = build_run_record("p", "n", "localToRemote", "schedule", 0, 1, &o, vec![]);
+        let r = build_run_record(
+            "p",
+            "n",
+            "localToRemote",
+            "schedule",
+            0,
+            1,
+            &o,
+            vec![],
+            None,
+        );
         assert_eq!(r.errors.len(), MAX_RUN_DETAIL_ENTRIES);
         assert_eq!(r.failures as usize, MAX_RUN_DETAIL_ENTRIES + 10);
     }
@@ -273,6 +292,34 @@ mod tests {
         assert_eq!(back.deleted_paths, r.deleted_paths);
         assert_eq!(back.deletes, 1);
         assert!(!back.succeeded);
+    }
+
+    #[test]
+    fn a_budget_refusal_round_trips_through_json() {
+        // The refused run is what a user reads in history after their
+        // destination stopped being mirrored — the numbers must survive a
+        // log-file reload.
+        let r = SyncRunRecord {
+            deletes_blocked: Some(BlockedDeletes {
+                planned: 412,
+                cap: 25,
+            }),
+            ..record(0, &[], &[])
+        };
+        let back: SyncRunRecord = serde_json::to_string(&r)
+            .and_then(|s| serde_json::from_str(&s))
+            .unwrap();
+        assert_eq!(
+            back.deletes_blocked,
+            Some(BlockedDeletes {
+                planned: 412,
+                cap: 25,
+            })
+        );
+        // And a record WITHOUT the field loads as absent (old log files).
+        let no_budget: SyncRunRecord =
+            serde_json::from_str(&serde_json::to_string(&record(0, &[], &[])).unwrap()).unwrap();
+        assert!(no_budget.deletes_blocked.is_none());
     }
 }
 
@@ -316,6 +363,7 @@ mod io_tests {
                     failures: 0,
                     deleted_paths: vec![format!("f{i}")],
                     errors: vec![],
+                    deletes_blocked: None,
                 }
             })
             .collect();

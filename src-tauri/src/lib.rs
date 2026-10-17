@@ -176,7 +176,6 @@ pub fn run() {
             clear_sync_runs,
             save_sync_profile,
             delete_sync_profile,
-            run_sync_profile_now,
             get_app_settings,
             save_app_settings,
             reset_onboarding,

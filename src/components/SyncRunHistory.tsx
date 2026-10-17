@@ -9,6 +9,7 @@ import {
   Clock,
   FileClock,
   Loader2,
+  ShieldAlert,
   Trash2,
 } from 'lucide-react';
 import type { SyncRunRecord } from '../types';
@@ -17,19 +18,23 @@ import type { SyncRunLog } from '../hooks/useSyncRunLog';
 // ── Pure helpers (exported for tests) ────────────────────────────────────────
 
 /**
- * The three things the row must react to, derived once so the markup and the
- * tests agree on what "worth noticing" means:
+ * The things the row must react to, derived once so the markup and the tests
+ * agree on what "worth noticing" means:
  *
  * - `hasDeletions` gets the row a red treatment — deletions are permanent and
  *   a scheduled run makes them while nobody is watching.
  * - `unattended` drives the schedule/manual badge, which must never be
  *   ambiguous (this is the whole reason the log exists).
+ * - `deletesSkipped` marks a scheduled run that planned deletions but withheld
+ *   them over the profile's delete budget — visible behaviour worth an
+ *   explicit badge, since a plain "0 deletes" would read as a calm run.
  * - `pathsCapped` catches the backend capping `deletedPaths` at 200 while
  *   `deletes` keeps the true count, so the list is never presented as complete.
  */
 export interface RunViewFlags {
   hasDeletions: boolean;
   unattended: boolean;
+  deletesSkipped: boolean;
   failed: boolean;
   pathsCapped: boolean;
   errorsCapped: boolean;
@@ -39,6 +44,7 @@ export function summarizeRun(run: SyncRunRecord): RunViewFlags {
   return {
     hasDeletions: run.deletes > 0,
     unattended: run.trigger === 'schedule',
+    deletesSkipped: run.deletesBlocked != null,
     failed: !run.succeeded,
     pathsCapped: run.deletedPaths.length < run.deletes,
     errorsCapped: run.errors.length < run.failures,
@@ -169,6 +175,18 @@ function RunRow({
             </span>
           )}
 
+          {/* A scheduled run that withheld its deletions must not read as a
+              calmly empty delete count — say why nothing was removed. */}
+          {flags.deletesSkipped && run.deletesBlocked && (
+            <span
+              title={`Planned to delete ${run.deletesBlocked.planned}; the profile allows ${run.deletesBlocked.cap} on a schedule`}
+              className="flex items-center space-x-1 text-xs px-1.5 py-0.5 rounded font-mono bg-amber-400/15 text-status-warning"
+            >
+              <ShieldAlert className="w-3 h-3" />
+              <span>deletes withheld</span>
+            </span>
+          )}
+
           <span className="ml-auto flex items-center space-x-2 shrink-0">
             <Metric icon={<ArrowUpFromLine className="w-3 h-3" />} label="uploads" value={run.uploads} danger={false} />
             <Metric icon={<ArrowDownToLine className="w-3 h-3" />} label="downloads" value={run.downloads} danger={false} />
@@ -224,6 +242,15 @@ function RunRow({
                 </p>
               )}
             </div>
+          ) : run.deletesBlocked != null ? (
+            // The budget refusal, spelled out in the detail a user opens after
+            // noticing their destination stopped being mirrored.
+            <p className="text-zinc-500">
+              This run planned to delete {run.deletesBlocked.planned} object
+              {run.deletesBlocked.planned !== 1 ? 's' : ''} but the profile allows{' '}
+              {run.deletesBlocked.cap} on a schedule, so nothing was deleted. Raise the limit in
+              the profile's schedule settings — or run it manually, which previews the diff first.
+            </p>
           ) : (
             <p className="text-zinc-500">No deletions in this run.</p>
           )}

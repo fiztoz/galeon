@@ -20,7 +20,9 @@ use opendal::Operator;
 /// This planner stays pure (size + mtime only). When `options.verify_checksum`
 /// is set, `compute_sync_diff` runs a follow-up checksum pass over the
 /// ambiguous same-size entries (`refine_plan_with_checksums`, S3 only), since
-/// byte-exact comparison needs network IO that doesn't belong here.
+/// byte-exact comparison needs network IO that doesn't belong here. Scheduled
+/// runs additionally pass the finished plan through `apply_delete_budget`,
+/// which is where the profile's unattended-delete allowance is enforced.
 pub fn compute_sync_plan(
     local: &[SyncFileEntry],
     remote: &[SyncFileEntry],
@@ -129,6 +131,41 @@ fn source_newer(src_ms: Option<u64>, dest_ms: Option<u64>) -> bool {
         (Some(s), Some(d)) => s > d.saturating_add(SYNC_MTIME_SLACK_MS),
         _ => false,
     }
+}
+
+/// Second pass over a computed plan: enforce a scheduled run's delete budget.
+///
+/// The planner intentionally knows nothing about budgets or triggers — the
+/// delete decision stays a pure function of the two trees. This applies the
+/// profile's policy afterwards: if the plan contains more deletions than
+/// `max_deletes` allows, EVERY delete entry collapses to `skip` and the run
+/// carries a `BlockedDeletes` flag. All-or-nothing on purpose: deleting the
+/// first N would strand the destination in a half-mirrored state nothing can
+/// explain, and the point of the cap is that an unattended run never removes
+/// more than its stated allowance.
+///
+/// Copies (`upload` / `download`) are untouched, so a blocked run still
+/// transfers everything that should move. Pure — unit-tested.
+pub(crate) fn apply_delete_budget(
+    plan: Vec<SyncPlanEntry>,
+    max_deletes: u32,
+) -> (Vec<SyncPlanEntry>, Option<BlockedDeletes>) {
+    let is_delete = |a: &str| a == "deleteRemote" || a == "deleteLocal";
+    let planned = plan.iter().filter(|e| is_delete(&e.action)).count() as u32;
+    if planned <= max_deletes {
+        return (plan, None);
+    }
+    let mut plan = plan;
+    let cap = max_deletes;
+    for entry in plan.iter_mut() {
+        if !is_delete(&entry.action) {
+            continue;
+        }
+        entry.action = "skip".to_string();
+        entry.reason = format!("extraneous (over scheduled delete limit {cap}: {planned} planned)");
+    }
+    let blocked = BlockedDeletes { planned, cap };
+    (plan, Some(blocked))
 }
 
 /// Build a `SyncPlanEntry`, pulling sizes/mtimes from whichever side has the

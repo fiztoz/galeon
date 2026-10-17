@@ -147,4 +147,34 @@ export interface SyncRunRecord {
   deletedPaths: string[];
   /** Human-readable failure messages. Capped by the backend the same way. */
   errors: string[];
+  /**
+   * Set when a scheduled run withheld its deletions because the plan exceeded
+   * the profile's `maxScheduledDeletes`. Absent on uncapped runs (and on
+   * records written before the budget existed).
+   */
+  deletesBlocked?: BlockedDeletes;
+}
+
+/** Mirrors `sync_types::BlockedDeletes` (camelCase). */
+export interface BlockedDeletes {
+  /** How many deletions the plan contained. */
+  planned: number;
+  /** The exceeded `maxScheduledDeletes` limit. */
+  cap: number;
+}
+
+/**
+ * Mirrors `commands::run_sync_outcome` (`SyncRunOutcome`, camelCase): what one
+ * executed sync plan actually did, as returned by `execute_sync_plan`. The
+ * command waits for the real transfer outcomes, so a failed upload is a
+ * failure here, not a success.
+ */
+export interface SyncRunOutcome {
+  uploads: number;
+  downloads: number;
+  /** Permanent deletions performed at the destination. */
+  deletes: number;
+  deletedPaths: string[];
+  /** One human-readable message per failed item, e.g. "a.bin: transfer failed (disk full)". */
+  failures: string[];
 }

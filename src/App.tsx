@@ -61,7 +61,7 @@ function App() {
   const [syncPrefillProfile, setSyncPrefillProfile] = useState<SyncProfile | null>(null);
   // "Run sync profile now" asks SyncPanel to compute the diff as soon as the
   // profile is loaded. Execution still only happens through the panel's diff +
-  // delete-confirmation flow — never via a direct run_sync_profile_now invoke.
+  // delete-confirmation flow.
   const [syncRunNow, setSyncRunNow] = useState(false);
 
   // Phase 12 — scheduled sync run notifications
@@ -555,21 +555,31 @@ function App() {
 
   useEffect(() => { syncProfilesRef.current = syncProfiles; }, [syncProfiles]);
 
-  // Phase 12 — scheduled sync run completion toast + reload profiles
+  // Scheduled sync run completion toast + reload profiles (budget refusals
+  // name their planned count and the limit that withheld them).
   useEffect(() => {
     const sub = listen<{
       profileId: string;
       success: boolean;
       failures: number;
+      /** Set when the run withheld its planned deletions over the profile's budget. */
+      deletesBlocked?: { planned: number; cap: number } | null;
       completedAtMs: number;
     }>('schedule-run-complete', (event) => {
-      const { profileId, success, failures } = event.payload;
+      const { profileId, success, failures, deletesBlocked } = event.payload;
       const name = syncProfilesRef.current.find((sp) => sp.id === profileId)?.name ?? 'Sync profile';
-      const message = success
-        ? failures > 0
-          ? `Scheduled sync "${name}" finished with ${failures} failure${failures === 1 ? '' : 's'}`
-          : `Scheduled sync "${name}" completed successfully`
-        : `Scheduled sync "${name}" failed`;
+      let message: string;
+      if (!success) {
+        message = `Scheduled sync "${name}" failed`;
+      } else if (deletesBlocked) {
+        // Say both numbers: the destination stopped mirroring on purpose, and
+        // someone should get the chance to review before raising the limit.
+        message = `Scheduled sync "${name}" withheld ${deletesBlocked.planned} deletion${deletesBlocked.planned === 1 ? '' : 's'} (limit ${deletesBlocked.cap})`;
+      } else if (failures > 0) {
+        message = `Scheduled sync "${name}" finished with ${failures} failure${failures === 1 ? '' : 's'}`;
+      } else {
+        message = `Scheduled sync "${name}" completed successfully`;
+      }
       setScheduleToast(message);
       loadSyncProfiles();
     });
@@ -628,11 +638,12 @@ function App() {
           keywords: 'sync mirror profile run',
           run: () => { setSyncPrefillProfile(sp); setSyncRunNow(false); setSyncPanelOpen(true); },
         })),
-        // "Run now" deliberately does NOT invoke run_sync_profile_now here: that
-        // path executes the profile's delete_extraneous deletions with no diff
-        // preview and no confirmation, and failures only hit console.error
-        // (DIRECTION.md: destructive actions always confirmed). The quick re-run
-        // affordance is kept by loading the profile and auto-computing the diff
+        // "Run now" deliberately loads the profile into the panel instead of
+        // executing anything directly: internal profile execution runs the
+        // profile's delete_extraneous deletions with no diff preview and no
+        // confirmation, and no plaintext path for it may remain (DIRECTION.md:
+        // destructive actions always confirmed). The quick re-run affordance
+        // is kept by loading the profile and auto-computing the diff
         // in SyncPanel — one keystroke still lands on the reviewed plan, and
         // Apply reuses the existing delete-confirmation block, so the count the
         // user approves is the count that runs. Errors surface in the panel.

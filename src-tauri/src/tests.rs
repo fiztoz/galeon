@@ -841,6 +841,145 @@ fn test_checksum_refine_apply() {
     assert_eq!(down.reason, "content differs");
 }
 
+// ── Phase: scheduled delete budget (pure) ──────────────────────────────
+
+/// Build a plan entry with a given action and readable path, standing in for
+/// whatever `compute_sync_plan` produced.
+fn budget_entry(path: &str, action: &str) -> SyncPlanEntry {
+    SyncPlanEntry {
+        relative_path: path.into(),
+        action: action.into(),
+        reason: match action {
+            "deleteRemote" | "deleteLocal" => "extraneous".into(),
+            "skip" => "identical".into(),
+            copy_action => format!("new ({copy_action})"),
+        },
+        local_size: Some(1),
+        remote_size: Some(1),
+        local_modified: None,
+        remote_modified: None,
+        direction: DIR_LOCAL_TO_REMOTE.into(),
+    }
+}
+
+#[test]
+fn test_delete_budget_within_limit_leaves_the_plan_alone() {
+    let plan = vec![
+        budget_entry("new.txt", "upload"),
+        budget_entry("gone-a.txt", "deleteRemote"),
+    ];
+    let (out, blocked) = apply_delete_budget(plan, 2);
+    assert!(blocked.is_none());
+    assert_eq!(out[0].action, "upload");
+    assert_eq!(out[1].action, "deleteRemote");
+}
+
+#[test]
+fn test_delete_budget_default_is_never_delete_on_a_schedule() {
+    // A profile without a budget loads as 0 — the safe posture for every
+    // pre-existing scheduled profile when this ships.
+    let plan = vec![
+        budget_entry("new.txt", "upload"),
+        budget_entry("gone-a.txt", "deleteRemote"),
+    ];
+    let (out, blocked) = apply_delete_budget(plan, 0);
+    assert_eq!(blocked, Some(BlockedDeletes { planned: 1, cap: 0 }));
+    assert_eq!(out[0].action, "upload", "copies must still run");
+    assert_eq!(out[1].action, "skip");
+    assert_eq!(
+        out[1].reason,
+        "extraneous (over scheduled delete limit 0: 1 planned)"
+    );
+}
+
+#[test]
+fn test_delete_budget_over_limit_blocks_every_delete() {
+    // All-or-nothing: no "first N" partial mirroring that nobody could
+    // reconstruct or explain afterwards.
+    let plan = vec![
+        budget_entry("gone-a.txt", "deleteRemote"),
+        budget_entry("gone-b.txt", "deleteRemote"),
+        budget_entry("gone-c.txt", "deleteLocal"),
+        budget_entry("changed.txt", "upload"),
+        budget_entry("same.txt", "skip"),
+    ];
+    let (out, blocked) = apply_delete_budget(plan, 2);
+    assert_eq!(blocked, Some(BlockedDeletes { planned: 3, cap: 2 }));
+    for rel in ["gone-a.txt", "gone-b.txt", "gone-c.txt"] {
+        let e = out.iter().find(|e| e.relative_path == rel).unwrap();
+        assert_eq!(e.action, "skip", "{} must be withheld", rel);
+        assert!(
+            e.reason
+                .starts_with("extraneous (over scheduled delete limit 2: 3 planned)"),
+            "reason for {}: {}",
+            rel,
+            e.reason
+        );
+    }
+    // The refusal reason must not collide with the empty-source guard wording.
+    assert_ne!(
+        out.iter().find(|e| e.action == "skip").unwrap().reason,
+        "extraneous (source is empty, not deleting)"
+    );
+    assert_eq!(
+        out.iter()
+            .find(|e| e.relative_path == "changed.txt")
+            .unwrap()
+            .action,
+        "upload"
+    );
+    assert_eq!(
+        out.iter()
+            .find(|e| e.relative_path == "same.txt")
+            .unwrap()
+            .action,
+        "skip"
+    );
+}
+
+#[test]
+fn test_delete_budget_zero_blocks_with_cap_zero() {
+    let plan = vec![budget_entry("x", "deleteRemote")];
+    let (out, blocked) = apply_delete_budget(plan, 0);
+    assert_eq!(out[0].action, "skip");
+    assert_eq!(
+        out[0].reason,
+        "extraneous (over scheduled delete limit 0: 1 planned)"
+    );
+    assert_eq!(blocked, Some(BlockedDeletes { planned: 1, cap: 0 }));
+}
+
+#[test]
+fn test_delete_budget_empty_plan_is_never_blocked() {
+    let (out, blocked) = apply_delete_budget(Vec::new(), 0);
+    assert!(out.is_empty());
+    assert!(blocked.is_none());
+}
+
+#[test]
+fn test_sync_profile_missing_budget_field_defaults_to_never_delete() {
+    // The store file written before this field exists must load, and it must
+    // load into the SAFE posture: a scheduled run keeps its hands off deletes
+    // until the user asks for a budget.
+    let legacy = r#"{
+        "id": "p1",
+        "name": "Nightly",
+        "connectionProfileId": "c1",
+        "localPath": "/tmp/src",
+        "remotePrefix": "backup",
+        "direction": "localToRemote",
+        "verifyChecksum": false,
+        "deleteExtraneous": true,
+        "lastRunMs": null
+    }"#;
+    let profile: SyncProfile = serde_json::from_str(legacy).unwrap();
+    assert!(profile.delete_extraneous, "fixture sanity: deletes were on");
+    assert_eq!(
+        profile.max_scheduled_deletes, 0,
+        "a legacy profile schedules with the safe default"
+    );
+}
+
 #[test]
 fn test_is_unsafe_relative_path() {
     assert!(is_unsafe_relative_path("/etc/passwd"));

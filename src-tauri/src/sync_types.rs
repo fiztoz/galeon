@@ -69,6 +69,18 @@ pub struct SyncProfile {
     pub direction: String,
     pub verify_checksum: bool,
     pub delete_extraneous: bool,
+    /// The most destination objects a SCHEDULED run may permanently delete.
+    ///
+    /// `0` (the serde default, so every pre-existing profile) means a scheduled
+    /// run never deletes: the unattended hole in `delete_extraneous` — a stale
+    /// but non-empty source erasing a destination on a timer — is closed by
+    /// default and can only be reopened deliberately, per profile, with a
+    /// number. Manual runs are unaffected: they preview the diff and confirm
+    /// before anything runs. All-or-nothing at the cap: a run over budget
+    /// performs NO deletions, rather than a partial (and unrecoverable)
+    /// half-mirrored state.
+    #[serde(default)]
+    pub max_scheduled_deletes: u32,
     /// Unix epoch millis of the last scheduled or manual run.
     pub last_run_ms: Option<u64>,
     /// Optional automatic run schedule (Phase 12).
@@ -87,6 +99,42 @@ pub struct SyncProfilesStore {
 /// Direction string constants for the shared contract.
 pub(crate) const DIR_LOCAL_TO_REMOTE: &str = "localToRemote";
 pub(crate) const DIR_REMOTE_TO_LOCAL: &str = "remoteToLocal";
+
+/// Which code path started a sync run. The only policy that hangs off it is
+/// the scheduled-delete budget (`apply_delete_budget`); manual runs preview and
+/// confirm in the UI instead.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SyncTrigger {
+    /// The user launched the run and confirmed the reviewed diff. No product
+    /// code constructs it — `execute_sync_plan` is the manual path from the
+    /// UI — but the pipeline keeps both postures explicit and the budget
+    /// e2e tests drive this arm so the contrast stays tested.
+    #[allow(dead_code)]
+    Manual,
+    Schedule,
+}
+
+impl SyncTrigger {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            SyncTrigger::Manual => "manual",
+            SyncTrigger::Schedule => "schedule",
+        }
+    }
+}
+
+/// Why a scheduled run performed none of its planned deletions. Travels in the
+/// run record and the `schedule-run-complete` event so the UI can say both
+/// numbers instead of a bare "0 deletes".
+/// Serialized as camelCase.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockedDeletes {
+    /// How many deletions the plan contained.
+    pub planned: u32,
+    /// The profile's `maxScheduledDeletes` (the exceeded limit).
+    pub cap: u32,
+}
 
 /// Allowed mtime drift (ms) before two timestamps are considered different.
 /// Remote stores (S3/FTP) round timestamps to whole seconds, so a 2s slack

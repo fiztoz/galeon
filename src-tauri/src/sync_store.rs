@@ -40,8 +40,10 @@ pub(crate) async fn run_sync_scheduler(app_handle: AppHandleType, _state: Arc<Ga
 
         for profile in due_profiles {
             let profile_id = profile.id.clone();
-            match commands::run_sync_profile_internal(&app_handle, &profile).await {
-                Ok(failures) => {
+            match commands::run_sync_profile_internal(&app_handle, &profile, SyncTrigger::Schedule)
+                .await
+            {
+                Ok(record) => {
                     let _ = update_sync_profile(&app_handle, &profile_id, |p| {
                         advance_schedule_after_run(p, now_ms())
                     })
@@ -50,8 +52,12 @@ pub(crate) async fn run_sync_scheduler(app_handle: AppHandleType, _state: Arc<Ga
                         "schedule-run-complete",
                         serde_json::json!({
                             "profileId": profile_id,
-                            "success": failures == 0,
-                            "failures": failures,
+                            "success": record.succeeded,
+                            "failures": record.failures,
+                            // Present only when the run withheld its planned
+                            // deletions, so the toast can explain why nothing
+                            // was deleted.
+                            "deletesBlocked": record.deletes_blocked,
                             "completedAtMs": now_ms(),
                         }),
                     );
@@ -252,6 +258,7 @@ mod tests {
             direction: crate::DIR_LOCAL_TO_REMOTE.to_string(),
             verify_checksum: false,
             delete_extraneous: true,
+            max_scheduled_deletes: 0,
             last_run_ms: None,
             schedule,
         }

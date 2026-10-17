@@ -62,6 +62,24 @@ test('a capped error list is reported as capped', () => {
   expect(summarizeRun(record({ failures: 0, errors: [] })).errorsCapped).toBe(false);
 });
 
+// A scheduled run that hit its delete budget performed NO deletions. Reviewing
+// it later must not read like an empty, quiet sync: the flag is the only place
+// the row can know "0" meant "refused" rather than "nothing to do".
+test('a scheduled run over budget is flagged deletes-skipped, a normal one is not', () => {
+  const refused = summarizeRun(record({
+    trigger: 'schedule',
+    deletes: 0,
+    deletedPaths: [],
+    deletesBlocked: { planned: 412, cap: 25 },
+  }));
+  expect(refused.deletesSkipped).toBe(true);
+  expect(refused.unattended).toBe(true);
+
+  // Uncapped runs — including scheduled ones that deleted freely.
+  expect(summarizeRun(record()).deletesSkipped).toBe(false);
+  expect(summarizeRun(record({ deletes: 2, deletedPaths: ['a', 'b'] })).deletesSkipped).toBe(false);
+});
+
 test('run age labels cover each unit and fall back to a date when old', () => {
   expect(runAgeLabel(NOW - 2_000, NOW)).toBe('just now');
   expect(runAgeLabel(NOW - 30_000, NOW)).toBe('30s ago');
