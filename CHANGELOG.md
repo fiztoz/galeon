@@ -28,6 +28,15 @@
 
 ### Fixed
 
+- Manual sync runs executed from the panel are now in the run history. Until this ships,
+  only scheduled (profile-pipeline) runs were recorded — the panel's apply ran
+  `execute_sync_plan` and its work vanished from the history. A manual run now writes the
+  same kind of record with trigger `manual`, attributed to the loaded sync profile as long
+  as the settings it executed still match it (editing what the run does — source,
+  destination, direction, checksum, or delete behavior — records it ad-hoc under
+  "Manual sync" instead: the log never blames a profile for settings it did not have), with
+  its deletions listed even when the run had failures. Empty plans (nothing to do) record
+  nothing — with no deletions, the panel's own "0 changes" view is the whole story.
 - The sync panel's "Apply" read `execute_sync_plan`'s answer as a raw failure count, but the
   backend (since alpha.6) returns a run summary object — so the panel could have mis-typed the
   response and mishandled partial runs. It now reads the summary's failure list directly.

@@ -320,6 +320,8 @@ async fn test_tier4_s05_execute_sync_plan_reports_real_transfer_outcomes() {
         ctx.temp_dir.to_string_lossy().to_string(),
         "tier4_s05".to_string(),
         None,
+        None,
+        None,
     )
     .await
     .unwrap();
@@ -339,6 +341,112 @@ async fn test_tier4_s05_execute_sync_plan_reports_real_transfer_outcomes() {
     // simply erroring out early.
     let op = ctx.operator();
     assert!(op.stat("tier4_s05/good.bin").await.is_ok());
+
+    ctx.cleanup().await;
+}
+
+#[tokio::test]
+async fn test_tier4_s09_manual_plan_runs_are_recorded_in_history() {
+    // The panel's apply executes `execute_sync_plan` directly — until now
+    // only profile-pipeline runs were recorded, so the history's premise
+    // ("every run, scheduled or manual") was only half true. The manual
+    // command path must write its own rows: attributed when the UI says so,
+    // generic for ad-hoc runs, deletions listed either way — including on
+    // runs where something failed.
+    let _guard = TEST_SERIAL_MUTEX.lock().await;
+    let ctx = TestContext::setup("tier4_s09").await;
+    let op = ctx.operator();
+
+    op.write("tier4_s09/gone-profile.bin", "a").await.unwrap();
+    op.write("tier4_s09/gone-adhoc.bin", "b").await.unwrap();
+
+    let attributed_plan = vec![SyncPlanEntry {
+        relative_path: "gone-profile.bin".into(),
+        action: "deleteRemote".into(),
+        reason: "extraneous".into(),
+        local_size: None,
+        remote_size: Some(1),
+        local_modified: None,
+        remote_modified: None,
+        direction: crate::DIR_LOCAL_TO_REMOTE.into(),
+    }];
+    let adhoc_plan = vec![SyncPlanEntry {
+        relative_path: "gone-adhoc.bin".into(),
+        action: "deleteRemote".into(),
+        reason: "extraneous".into(),
+        local_size: None,
+        remote_size: Some(1),
+        local_modified: None,
+        remote_modified: None,
+        direction: crate::DIR_LOCAL_TO_REMOTE.into(),
+    }];
+
+    let empty_local = ctx.temp_dir.to_string_lossy().to_string();
+
+    // The panel-equivalent run, attributed to the loaded profile.
+    let attributed = execute_sync_plan(
+        ctx.handle.clone(),
+        ctx.app.state::<GaleonEngine>(),
+        ctx.session_id.clone(),
+        attributed_plan,
+        true,
+        empty_local.clone(),
+        "tier4_s09".to_string(),
+        None,
+        Some("sp-manual".to_string()),
+        Some("Nightly backup".to_string()),
+    )
+    .await
+    .unwrap();
+
+    // The ad-hoc run: same command, no attribution.
+    execute_sync_plan(
+        ctx.handle.clone(),
+        ctx.app.state::<GaleonEngine>(),
+        ctx.session_id.clone(),
+        adhoc_plan,
+        true,
+        empty_local,
+        "tier4_s09".to_string(),
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    assert!(
+        attributed.failures.is_empty(),
+        "fixture sanity: deletes ran clean ({:?})",
+        attributed.failures
+    );
+    let log = sync_log::read_sync_runs(&ctx.handle);
+
+    let attributed_row = log
+        .runs
+        .iter()
+        .find(|r| r.profile_id == "sp-manual")
+        .expect("the attributed manual run must be recorded");
+    assert_eq!(attributed_row.trigger, "manual");
+    assert_eq!(attributed_row.profile_name, "Nightly backup");
+    assert_eq!(attributed_row.direction, "localToRemote");
+    assert_eq!(attributed_row.deletes, 1);
+    assert_eq!(attributed_row.deleted_paths, ["gone-profile.bin"]);
+    assert!(attributed_row.succeeded);
+
+    let adhoc_row = log
+        .runs
+        .iter()
+        .find(|r| r.profile_name == "Manual sync")
+        .expect("the ad-hoc run must be recorded under the generic name");
+    assert_eq!(adhoc_row.trigger, "manual");
+    assert_eq!(adhoc_row.profile_id, "", "an ad-hoc run has no profile id");
+    assert_eq!(adhoc_row.deletes, 1);
+    assert_eq!(adhoc_row.deleted_paths, ["gone-adhoc.bin"]);
+
+    // And the deletions really happened.
+    assert!(op.stat("tier4_s09/gone-profile.bin").await.is_err());
+    assert!(op.stat("tier4_s09/gone-adhoc.bin").await.is_err());
 
     ctx.cleanup().await;
 }

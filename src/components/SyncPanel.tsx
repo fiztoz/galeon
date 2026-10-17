@@ -145,6 +145,43 @@ export function isSyncPlanStale(
 }
 
 /**
+ * Which saved sync profile a manual (panel-executed) run belongs to, or `null`
+ * for an ad-hoc run. Every saved-sync-profile load fills the form from that
+ * profile; if the settings the run actually used still equal the loaded
+ * profile's, the history row can honestly carry its name and id. One edit
+ * anywhere in the execution-relevant inputs and the run is no longer what the
+ * profile described — ad-hoc then, so the log never blames a profile for
+ * settings it did not have when the run executed.
+ *
+ * Deliberately NOT compared: the display name being retyped, the schedule
+ * (manual runs are not schedule-driven), and `maxScheduledDeletes` — manual
+ * runs never consult the budget, so a budget edit does not change what this
+ * run does.
+ */
+export interface ManualRunAttribution {
+  profileId: string;
+  profileName: string;
+}
+
+export function manualRunAttribution(
+  loadedFrom: SyncProfile | null | undefined,
+  inputs: SyncDiffInputs & { connectionProfileId: string },
+): ManualRunAttribution | null {
+  if (
+    loadedFrom &&
+    loadedFrom.connectionProfileId === inputs.connectionProfileId &&
+    loadedFrom.localPath === inputs.localPath &&
+    loadedFrom.remotePrefix === inputs.remotePrefix &&
+    loadedFrom.direction === inputs.direction &&
+    loadedFrom.verifyChecksum === inputs.verifyChecksum &&
+    loadedFrom.deleteExtraneous === inputs.deleteExtraneous
+  ) {
+    return { profileId: loadedFrom.id, profileName: loadedFrom.name };
+  }
+  return null;
+}
+
+/**
  * Copy entries whose DESTINATION is newer than the source — i.e. the sync will
  * overwrite a file the user changed more recently.
  *
@@ -423,8 +460,19 @@ export function SyncPanel({
     setApplyError(null);
     setSyncProgress(null);
     try {
-      // The backend waits for the real transfer outcomes and answers with the
-      // finished run summary (Wire: `SyncRunOutcome`).
+      // Attribute the run to the loaded profile only when the settings it
+      // executed still match that profile; edits turn it ad-hoc.
+      const attribution = manualRunAttribution(prefillProfile, {
+        connectionProfileId: selectedConnectionProfileId,
+        localPath,
+        remotePrefix,
+        direction,
+        verifyChecksum,
+        deleteExtraneous,
+      });
+      // The backend waits for the real transfer outcomes, records the manual
+      // run, and answers with the finished run summary (Wire: `SyncRunOutcome`).
+      // The stale-plan guard above ran before this point either way.
       const outcome = await invoke<SyncRunOutcome>('execute_sync_plan', {
         sessionId,
         plan,
@@ -432,9 +480,10 @@ export function SyncPanel({
         localPath,
         remotePrefix,
         profileId: connectionProfileId ?? null,
+        syncProfileId: attribution?.profileId ?? null,
+        syncProfileName: attribution?.profileName ?? null,
       });
-      // The backend records the run as part of executing the plan — pull the
-      // new history row in so a partial run's deletions/failures are visible.
+      // Refresh history now so this run's row appears without a reload.
       void refreshRuns();
       if (outcome.failures.length > 0) {
         setApplyError(`${outcome.failures.length} sync item(s) failed`);
@@ -447,7 +496,7 @@ export function SyncPanel({
     } finally {
       setApplyLoading(false);
     }
-  }, [plan, planStale, sessionId, deleteExtraneous, localPath, remotePrefix, connectionProfileId, confirmDeleteOpen, refreshRuns, onSyncComplete, onClose]);
+  }, [plan, planStale, sessionId, deleteExtraneous, localPath, remotePrefix, connectionProfileId, selectedConnectionProfileId, direction, verifyChecksum, prefillProfile, confirmDeleteOpen, refreshRuns, onSyncComplete, onClose]);
 
   const handleSaveProfile = async () => {
     if (!saveProfileName.trim()) return;
