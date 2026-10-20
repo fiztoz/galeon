@@ -18,6 +18,8 @@ import { SplitPane } from './components/SplitPane';
 import { PresignHistoryModal } from './components/PresignHistoryModal';
 import { nextThemeMode, THEME_LABELS } from './theme';
 import { useLayoutPreferences } from './hooks/useLayoutPreferences';
+import { ConfirmDialog } from './components/Dialogs';
+import { disconnectNeedsConfirm } from './disconnectGuard';
 
 import type {
   AppSettings,
@@ -25,6 +27,27 @@ import type {
   PresignHistoryEntry,
   ProtocolCapabilities,
 } from './types';
+
+/** Shared warning body for the switch / disconnect confirmations. */
+function EditorWatchWarning({ action, sessions }: { action: string; sessions: EditSessionInfo[] }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-zinc-400">
+        You have {sessions.length} file{sessions.length === 1 ? '' : 's'} open in an external editor.
+        {action} will stop watching them — unsaved changes in your editor won't be re-uploaded.
+      </p>
+      {sessions.length > 0 && (
+        <ul className="max-h-40 overflow-y-auto space-y-1 rounded-lg border border-zinc-800 bg-zinc-950/50 p-2">
+          {sessions.map((s) => (
+            <li key={s.editorId} className="text-sm text-zinc-300 truncate">
+              {s.filename}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function App() {
   const [session, setSession] = useState<{
@@ -54,6 +77,9 @@ function App() {
   // Phase 10 — profile awaiting a disconnect-and-switch confirmation while
   // external edit sessions are mid-flight; non-null opens the warning modal.
   const [pendingSwitchProfile, setPendingSwitchProfile] = useState<ConnectionProfile | null>(null);
+  // Disconnect awaiting the same warning while external edit sessions are
+  // mid-flight; true opens the confirmation modal.
+  const [pendingDisconnect, setPendingDisconnect] = useState(false);
 
   // Phase 11 — one-way sync
   const [syncProfiles, setSyncProfiles] = useState<SyncProfile[]>([]);
@@ -500,6 +526,7 @@ function App() {
   // Reads the live count from the ref to keep this callback's deps minimal.
   const connectProfile = useCallback(async (profile: ConnectionProfile) => {
     if (editSessionsRef.current.length > 0) {
+      setPendingDisconnect(false);
       setPendingSwitchProfile(profile);
       return;
     }
@@ -522,7 +549,7 @@ function App() {
   }, []);
 
   // Stop any active external-editor watchers and tear down the session.
-  const handleDisconnect = useCallback(() => {
+  const performDisconnect = useCallback(() => {
     editSessionsRef.current.forEach((s) => { invoke('stop_editing_file', { editorId: s.editorId }).catch(() => {}); });
     editSessionsRef.current = [];
     setEditSessions([]);
@@ -531,6 +558,18 @@ function App() {
     setRecentPaths([]);
     setSession(null);
   }, []);
+
+  // Gating wrapper: confirm before tearing the session down while external
+  // edit sessions are mid-flight. Reads the live count from the ref to keep
+  // this callback's deps minimal. Only one warning dialog is mounted at a time.
+  const requestDisconnect = useCallback(() => {
+    if (disconnectNeedsConfirm(editSessionsRef.current.length)) {
+      setPendingSwitchProfile(null);
+      setPendingDisconnect(true);
+      return;
+    }
+    performDisconnect();
+  }, [performDisconnect]);
 
   // Mirror edit sessions into a ref so disconnect can read them without a stale
   // closure, and refresh the list on backend lifecycle events while connected.
@@ -657,7 +696,7 @@ function App() {
         { id: 'settings', label: 'Open Settings', keywords: 'preferences config about privacy', run: () => setSettingsOpen(true) },
         { id: 'onboarding', label: 'Show Onboarding', keywords: 'welcome tutorial intro', run: handleShowOnboardingAgain },
         { id: 'lock-credentials', label: 'Lock Credentials Now', keywords: 'keychain password secure lock', run: handleLockCredentials },
-        { id: 'disconnect', label: 'Disconnect', keywords: 'logout exit close', run: handleDisconnect },
+        { id: 'disconnect', label: 'Disconnect', keywords: 'logout exit close', run: requestDisconnect },
       ]
     : [
         { id: 'settings', label: 'Open Settings', keywords: 'preferences config about privacy', run: () => setSettingsOpen(true) },
@@ -781,7 +820,7 @@ function App() {
             <Settings className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={handleDisconnect}
+            onClick={requestDisconnect}
             className="ui-button ui-button-ghost ml-1"
           >
             Disconnect
@@ -921,38 +960,31 @@ function App() {
 
       {/* Disconnect-and-switch confirmation (external edits mid-flight) */}
       {pendingSwitchProfile && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-[480px] max-h-[80vh] shadow-2xl flex flex-col">
-            <h3 className="text-lg font-semibold mb-2">Switch connection?</h3>
-            <p className="text-sm text-zinc-400">
-              You have {editSessions.length} file{editSessions.length === 1 ? '' : 's'} open in an external editor.
-              Switching will stop watching them — unsaved changes in your editor won't be re-uploaded.
-            </p>
-            {editSessions.length > 0 && (
-              <ul className="mt-3 max-h-40 overflow-y-auto space-y-1 rounded-lg border border-zinc-800 bg-zinc-950/50 p-2">
-                {editSessions.map((s) => (
-                  <li key={s.editorId} className="text-sm text-zinc-300 truncate">
-                    {s.filename}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="mt-6 flex justify-end space-x-2">
-              <button
-                onClick={cancelSwitchProfile}
-                className="px-4 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmSwitchProfile}
-                className="px-4 py-2 text-sm rounded-lg bg-rose-600 text-white hover:bg-rose-500"
-              >
-                Switch anyway
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Switch connection?"
+          width="w-[480px]"
+          tone="danger"
+          confirmLabel="Switch anyway"
+          onCancel={cancelSwitchProfile}
+          onConfirm={confirmSwitchProfile}
+        >
+          <EditorWatchWarning action="Switching" sessions={editSessions} />
+        </ConfirmDialog>
+      )}
+
+      {/* Disconnect confirmation (external edits mid-flight) */}
+      {pendingDisconnect && (
+        <ConfirmDialog
+          title="Disconnect?"
+          width="w-[480px]"
+          tone="danger"
+          confirmLabel="Disconnect"
+          cancelLabel="Stay connected"
+          onCancel={() => setPendingDisconnect(false)}
+          onConfirm={() => { setPendingDisconnect(false); performDisconnect(); }}
+        >
+          <EditorWatchWarning action="Disconnecting" sessions={editSessions} />
+        </ConfirmDialog>
       )}
 
       {showOnboarding && (
