@@ -391,8 +391,9 @@ html[data-theme='light'] .connection-field { background: #fff; }
 .file-table th:first-child { width: 40px; }
 .file-table th:nth-child(3) { width: 100px; }
 .file-table th:nth-child(4) { width: 190px; }
-.file-table th:nth-child(5) { width: 64px; }
 .file-table td:nth-child(3) { white-space: nowrap; }
+/* Keyboard cursor: a rule at the row's edge, not a second selection tint. */
+.file-table tr.is-cursor { box-shadow: inset 2px 0 0 var(--focus-ring); }
 .file-table .file-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .file-table .file-name button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .file-table .compact-date { display: none; }
@@ -407,9 +408,7 @@ html[data-theme='light'] .connection-field { background: #fff; }
   .file-table th:nth-child(4), .file-table td:nth-child(4) { display: none; }
   .file-table .compact-date { display: block; margin-top: 2px; font-size: 11px; color: var(--color-zinc-500); }
   .file-table th:nth-child(3) { width: 80px; }
-  .file-table th:nth-child(5) { width: 40px; }
   .file-table th, .file-table td { padding: 8px; }
-  .file-table th:nth-child(5) { font-size: 0; }
 }
 
 .galeon-dialog {

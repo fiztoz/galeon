@@ -18,6 +18,8 @@ import {
   RotateCw,
 } from 'lucide-react';
 import { formatSize } from './Explorer';
+import { useMultiSelect } from '../hooks/useMultiSelect';
+import { useFileListKeyboardNav, isInteractiveTarget } from '../hooks/useFileListKeyboard';
 import {
   GALEON_LOCAL_PATHS_MIME,
   GALEON_REMOTE_KEYS_MIME,
@@ -101,10 +103,6 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
   const [error, setError] = useState('');
   const [listFailed, setListFailed] = useState(false);
 
-  // Selection
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
-
   // Sort & filter
   const [searchQuery, setSearchQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -123,11 +121,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
   // window-level `tauri://drag-drop` listener untouched.
   const [dragOverRemote, setDragOverRemote] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const localDragPaths = (entry: LocalEntry): string[] => {
-    if (selectedItems.has(entry.path) && selectedItems.size > 0) return [...selectedItems];
-    return [entry.path];
-  };
+  const tbodyRef = useRef<HTMLTableSectionElement | null>(null);
   const listNonceRef = useRef(0);
 
   // ── Fetch directory ────────────────────────────────────────────────────────
@@ -187,6 +181,19 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
     return sortEntries(result, sortKey, sortDirection);
   }, [entries, showHidden, searchQuery, sortKey, sortDirection]);
 
+  // ── Selection ──────────────────────────────────────────────────────────────
+  // The same gesture model as the remote pane: a plain click replaces the
+  // selection, Cmd/Ctrl-click toggles, Shift extends.
+  const localRows = useMemo(() => filteredEntries.map(e => ({ fullKey: e.path })), [filteredEntries]);
+  const { selectedItems, cursorIndex, handleSelectItem, handleSelectAll, clearSelection } =
+    useMultiSelect(localRows);
+
+  // Dragging a selected row drags the whole selection.
+  const localDragPaths = (entry: LocalEntry): string[] => {
+    if (selectedItems.has(entry.path) && selectedItems.size > 0) return [...selectedItems];
+    return [entry.path];
+  };
+
   // ── Sort handler ───────────────────────────────────────────────────────────
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -197,43 +204,6 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
     }
   };
 
-  // ── Selection ──────────────────────────────────────────────────────────────
-  const handleSelectItem = (path: string, index: number, shiftKey: boolean = false) => {
-    const newSelected = new Set(selectedItems);
-
-    if (shiftKey && lastSelectedIndex !== null) {
-      const startIdx = Math.min(lastSelectedIndex, index);
-      const endIdx = Math.max(lastSelectedIndex, index);
-      for (let i = startIdx; i <= endIdx; i++) {
-        if (filteredEntries[i]) {
-          newSelected.add(filteredEntries[i].path);
-        }
-      }
-    } else {
-      if (newSelected.has(path)) {
-        newSelected.delete(path);
-      } else {
-        newSelected.add(path);
-      }
-    }
-
-    setSelectedItems(newSelected);
-    setLastSelectedIndex(index);
-  };
-
-  const handleSelectAll = () => {
-    if (selectedItems.size === filteredEntries.length) {
-      setSelectedItems(new Set());
-    } else {
-      setSelectedItems(new Set(filteredEntries.map((e) => e.path)));
-    }
-  };
-
-  const clearSelection = () => {
-    setSelectedItems(new Set());
-    setLastSelectedIndex(null);
-  };
-
   // ── Navigation ─────────────────────────────────────────────────────────────
   const handleDoubleClick = (entry: LocalEntry) => {
     if (entry.isDir) {
@@ -241,6 +211,41 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
       clearSelection();
     }
   };
+
+  // ── Keyboard navigation ────────────────────────────────────────────────────
+  // The pane owns its keys: arrows walk the rows, Enter opens, Cmd+A selects
+  // everything, Escape clears. The listener stays on the pane so dialogs and
+  // the command palette keep their own shortcuts.
+  const paneRef = useRef<HTMLDivElement | null>(null);
+
+  const handlePaneKeyDown = useFileListKeyboardNav({
+    count: filteredEntries.length,
+    cursor: cursorIndex,
+    onMove: (index, extend) => {
+      const entry = filteredEntries[index];
+      if (!entry) return;
+      // A shift move extends from the anchor; the anchor itself must not
+      // move, or the next shift move would range from the wrong row.
+      handleSelectItem(entry.path, index, extend ? { shift: true } : {});
+    },
+    onOpen: (index) => {
+      const entry = filteredEntries[index];
+      if (entry) handleDoubleClick(entry);
+    },
+    onSelectAll: () => {
+      // Select-all is idempotent: pressing it twice must not deselect.
+      if (selectedItems.size !== filteredEntries.length) handleSelectAll();
+    },
+    onClear: clearSelection,
+  });
+
+  // The local list renders every row, so the cursor row only has to be
+  // scrolled into view — no windowed offsets to compute.
+  useEffect(() => {
+    if (cursorIndex === null) return;
+    const row = tbodyRef.current?.querySelector(`[data-row-index="${cursorIndex}"]`);
+    (row as HTMLElement | null)?.scrollIntoView({ block: 'nearest' });
+  }, [cursorIndex]);
 
   const navigateUp = () => {
     // Derive parent from path string (no invoke needed)
@@ -303,7 +308,10 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
 
   return (
     <div
+      ref={paneRef}
       className="file-pane flex flex-col h-full bg-zinc-950 text-zinc-100"
+      tabIndex={0}
+      onKeyDown={handlePaneKeyDown}
       onDragOver={(e) => {
         if (dragHasType(e, GALEON_REMOTE_KEYS_MIME)) {
           e.preventDefault();
@@ -488,7 +496,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800/50 text-sm text-zinc-200">
+              <tbody ref={tbodyRef} className="divide-y divide-zinc-800/50 text-sm text-zinc-200">
                 {filteredEntries.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-6 py-14 text-center text-zinc-500">
@@ -536,16 +544,28 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                   filteredEntries.map((entry, index) => (
                     <tr
                       key={entry.path}
+                      data-row-index={index}
                       draggable={!entry.isDir}
+                      aria-selected={selectedItems.has(entry.path)}
                       onDragStart={(e) => {
                         if (entry.isDir) { e.preventDefault(); return; }
                         e.dataTransfer.setData(GALEON_LOCAL_PATHS_MIME, JSON.stringify(localDragPaths(entry)));
                         e.dataTransfer.effectAllowed = 'copy';
                       }}
+                      onClick={(e) => {
+                        if (isInteractiveTarget(e.target)) return;
+                        // The pane takes the focus so the arrow keys keep
+                        // walking the rows straight after a click.
+                        paneRef.current?.focus();
+                        handleSelectItem(entry.path, index, {
+                          shift: e.shiftKey,
+                          toggle: e.metaKey || e.ctrlKey,
+                        });
+                      }}
                       onDoubleClick={() => handleDoubleClick(entry)}
                       className={`hover:bg-zinc-800/40 cursor-pointer transition-colors ${
                         selectedItems.has(entry.path) ? 'bg-gale-teal/10 border-l-2 border-gale-teal' : ''
-                      } ${entry.isHidden ? 'opacity-50' : ''}`}
+                      } ${entry.isHidden ? 'opacity-50' : ''} ${index === cursorIndex ? 'is-cursor' : ''}`}
                     >
                       <td className="px-4 py-3">
                         <input
@@ -555,7 +575,10 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                           onChange={() => {}}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleSelectItem(entry.path, index, e.shiftKey);
+                            handleSelectItem(entry.path, index, {
+                              toggle: !e.shiftKey,
+                              shift: e.shiftKey,
+                            });
                           }}
                           className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-gale-teal focus:ring-gale-teal focus:ring-1 accent-gale-teal"
                         />
@@ -568,7 +591,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                           <File className="w-5 h-5 text-zinc-400 flex-shrink-0" />
                         )}
                         <div className="min-w-0">
-                          <button type="button" onClick={(event) => handleSelectItem(entry.path, index, event.shiftKey)}
+                          <button type="button" onClick={(event) => { event.stopPropagation(); handleSelectItem(entry.path, index, { shift: event.shiftKey, toggle: event.metaKey || event.ctrlKey }); }}
                             onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleDoubleClick(entry); } }} title={entry.name} className="block max-w-full hover:text-gale-teal">{entry.name}</button>
                           <span className="compact-date">{formatDate(entry.modifiedMs)}</span>
                         </div>

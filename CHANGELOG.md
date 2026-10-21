@@ -1,3 +1,27 @@
+## [Unreleased]
+
+### Added
+
+- **Keyboard navigation in both file panes.** Arrow keys walk the rows, Shift+Arrow
+  extends the selection, Home/End jump to the ends, Enter opens the row under the
+  cursor, Cmd/Ctrl+A selects everything, and Escape clears the selection. The keys
+  belong to the pane you are in — the search box and the inline editor keep their
+  own — and the remote list scrolls the cursor into view even when the row sits
+  outside the windowed viewport. The rules live in one pure helper
+  (`fileListKeyAction`), shared by the remote and local panes.
+
+### Changed
+
+- **Clicking a row now behaves like a file manager.** A plain click *replaces* the
+  selection instead of toggling it (clicking the same row twice used to deselect
+  it), Cmd/Ctrl-click toggles one row, and Shift-click extends a range from the
+  last row you clicked. The checkbox column still behaves like a checkbox. The
+  local pane no longer keeps a second, subtly different copy of these rules — both
+  panes now share one selection model.
+- **The per-row Actions button is gone from the remote list.** Right-click opens
+  the same menu; the column was spending a fifth of the table on a button that
+  duplicated it.
+
 ## [1.0.0-alpha.8] - 2026-10-17
 
 ### Added

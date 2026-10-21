@@ -4,12 +4,13 @@ import { createPortal } from 'react-dom';
 import { useObjectListing, useObjectSorting } from '../hooks/useObjectListing';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import { useWindowedRows } from '../hooks/useWindowedRows';
+import { useFileListKeyboardNav, isInteractiveTarget } from '../hooks/useFileListKeyboard';
 import React, { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useFolderSizes } from '../hooks/useFolderSizes';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { useUploadPipeline, type PendingConflict } from '../hooks/useUploadPipeline';
-import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, MoreVertical, Loader2, AlertTriangle, Search, RotateCw } from 'lucide-react';
+import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, Loader2, AlertTriangle, Search, RotateCw } from 'lucide-react';
 import { ProtocolCapabilities, DirectoryListing, GaleonObject, StorageProtocol } from '../types';
 import {
   ConflictDialog,
@@ -108,7 +109,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
   const { searchQuery, setSearchQuery, filterType, setFilterType, sortKey, sortDirection, filteredObjects, handleSort } =
     useObjectSorting(objects, folderSizes);
 
-  const { selectedItems, setSelectedItems, setLastSelectedIndex, handleSelectItem, handleSelectAll, clearSelection } =
+  const { selectedItems, setSelectedItems, setLastSelectedIndex, cursorIndex, handleSelectItem, handleSelectAll, clearSelection } =
     useMultiSelect(filteredObjects);
 
   // -- Windowed rendering -----------------------------------------------------
@@ -117,7 +118,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
   // spreads `visibleRows` between two spacer rows.
   const {
     scrollRef, tbodyRef, visibleRows, indexOf: rowIndexOf,
-    topSpacer, bottomSpacer, hasTopSpacer, hasBottomSpacer,
+    topSpacer, bottomSpacer, hasTopSpacer, hasBottomSpacer, scrollToIndex,
   } = useWindowedRows(filteredObjects, objects);
 
   // In-app drag state (local → remote). HTML5 only, additive over the native
@@ -129,7 +130,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
     return [obj.fullKey];
   };
 
-  const { activeMenu, setActiveMenu, menuPosition, openItemMenu, handleRowContextMenu } =
+  const { activeMenu, setActiveMenu, menuPosition, handleRowContextMenu } =
     useObjectContextMenu(selectedItems, setSelectedItems, setLastSelectedIndex);
 
   const handleMenuAction = (action: ObjectMenuAction, obj: GaleonObject) => {
@@ -248,6 +249,34 @@ export const Explorer: React.FC<ExplorerProps> = ({
       setPrefix(isFsProtocol ? normalizeFsPath(obj.fullKey) : obj.fullKey);
     }
   };
+
+  // -- Keyboard navigation ----------------------------------------------------
+  // The pane owns its keys: arrows walk the rows, Enter opens, Cmd+A selects
+  // everything, Escape clears. The listener stays on the pane so dialogs and
+  // the command palette keep their own shortcuts.
+  const paneRef = useRef<HTMLDivElement | null>(null);
+
+  const handlePaneKeyDown = useFileListKeyboardNav({
+    count: filteredObjects.length,
+    cursor: cursorIndex,
+    onMove: (index, extend) => {
+      const obj = filteredObjects[index];
+      if (!obj) return;
+      // A shift move extends from the anchor; the anchor itself must not
+      // move, or the next shift move would range from the wrong row.
+      handleSelectItem(obj.fullKey, index, extend ? { shift: true } : {});
+    },
+    onOpen: (index) => {
+      const obj = filteredObjects[index];
+      if (obj) handleDoubleClick(obj);
+    },
+    onSelectAll: () => {
+      // Select-all is idempotent: pressing it twice must not deselect.
+      if (selectedItems.size !== filteredObjects.length) handleSelectAll();
+    },
+    onClear: clearSelection,
+    onScrollTo: scrollToIndex,
+  });
 
   const handleDownload = async (obj: GaleonObject) => {
     if (obj.objectType === 'folder') {
@@ -516,7 +545,10 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
   return (
     <div
+      ref={paneRef}
       className="file-pane flex flex-col h-full bg-zinc-950 text-zinc-100"
+      tabIndex={0}
+      onKeyDown={handlePaneKeyDown}
       onDragOver={(e) => {
         if (dragHasType(e, GALEON_LOCAL_PATHS_MIME)) {
           e.preventDefault();
@@ -707,13 +739,12 @@ export const Explorer: React.FC<ExplorerProps> = ({
                   >
                     <button type="button" onClick={() => handleSort('date')}>Last Modified {sortKey === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}</button>
                   </th>
-                  <th className="px-6 py-3 w-20 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody ref={tbodyRef} className="divide-y divide-zinc-800/50 text-sm text-zinc-200">
                 {filteredObjects.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-14 text-center text-zinc-500">
+                    <td colSpan={4} className="px-6 py-14 text-center text-zinc-500">
                       <div className="flex flex-col items-center gap-3 max-w-sm mx-auto">
                         {listFailed ? (
                           <>
@@ -776,7 +807,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
                   <>
                     {hasTopSpacer && (
                       <tr aria-hidden="true" className="galeon-spacer">
-                        <td colSpan={5} style={{ height: topSpacer }} />
+                        <td colSpan={4} style={{ height: topSpacer }} />
                       </tr>
                     )}
                     {visibleRows.map((obj, windowIndex) => {
@@ -786,16 +817,27 @@ export const Explorer: React.FC<ExplorerProps> = ({
                       key={obj.fullKey}
                       data-row-index={index}
                       draggable={obj.objectType === 'file'}
+                      aria-selected={selectedItems.has(obj.fullKey)}
                       onDragStart={(e) => {
                         if (obj.objectType !== 'file') { e.preventDefault(); return; }
                         e.dataTransfer.setData(GALEON_REMOTE_KEYS_MIME, JSON.stringify(remoteDragKeys(obj)));
                         e.dataTransfer.effectAllowed = 'copy';
                       }}
+                      onClick={(e) => {
+                        if (isInteractiveTarget(e.target)) return;
+                        // The pane takes the focus so the arrow keys keep
+                        // walking the rows straight after a click.
+                        paneRef.current?.focus();
+                        handleSelectItem(obj.fullKey, index, {
+                          shift: e.shiftKey,
+                          toggle: e.metaKey || e.ctrlKey,
+                        });
+                      }}
                       onDoubleClick={() => handleDoubleClick(obj)}
                       onContextMenu={(e) => handleRowContextMenu(e, obj, index)}
                       className={`hover:bg-zinc-800/40 cursor-pointer transition-colors ${
                         selectedItems.has(obj.fullKey) ? 'bg-gale-teal/10 border-l-2 border-gale-teal' : ''
-                      }`}
+                      } ${index === cursorIndex ? 'is-cursor' : ''}`}
                     >
                       <td className="px-4 py-4">
                         <input
@@ -805,7 +847,10 @@ export const Explorer: React.FC<ExplorerProps> = ({
                           onChange={() => {}}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleSelectItem(obj.fullKey, index, e.shiftKey);
+                            handleSelectItem(obj.fullKey, index, {
+                              toggle: !e.shiftKey,
+                              shift: e.shiftKey,
+                            });
                           }}
                           className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-gale-teal focus:ring-gale-teal focus:ring-1 accent-gale-teal"
                         />
@@ -818,7 +863,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
                           <File className="w-5 h-5 text-zinc-400 flex-shrink-0" />
                         )}
                         <div className="min-w-0">
-                          <button type="button" onClick={(event) => handleSelectItem(obj.fullKey, index, event.shiftKey)}
+                          <button type="button" onClick={(event) => { event.stopPropagation(); handleSelectItem(obj.fullKey, index, { shift: event.shiftKey, toggle: event.metaKey || event.ctrlKey }); }}
                             onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleDoubleClick(obj); } }} title={obj.name} className="block max-w-full hover:text-gale-teal">{obj.name}</button>
                           <span className="compact-date">{obj.lastModified ? new Date(obj.lastModified).toLocaleString() : '—'}</span>
                         </div>
@@ -828,29 +873,12 @@ export const Explorer: React.FC<ExplorerProps> = ({
                       <td className="px-6 py-4 text-zinc-400 metric-text">
                         {obj.lastModified ? new Date(obj.lastModified).toLocaleString() : '-'}
                       </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (activeMenu === obj.fullKey) {
-                              setActiveMenu(null);
-                              return;
-                            }
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            openItemMenu(obj, rect.right - 160, rect.bottom + 4);
-                          }}
-                          aria-label={`Actions for ${obj.name}`}
-                          className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-200 transition-colors"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                      </td>
                     </tr>
                       );
                     })}
                     {hasBottomSpacer && (
                       <tr aria-hidden="true" className="galeon-spacer">
-                        <td colSpan={5} style={{ height: bottomSpacer }} />
+                        <td colSpan={4} style={{ height: bottomSpacer }} />
                       </tr>
                     )}
                   </>
