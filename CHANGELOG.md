@@ -17,6 +17,13 @@
   move — a breadcrumb, a folder, a command-palette jump — is recorded, and the
   selection is cleared when the location changes. The rules are one pure module
   (`pathHistory`), unit-tested.
+- **The working actions are in the native menu bar.** File carries **Upload…**
+  (⇧⌘U), **New Folder…** (⇧⌘N), and **Disconnect**; View carries **Toggle Local
+  Pane** (⌥⌘L), **Command Palette** (⌘K), **Sync…**, and **Shared Links**. The menu
+  emits events and the existing handlers run, so Disconnect still asks before it
+  tears down a session that has files open in an external editor. The ⌥⌘L
+  shortcut is now the menu's own accelerator, so the pane can no longer toggle
+  twice. The titlebar buttons stay until the pane chrome is collapsed.
 
 ### Changed
 

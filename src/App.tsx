@@ -126,30 +126,79 @@ function App() {
     loadAppSettings();
   }, []);
 
-  // Global keyboard shortcut: ⌥⌘L → toggle dual pane
+  // Native menu: Galeon → Settings… (⌘,), File → Upload / New Folder /
+  // Disconnect, View → Toggle Local Pane / Command Palette / Sync / Shared
+  // Links. One subscription for every item, and each event runs the same
+  // handler the titlebar button runs.
+  //
+  // The subscription lives for the life of the window, so the live session is
+  // mirrored into a ref rather than captured in a stale closure.
+  const sessionRef = useRef(session);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.altKey && e.metaKey && e.key.toLowerCase() === 'l') {
-        e.preventDefault();
-        toggleDualPane();
+    let cancelled = false;
+    const unlisteners: (() => void)[] = [];
+
+    const handleMenuEvent = (name: string) => {
+      switch (name) {
+        case 'menu://preferences':
+          setSettingsOpen(true);
+          return;
+        case 'menu://command-palette':
+          setPaletteOpen(true);
+          return;
+        case 'menu://toggle-local-pane':
+          toggleDualPane();
+          return;
+        case 'menu://sync':
+          if (!sessionRef.current) return;
+          setSyncPrefillProfile(null);
+          setSyncRunNow(false);
+          setSyncPanelOpen(true);
+          return;
+        case 'menu://links':
+          if (!sessionRef.current) return;
+          loadPresignHistory();
+          setShowHistory(true);
+          return;
+        case 'menu://upload':
+          explorerCmdsRef.current?.upload();
+          return;
+        case 'menu://new-folder':
+          explorerCmdsRef.current?.newFolder();
+          return;
+        case 'menu://disconnect':
+          requestDisconnect();
+          return;
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
 
-  // Native menu: Galeon → Settings… (⌘,)
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    listen('menu://preferences', () => {
-      setSettingsOpen(true);
-    })
-      .then((fn) => {
-        unlisten = fn;
+    const events = [
+      'menu://preferences',
+      'menu://command-palette',
+      'menu://toggle-local-pane',
+      'menu://sync',
+      'menu://links',
+      'menu://upload',
+      'menu://new-folder',
+      'menu://disconnect',
+    ];
+
+    Promise.all(events.map((name) => listen(name, () => handleMenuEvent(name))))
+      .then((fns) => {
+        // An unlisten that resolves after cleanup has to be called right away.
+        if (cancelled) {
+          fns.forEach((fn) => fn());
+          return;
+        }
+        unlisteners.push(...fns);
       })
-      .catch((err) => console.error('Failed to listen for preferences menu:', err));
+      .catch((err) => console.error('Failed to listen for menu events:', err));
+
     return () => {
-      unlisten?.();
+      cancelled = true;
+      unlisteners.forEach((fn) => fn());
     };
   }, []);
 
