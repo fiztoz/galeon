@@ -22,6 +22,7 @@ import {
 import { formatSize } from './Explorer';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import { useFileListKeyboardNav, isInteractiveTarget } from '../hooks/useFileListKeyboard';
+import { PaneChrome } from './PaneChrome';
 import { initialPathHistory, moveWithinHistory, pushPath } from '../pathHistory';
 import {
   GALEON_LOCAL_PATHS_MIME,
@@ -352,64 +353,81 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
         if (keys && keys.length > 0) onDownloadToLocal?.(keys, currentPath);
       }}
     >
-      {/* Path bar */}
-      <div className="pane-path flex items-center justify-between gap-3 py-3 px-4 bg-zinc-900 border-b border-zinc-800 text-sm">
-        <nav aria-label="Local path" className="flex items-center space-x-1 min-w-0 galeon-scrollbar">
-          <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded font-medium mr-1 shrink-0">
-            LOCAL
-          </span>
-          <button
-            onClick={() => goTo('/')}
-            className="text-gale-teal hover:text-deep-current font-medium"
-          >
-            /
-          </button>
-          {pathSegments.map((seg, idx) => (
-            <React.Fragment key={idx}>
-              <ChevronRight className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-              <button
-                onClick={() => navigateToSegment(idx)}
-                className="text-gale-teal hover:text-deep-current truncate font-medium"
-              >
-                {seg}
-              </button>
-            </React.Fragment>
-          ))}
-        </nav>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={goBack}
-            disabled={history.past.length === 0}
-            aria-label="Back"
-            title="Back"
-            className="ui-button ui-button-ghost disabled:opacity-30"
-          >
-            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          </button>
-          <button
-            onClick={goForward}
-            disabled={history.future.length === 0}
-            aria-label="Forward"
-            title="Forward"
-            className="ui-button ui-button-ghost disabled:opacity-30"
-          >
-            <ArrowRight className="w-4 h-4" aria-hidden="true" />
-          </button>
-          <button
-            onClick={navigateUp}
-            disabled={pathSegments.length === 0}
-            aria-label="Go up"
-            title="Go up one level"
-            className="ui-button ui-button-ghost disabled:opacity-30"
-          >
-            <ArrowUp className="w-4 h-4" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-
-      {/* Toolbar */}
-      <div className="pane-toolbar bg-zinc-900/50 border-b border-zinc-800 space-y-3">
-        <div className="pane-toolbar-row">
+      {/* Chrome row */}
+      <PaneChrome
+        navigation={
+          <>
+            <button
+              onClick={goBack}
+              disabled={history.past.length === 0}
+              aria-label="Back"
+              title="Back"
+              className="ui-button ui-button-ghost disabled:opacity-30"
+            >
+              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+            </button>
+            <button
+              onClick={goForward}
+              disabled={history.future.length === 0}
+              aria-label="Forward"
+              title="Forward"
+              className="ui-button ui-button-ghost disabled:opacity-30"
+            >
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </button>
+            <button
+              onClick={navigateUp}
+              disabled={pathSegments.length === 0}
+              aria-label="Go up"
+              title="Go up one level"
+              className="ui-button ui-button-ghost disabled:opacity-30"
+            >
+              <ArrowUp className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </>
+        }
+        path={
+          <nav aria-label="Local path" className="flex items-center space-x-1 min-w-0 galeon-scrollbar">
+            <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded font-medium mr-1 shrink-0">
+              LOCAL
+            </span>
+            <button
+              onClick={() => goTo('/')}
+              className="text-gale-teal hover:text-deep-current font-medium"
+            >
+              /
+            </button>
+            {pathSegments.map((seg, idx) => (
+              <React.Fragment key={idx}>
+                <ChevronRight className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                <button
+                  onClick={() => navigateToSegment(idx)}
+                  className="text-gale-teal hover:text-deep-current truncate font-medium"
+                >
+                  {seg}
+                </button>
+              </React.Fragment>
+            ))}
+          </nav>
+        }
+        search={
+          <div className="pane-search">
+            <Search size={14} aria-hidden="true" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search local files"
+              placeholder="Search local files…"
+              className="connection-field text-zinc-100 placeholder:text-zinc-500"
+              autoCapitalize="off"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+        }
+        actions={
           <div className="pane-actions">
             <button
               onClick={handleUploadSelected}
@@ -435,53 +453,40 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
               <RotateCw size={14} aria-hidden="true" />
             </button>
           </div>
-          <div className="pane-search">
-            <Search size={14} aria-hidden="true" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search local files"
-              placeholder="Search local files…"
-              className="connection-field text-zinc-100 placeholder:text-zinc-500"
-              autoCapitalize="off"
-              autoCorrect="off"
-              autoComplete="off"
-              spellCheck={false}
-            />
+        }
+        filters={
+          <div className="pane-filters">
+            <button
+              onClick={() => setShowHidden(!showHidden)}
+              aria-pressed={showHidden}
+              className="pane-filter-button flex items-center gap-1.5"
+            >
+              {showHidden ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+              Hidden
+            </button>
+            <span className="text-xs text-zinc-500">Sort:</span>
+            {(['name', 'size', 'date'] as SortKey[]).map((key) => (
+              <button
+                key={key}
+                onClick={() => handleSort(key)}
+                aria-pressed={sortKey === key}
+                className="pane-filter-button"
+              >
+                {key === 'name' ? 'Name' : key === 'size' ? 'Size' : 'Date'}
+                {sortKey === key && (sortDirection === 'asc' ? ' ↑' : ' ↓')}
+              </button>
+            ))}
+            {(searchQuery || showHidden) && (
+              <button
+                onClick={() => { setSearchQuery(''); setShowHidden(false); }}
+                className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+              >
+                Clear
+              </button>
+            )}
           </div>
-        </div>
-        <div className="pane-filters">
-          <button
-            onClick={() => setShowHidden(!showHidden)}
-            aria-pressed={showHidden}
-            className="pane-filter-button flex items-center gap-1.5"
-          >
-            {showHidden ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-            Hidden
-          </button>
-          <span className="text-xs text-zinc-500">Sort:</span>
-          {(['name', 'size', 'date'] as SortKey[]).map((key) => (
-            <button
-              key={key}
-              onClick={() => handleSort(key)}
-              aria-pressed={sortKey === key}
-              className="pane-filter-button"
-            >
-              {key === 'name' ? 'Name' : key === 'size' ? 'Size' : 'Date'}
-              {sortKey === key && (sortDirection === 'asc' ? ' ↑' : ' ↓')}
-            </button>
-          ))}
-          {(searchQuery || showHidden) && (
-            <button
-              onClick={() => { setSearchQuery(''); setShowHidden(false); }}
-              className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
+        }
+      />
 
       {/* Content area */}
       <div className={`pane-content flex-1 overflow-auto galeon-scrollbar ${dragOverRemote ? 'ring-2 ring-inset ring-gale-teal/60 bg-gale-teal/5' : ''}`}>

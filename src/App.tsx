@@ -8,7 +8,7 @@ import { TransferManager, TransferState } from './components/TransferManager';
 import { CommandPalette, CommandAction } from './components/CommandPalette';
 import { PropertiesInspector } from './components/PropertiesInspector';
 import { ActiveEditors, EditSessionInfo } from './components/ActiveEditors';
-import { Link, Command, RefreshCw, Settings, Columns } from 'lucide-react';
+import { Columns } from 'lucide-react';
 import { SyncPanel, SyncProfile } from './components/SyncPanel';
 import { OnboardingWizard, OnboardingProtocol } from './components/OnboardingWizard';
 import { SettingsPanel } from './components/SettingsPanel';
@@ -853,50 +853,11 @@ function App() {
               <span>Local</span>
             </button>
           )}
-          <button
-            onClick={() => setPaletteOpen(true)}
-            title="Command Palette (⌘K)"
-            className="ui-button ui-button-ghost"
-          >
-            <Command className="w-3.5 h-3.5" />
-            <span>Commands</span>
-          </button>
           <ActiveEditors
             sessions={editSessions}
             onStop={handleStopEditor}
             onStopAll={handleStopAllEditors}
           />
-          <button
-            onClick={() => { setSyncPrefillProfile(null); setSyncRunNow(false); setSyncPanelOpen(true); }}
-            title="Sync"
-            className="ui-button ui-button-ghost"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Sync</span>
-          </button>
-          <button
-            onClick={() => { loadPresignHistory(); setShowHistory(true); }}
-            title="Shared links"
-            className="ui-button ui-button-ghost"
-          >
-            <Link className="w-3.5 h-3.5" />
-            <span>Links</span>
-            {presignHistory.length > 0 && <span className="metric-text">{presignHistory.length}</span>}
-          </button>
-          <button
-            onClick={() => setSettingsOpen(true)}
-            title="Settings (⌘,)"
-            aria-label="Settings"
-            className="ui-button ui-button-ghost"
-          >
-            <Settings className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={requestDisconnect}
-            className="ui-button ui-button-ghost ml-1"
-          >
-            Disconnect
-          </button>
         </div>
       </header>
       <main className="flex-1 min-h-0 overflow-hidden">

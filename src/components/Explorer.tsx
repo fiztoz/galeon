@@ -26,6 +26,7 @@ import {
   TextPromptDialog,
 } from './Dialogs';
 import { ObjectContextMenu, useObjectContextMenu, type ObjectMenuAction } from './ObjectContextMenu';
+import { PaneChrome } from './PaneChrome';
 import {
   GALEON_LOCAL_PATHS_MIME,
   GALEON_REMOTE_KEYS_MIME,
@@ -476,14 +477,14 @@ export const Explorer: React.FC<ExplorerProps> = ({
     const label = prefix ? 'Folder total' : 'Bucket total';
     if (prefixSizeError) {
       return (
-        <span className="text-xs text-status-danger whitespace-nowrap" title={prefixSizeError}>
+        <span className="text-xs text-status-danger whitespace-nowrap shrink-0" title={prefixSizeError}>
           {label}: unavailable
         </span>
       );
     }
     if (prefixSizeLoading && prefixSizeBytes === null) {
       return (
-        <span className="flex items-center gap-1.5 text-xs text-zinc-500 whitespace-nowrap">
+        <span className="flex items-center gap-1.5 text-xs text-zinc-500 whitespace-nowrap shrink-0">
           <Loader2 className="w-3 h-3 animate-spin" />
           <span>Calculating {label.toLowerCase()}…</span>
         </span>
@@ -495,7 +496,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
           ? ` · ${prefixFileCount.toLocaleString()} file${prefixFileCount === 1 ? '' : 's'}`
           : '';
       return (
-        <span className="flex items-center gap-1.5 text-xs text-zinc-500 whitespace-nowrap metric-text">
+        <span className="flex items-center gap-1.5 text-xs text-zinc-500 whitespace-nowrap metric-text shrink-0">
           {prefixSizeLoading && <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />}
           <span>
             {label}: {formatSize(prefixSizeBytes)}
@@ -543,37 +544,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
         ? normalizeFsPath('/' + parts.slice(0, index + 1).join('/'))
         : parts.slice(0, index + 1).join('/') + '/';
     return (
-      <div className="pane-path flex items-center justify-between gap-3 py-3 px-4 bg-zinc-900 border-b border-zinc-800 text-sm">
-        <div className="flex items-center gap-2 min-w-0">
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={goBack}
-            disabled={history.past.length === 0}
-            aria-label="Back"
-            title="Back"
-            className="ui-button ui-button-ghost disabled:opacity-30"
-          >
-            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          </button>
-          <button
-            onClick={goForward}
-            disabled={history.future.length === 0}
-            aria-label="Forward"
-            title="Forward"
-            className="ui-button ui-button-ghost disabled:opacity-30"
-          >
-            <ArrowRight className="w-4 h-4" aria-hidden="true" />
-          </button>
-          <button
-            onClick={goUp}
-            disabled={parentPrefix(prefix, isFsProtocol) === null}
-            aria-label="Go up"
-            title="Go up one level"
-            className="ui-button ui-button-ghost disabled:opacity-30"
-          >
-            <ArrowUp className="w-4 h-4" aria-hidden="true" />
-          </button>
-        </div>
+      <>
         <nav aria-label="Remote path" className="flex items-center space-x-1 min-w-0 galeon-scrollbar">
         {protocol === 'sftp' && (
           <span className="text-xs bg-status-success/10 text-status-success px-2 py-0.5 rounded font-medium mr-1">
@@ -605,9 +576,8 @@ export const Explorer: React.FC<ExplorerProps> = ({
           );
         })}
         </nav>
-        </div>
         {renderPrefixSizeSummary()}
-      </div>
+      </>
     );
   };
 
@@ -637,8 +607,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
         }
       }}
     >
-      {renderBreadcrumbs()}
-      
       {/* Drag & Drop Visual Overlay */}
       {isDragging && (
         <div className="fixed inset-0 bg-gale-teal/5 border-2 border-dashed border-gale-teal/60 rounded-xl z-50 flex items-center justify-center pointer-events-none backdrop-blur-sm">
@@ -655,9 +623,58 @@ export const Explorer: React.FC<ExplorerProps> = ({
         </div>
       )}
 
-      {/* Toolbar */}
-      <div className="pane-toolbar bg-zinc-900/50 border-b border-zinc-800 space-y-3">
-        <div className="pane-toolbar-row">
+      {/* Chrome row */}
+      <PaneChrome
+        navigation={
+          <>
+            <button
+              onClick={goBack}
+              disabled={history.past.length === 0}
+              aria-label="Back"
+              title="Back"
+              className="ui-button ui-button-ghost disabled:opacity-30"
+            >
+              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+            </button>
+            <button
+              onClick={goForward}
+              disabled={history.future.length === 0}
+              aria-label="Forward"
+              title="Forward"
+              className="ui-button ui-button-ghost disabled:opacity-30"
+            >
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </button>
+            <button
+              onClick={goUp}
+              disabled={parentPrefix(prefix, isFsProtocol) === null}
+              aria-label="Go up"
+              title="Go up one level"
+              className="ui-button ui-button-ghost disabled:opacity-30"
+            >
+              <ArrowUp className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </>
+        }
+        path={renderBreadcrumbs()}
+        search={
+          <div className="pane-search">
+            <Search size={14} aria-hidden="true" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search remote files"
+              placeholder="Search remote files…"
+              className="connection-field text-zinc-100 placeholder:text-zinc-500"
+              autoCapitalize="off"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+        }
+        actions={
           <div className="pane-actions">
             <button
               onClick={handleUpload}
@@ -682,70 +699,57 @@ export const Explorer: React.FC<ExplorerProps> = ({
               <RotateCw size={14} aria-hidden="true" />
             </button>
           </div>
-          <div className="pane-search">
-            <Search size={14} aria-hidden="true" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search remote files"
-              placeholder="Search remote files…"
-              className="connection-field text-zinc-100 placeholder:text-zinc-500"
-              autoCapitalize="off"
-              autoCorrect="off"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </div>
-        </div>
-        <div className="pane-filters">
-          <span className="sr-only">Filter:</span>
-          <button
-            onClick={() => setFilterType('all')}
-            aria-pressed={filterType === 'all'}
-            className="pane-filter-button"
-          >
-            All
-          </button>
-          <button
-            onClick={() => setFilterType('folders')}
-            aria-pressed={filterType === 'folders'}
-            className="pane-filter-button"
-          >
-            Folders
-          </button>
-          <button
-            onClick={() => setFilterType('files')}
-            aria-pressed={filterType === 'files'}
-            className="pane-filter-button"
-          >
-            Files
-          </button>
-          {(searchQuery || filterType !== 'all') && (
+        }
+        filters={
+          <div className="pane-filters">
+            <span className="sr-only">Filter:</span>
             <button
-              onClick={() => { setSearchQuery(''); setFilterType('all'); }}
-              className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+              onClick={() => setFilterType('all')}
+              aria-pressed={filterType === 'all'}
+              className="pane-filter-button"
             >
-              Clear
+              All
             </button>
-          )}
-          <div className="compact-sort items-center gap-2">
-            <Select
-              aria-label="Sort remote files by"
-              value={sortKey}
-              onValueChange={(value) => handleSort(value as 'name' | 'size' | 'date')}
-              className="min-w-0 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300"
+            <button
+              onClick={() => setFilterType('folders')}
+              aria-pressed={filterType === 'folders'}
+              className="pane-filter-button"
             >
-              <option value="name">Name</option>
-              <option value="size">Size</option>
-              <option value="date">Modified</option>
-            </Select>
-            <button type="button" onClick={() => handleSort(sortKey)} aria-label={`Sort ${sortDirection === 'asc' ? 'descending' : 'ascending'}`} className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">
-              {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+              Folders
             </button>
+            <button
+              onClick={() => setFilterType('files')}
+              aria-pressed={filterType === 'files'}
+              className="pane-filter-button"
+            >
+              Files
+            </button>
+            {(searchQuery || filterType !== 'all') && (
+              <button
+                onClick={() => { setSearchQuery(''); setFilterType('all'); }}
+                className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+              >
+                Clear
+              </button>
+            )}
+            <div className="compact-sort items-center gap-2">
+              <Select
+                aria-label="Sort remote files by"
+                value={sortKey}
+                onValueChange={(value) => handleSort(value as 'name' | 'size' | 'date')}
+                className="min-w-0 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300"
+              >
+                <option value="name">Name</option>
+                <option value="size">Size</option>
+                <option value="date">Modified</option>
+              </Select>
+              <button type="button" onClick={() => handleSort(sortKey)} aria-label={`Sort ${sortDirection === 'asc' ? 'descending' : 'ascending'}`} className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">
+                {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       <div ref={scrollRef} className="pane-content flex-1 overflow-auto galeon-scrollbar">
         {error && (

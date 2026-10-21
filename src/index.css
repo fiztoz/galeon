@@ -358,11 +358,14 @@ html[data-theme='light'] .connection-field { background: #fff; }
 }
 
 .file-pane { container: file-pane / inline-size; min-width: 0; min-height: 0; }
-.pane-path { flex-shrink: 0; }
-.pane-path nav { overflow-x: auto; white-space: nowrap; }
-.pane-path nav button { flex-shrink: 0; }
-.pane-toolbar { flex-shrink: 0; padding: 10px 16px; }
-.pane-toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+/* One chrome row per pane: navigation, path, search, actions, filters.
+   The path absorbs the slack; the rest keeps its size. */
+.pane-chrome { display: flex; align-items: center; gap: 8px; padding: 8px 12px; min-width: 0; flex-shrink: 0; border-bottom: 1px solid var(--color-zinc-800); background: var(--color-zinc-900); }
+.pane-chrome-nav { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.pane-chrome-path { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; overflow: hidden; }
+.pane-chrome-path nav { overflow-x: auto; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
+.pane-chrome-path nav button { flex-shrink: 0; }
+.pane-chrome > .pane-search { flex: 0 1 200px; }
 .pane-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .pane-actions button { white-space: nowrap; }
 .pane-search { position: relative; flex: 1 1 180px; min-width: 0; }
@@ -403,8 +406,8 @@ html[data-theme='light'] .connection-field { background: #fff; }
 
 @container file-pane (max-width: 640px) {
   .compact-sort { display: flex; }
-  .pane-search { flex-basis: 100%; }
-  .pane-path { flex-wrap: wrap; gap: 4px; padding: 10px 16px; }
+  .pane-chrome { flex-wrap: wrap; }
+  .pane-chrome > .pane-search { flex-basis: 100%; }
   .file-table th:nth-child(4), .file-table td:nth-child(4) { display: none; }
   .file-table .compact-date { display: block; margin-top: 2px; font-size: 11px; color: var(--color-zinc-500); }
   .file-table th:nth-child(3) { width: 80px; }

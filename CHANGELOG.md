@@ -32,6 +32,14 @@
   Escape closes). Switching goes through the same path as the command palette,
   so the "files open in an external editor" warning still appears before the
   session is replaced.
+- **One chrome row per file pane.** A connected window stacked a titlebar, a
+  path bar, and a toolbar before the first file — and dual pane doubled the
+  last two. Each pane now has a single row: navigation, path, search, actions,
+  filters. The window titlebar keeps only the connection switcher, the local
+  toggle, and live editor state; **Commands**, **Sync**, **Links**, **Settings**,
+  and **Disconnect** as text buttons are gone from it, because the native menu
+  (File / View) and the connection switcher already carry them. Every action
+  still works — the menu is the way in now.
 
 ### Changed
 
