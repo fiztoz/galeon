@@ -24,6 +24,14 @@
   tears down a session that has files open in an external editor. The ⌥⌘L
   shortcut is now the menu's own accelerator, so the pane can no longer toggle
   twice. The titlebar buttons stay until the pane chrome is collapsed.
+- **Switch saved connections from the titlebar.** The connected window showed a
+  bucket name and a Disconnect button, so choosing another saved connection
+  meant disconnecting and connecting again. The titlebar identity is now a menu
+  of saved profiles: one click to switch, the current one marked in teal,
+  Disconnect as the last row, and the keyboard works (arrows move, Enter picks,
+  Escape closes). Switching goes through the same path as the command palette,
+  so the "files open in an external editor" warning still appears before the
+  session is replaced.
 
 ### Changed
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Connection } from './components/Connection';
@@ -20,6 +20,7 @@ import { nextThemeMode, THEME_LABELS } from './theme';
 import { useLayoutPreferences } from './hooks/useLayoutPreferences';
 import { ConfirmDialog } from './components/Dialogs';
 import { disconnectNeedsConfirm } from './disconnectGuard';
+import { ConnectionSwitcher } from './components/ConnectionSwitcher';
 
 import type {
   AppSettings,
@@ -582,6 +583,30 @@ function App() {
     await doConnectProfile(profile);
   }, [doConnectProfile]);
 
+  // The titlebar switcher lists saved profiles by name and subtitle only —
+  // never the credentials a profile carries.
+  const switcherProfiles = useMemo(
+    () => profiles.map((p) => ({
+      id: p.id,
+      name: p.name,
+      protocol: p.protocol,
+      username: p.username,
+      host: p.host,
+      port: p.port?.toString(),
+      bucket: p.bucket,
+      endpoint: p.endpoint,
+    })),
+    [profiles],
+  );
+
+  // Switching goes through the same connect path as the palette, so the
+  // editor warning still appears before the session is replaced.
+  const handleSwitchConnection = useCallback((profileId: string) => {
+    const profile = profiles.find((p) => p.id === profileId);
+    if (!profile) return;
+    connectProfile(profile);
+  }, [profiles, connectProfile]);
+
   // "Switch anyway": stop every watcher, then perform the deferred connect.
   const confirmSwitchProfile = useCallback(async () => {
     const profile = pendingSwitchProfile;
@@ -802,17 +827,15 @@ function App() {
           <span data-tauri-drag-region className="text-zinc-700 shrink-0" aria-hidden>
             ·
           </span>
-          <span
-            data-tauri-drag-region
-            className="text-[13px] text-zinc-400 truncate"
-            title={session.protocol === 'sftp' || session.protocol === 'ftp' || session.protocol === 'ftps'
+          <ConnectionSwitcher
+            profiles={switcherProfiles}
+            sessionProfileId={session.profileId}
+            fallbackLabel={session.protocol === 'sftp' || session.protocol === 'ftp' || session.protocol === 'ftps'
               ? (session.protocol ?? '').toUpperCase()
               : session.bucket}
-          >
-            {session.protocol === 'sftp' || session.protocol === 'ftp' || session.protocol === 'ftps'
-              ? (session.protocol ?? '').toUpperCase()
-              : session.bucket}
-          </span>
+            onConnect={handleSwitchConnection}
+            onDisconnect={requestDisconnect}
+          />
         </div>
         <div data-no-drag className="flex items-center gap-1 shrink-0">
           {session && (
