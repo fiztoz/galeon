@@ -6,7 +6,6 @@ import {
   Folder,
   File,
   ChevronRight,
-  ChevronUp,
   Upload,
   Plus,
   Loader2,
@@ -16,10 +15,14 @@ import {
   ArrowUpToLine,
   Search,
   RotateCw,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
 } from 'lucide-react';
 import { formatSize } from './Explorer';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import { useFileListKeyboardNav, isInteractiveTarget } from '../hooks/useFileListKeyboard';
+import { initialPathHistory, moveWithinHistory, pushPath } from '../pathHistory';
 import {
   GALEON_LOCAL_PATHS_MIME,
   GALEON_REMOTE_KEYS_MIME,
@@ -194,6 +197,30 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
     return [entry.path];
   };
 
+  // ── Navigation history ─────────────────────────────────────────────────────
+  // The local pane keeps its own stack of directories. Back and Forward walk
+  // it; every other move — path segment, folder, Up — records a new entry.
+  const [history, setHistory] = useState(() => initialPathHistory(currentPath));
+
+  /** Move to another directory. `record` is false for back/forward moves. */
+  const goTo = (next: string, record: boolean = true) => {
+    setHistory(h => (record ? pushPath(h, next) : moveWithinHistory(h, next)));
+    setCurrentPath(next);
+    clearSelection();
+  };
+
+  const goBack = () => {
+    const previous = history.past[history.past.length - 1];
+    if (previous === undefined) return;
+    goTo(previous, false);
+  };
+
+  const goForward = () => {
+    const next = history.future[0];
+    if (next === undefined) return;
+    goTo(next, false);
+  };
+
   // ── Sort handler ───────────────────────────────────────────────────────────
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -207,8 +234,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
   // ── Navigation ─────────────────────────────────────────────────────────────
   const handleDoubleClick = (entry: LocalEntry) => {
     if (entry.isDir) {
-      setCurrentPath(entry.path);
-      clearSelection();
+      goTo(entry.path);
     }
   };
 
@@ -255,8 +281,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
     if (parts.length > 1) {
       parts.pop();
       const parent = parts.join('/') || '/';
-      setCurrentPath(parent);
-      clearSelection();
+      goTo(parent);
     }
   };
 
@@ -299,8 +324,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
 
   const navigateToSegment = (index: number) => {
     const joined = '/' + pathSegments.slice(0, index + 1).join('/');
-    setCurrentPath(joined);
-    clearSelection();
+    goTo(joined);
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -335,7 +359,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
             LOCAL
           </span>
           <button
-            onClick={() => { setCurrentPath('/'); clearSelection(); }}
+            onClick={() => goTo('/')}
             className="text-gale-teal hover:text-deep-current font-medium"
           >
             /
@@ -352,14 +376,35 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
             </React.Fragment>
           ))}
         </nav>
-        <button
-          onClick={navigateUp}
-          disabled={pathSegments.length === 0}
-          className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-          title="Go up one level"
-        >
-          <ChevronUp className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={goBack}
+            disabled={history.past.length === 0}
+            aria-label="Back"
+            title="Back"
+            className="ui-button ui-button-ghost disabled:opacity-30"
+          >
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+          </button>
+          <button
+            onClick={goForward}
+            disabled={history.future.length === 0}
+            aria-label="Forward"
+            title="Forward"
+            className="ui-button ui-button-ghost disabled:opacity-30"
+          >
+            <ArrowRight className="w-4 h-4" aria-hidden="true" />
+          </button>
+          <button
+            onClick={navigateUp}
+            disabled={pathSegments.length === 0}
+            aria-label="Go up"
+            title="Go up one level"
+            className="ui-button ui-button-ghost disabled:opacity-30"
+          >
+            <ArrowUp className="w-4 h-4" aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       {/* Toolbar */}

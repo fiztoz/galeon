@@ -9,6 +9,14 @@
   own — and the remote list scrolls the cursor into view even when the row sits
   outside the windowed viewport. The rules live in one pure helper
   (`fileListKeyAction`), shared by the remote and local panes.
+- **Back, Forward, and Up in both file panes.** The remote pane could not go up a
+  folder, and neither pane could return to the folder it had just left — the
+  breadcrumbs jumped to ancestors but could not restore a sibling. Each pane now
+  keeps its own history: **Back** and **Forward** walk it, and **Up** goes to the
+  parent (the remote pane gained it; the local pane already had it). Every other
+  move — a breadcrumb, a folder, a command-palette jump — is recorded, and the
+  selection is cleared when the location changes. The rules are one pure module
+  (`pathHistory`), unit-tested.
 
 ### Changed
 

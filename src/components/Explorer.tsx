@@ -5,12 +5,18 @@ import { useObjectListing, useObjectSorting } from '../hooks/useObjectListing';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import { useWindowedRows } from '../hooks/useWindowedRows';
 import { useFileListKeyboardNav, isInteractiveTarget } from '../hooks/useFileListKeyboard';
+import {
+  initialPathHistory,
+  moveWithinHistory,
+  parentPrefix,
+  pushPath,
+} from '../pathHistory';
 import React, { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useFolderSizes } from '../hooks/useFolderSizes';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { useUploadPipeline, type PendingConflict } from '../hooks/useUploadPipeline';
-import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, Loader2, AlertTriangle, Search, RotateCw } from 'lucide-react';
+import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, Loader2, AlertTriangle, Search, RotateCw, ArrowLeft, ArrowRight, ArrowUp } from 'lucide-react';
 import { ProtocolCapabilities, DirectoryListing, GaleonObject, StorageProtocol } from '../types';
 import {
   ConflictDialog,
@@ -120,6 +126,37 @@ export const Explorer: React.FC<ExplorerProps> = ({
     scrollRef, tbodyRef, visibleRows, indexOf: rowIndexOf,
     topSpacer, bottomSpacer, hasTopSpacer, hasBottomSpacer, scrollToIndex,
   } = useWindowedRows(filteredObjects, objects);
+
+  // -- Navigation history ----------------------------------------------------
+  // The remote pane keeps its own stack of prefixes. Back and Forward walk
+  // it; every other move — breadcrumb, folder, palette jump, Up — records a
+  // new entry. The rules live in `pathHistory`; this only wires them up.
+  const [history, setHistory] = useState(() => initialPathHistory(prefix));
+
+  /** Move to another location. `record` is false for back/forward moves. */
+  const goTo = (next: string, record: boolean = true) => {
+    setHistory(h => (record ? pushPath(h, next) : moveWithinHistory(h, next)));
+    setPrefix(next);
+    clearSelection();
+  };
+
+  const goBack = () => {
+    const previous = history.past[history.past.length - 1];
+    if (previous === undefined) return;
+    goTo(previous, false);
+  };
+
+  const goForward = () => {
+    const next = history.future[0];
+    if (next === undefined) return;
+    goTo(next, false);
+  };
+
+  const goUp = () => {
+    const parent = parentPrefix(prefix, isFsProtocol);
+    if (parent === null) return;
+    goTo(parent, true);
+  };
 
   // In-app drag state (local → remote). HTML5 only, additive over the native
   // OS drop overlay (`isDragging`): we only preventDefault for our own MIME.
@@ -239,14 +276,14 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
   // Cross-component navigation (e.g. Command Palette "Go to path")
   useEffect(() => {
-    if (navRequest) setPrefix(navRequest.path);
+    if (navRequest) goTo(navRequest.path);
   }, [navRequest?.nonce]);
 
   const normalizeFsPath = (path: string) => path.replace(/\/+/g, '/');
 
   const handleDoubleClick = (obj: GaleonObject) => {
     if (obj.objectType === 'folder') {
-      setPrefix(isFsProtocol ? normalizeFsPath(obj.fullKey) : obj.fullKey);
+      goTo(isFsProtocol ? normalizeFsPath(obj.fullKey) : obj.fullKey);
     }
   };
 
@@ -507,6 +544,36 @@ export const Explorer: React.FC<ExplorerProps> = ({
         : parts.slice(0, index + 1).join('/') + '/';
     return (
       <div className="pane-path flex items-center justify-between gap-3 py-3 px-4 bg-zinc-900 border-b border-zinc-800 text-sm">
+        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={goBack}
+            disabled={history.past.length === 0}
+            aria-label="Back"
+            title="Back"
+            className="ui-button ui-button-ghost disabled:opacity-30"
+          >
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+          </button>
+          <button
+            onClick={goForward}
+            disabled={history.future.length === 0}
+            aria-label="Forward"
+            title="Forward"
+            className="ui-button ui-button-ghost disabled:opacity-30"
+          >
+            <ArrowRight className="w-4 h-4" aria-hidden="true" />
+          </button>
+          <button
+            onClick={goUp}
+            disabled={parentPrefix(prefix, isFsProtocol) === null}
+            aria-label="Go up"
+            title="Go up one level"
+            className="ui-button ui-button-ghost disabled:opacity-30"
+          >
+            <ArrowUp className="w-4 h-4" aria-hidden="true" />
+          </button>
+        </div>
         <nav aria-label="Remote path" className="flex items-center space-x-1 min-w-0 galeon-scrollbar">
         {protocol === 'sftp' && (
           <span className="text-xs bg-status-success/10 text-status-success px-2 py-0.5 rounded font-medium mr-1">
@@ -523,7 +590,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
             FTPS
           </span>
         )}
-        <button onClick={() => setPrefix('')} className="text-gale-teal hover:text-deep-current font-medium">
+        <button onClick={() => goTo('')} className="text-gale-teal hover:text-deep-current font-medium">
           {bucket}
         </button>
         {parts.map((part, index) => {
@@ -531,13 +598,14 @@ export const Explorer: React.FC<ExplorerProps> = ({
           return (
             <React.Fragment key={index}>
               <ChevronRight className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-              <button onClick={() => setPrefix(path)} className="text-gale-teal hover:text-deep-current truncate font-medium">
+              <button onClick={() => goTo(path)} className="text-gale-teal hover:text-deep-current truncate font-medium">
                 {part}
               </button>
             </React.Fragment>
           );
         })}
         </nav>
+        </div>
         {renderPrefixSizeSummary()}
       </div>
     );
