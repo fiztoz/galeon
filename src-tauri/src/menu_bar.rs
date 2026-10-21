@@ -48,8 +48,13 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         MenuItem::with_id(app, PREFERENCES_ID, "Settings…", true, Some("CmdOrCtrl+,"))?;
 
     let upload = MenuItem::with_id(app, UPLOAD_ID, "Upload…", true, Some("CmdOrCtrl+Shift+U"))?;
-    let new_folder =
-        MenuItem::with_id(app, NEW_FOLDER_ID, "New Folder…", true, Some("CmdOrCtrl+Shift+N"))?;
+    let new_folder = MenuItem::with_id(
+        app,
+        NEW_FOLDER_ID,
+        "New Folder…",
+        true,
+        Some("CmdOrCtrl+Shift+N"),
+    )?;
     let disconnect = MenuItem::with_id(app, DISCONNECT_ID, "Disconnect", true, None::<&str>)?;
 
     let toggle_local_pane = MenuItem::with_id(
@@ -59,8 +64,13 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         true,
         Some("Alt+CmdOrCtrl+L"),
     )?;
-    let command_palette =
-        MenuItem::with_id(app, COMMAND_PALETTE_ID, "Command Palette", true, Some("CmdOrCtrl+K"))?;
+    let command_palette = MenuItem::with_id(
+        app,
+        COMMAND_PALETTE_ID,
+        "Command Palette",
+        true,
+        Some("CmdOrCtrl+K"),
+    )?;
     let sync = MenuItem::with_id(app, SYNC_ID, "Sync…", true, None::<&str>)?;
     let links = MenuItem::with_id(app, LINKS_ID, "Shared Links", true, None::<&str>)?;
 
