@@ -1,6 +1,6 @@
 import type { CommandAction } from './components/CommandPalette';
 import type { EditSessionInfo } from './components/ActiveEditors';
-import type { SyncProfile } from './components/SyncPanel';
+import type { SyncProfile } from './syncModel';
 
 /**
  * The command palette's action list.
