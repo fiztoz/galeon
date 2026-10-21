@@ -5,6 +5,7 @@ import { useObjectListing, useObjectSorting } from '../hooks/useObjectListing';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import { useWindowedRows } from '../hooks/useWindowedRows';
 import { useFileListKeyboardNav, isInteractiveTarget } from '../hooks/useFileListKeyboard';
+import { useExplorerDialogs } from '../hooks/useExplorerDialogs';
 import {
   initialPathHistory,
   moveWithinHistory,
@@ -12,18 +13,13 @@ import {
   pushPath,
 } from '../pathHistory';
 import React, { useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { useFolderSizes } from '../hooks/useFolderSizes';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { useUploadPipeline, type PendingConflict } from '../hooks/useUploadPipeline';
 import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, Loader2, AlertTriangle, Search, RotateCw, ArrowLeft, ArrowRight, ArrowUp } from 'lucide-react';
-import { ProtocolCapabilities, DirectoryListing, GaleonObject, StorageProtocol } from '../types';
+import { ProtocolCapabilities, GaleonObject, StorageProtocol } from '../types';
 import {
   ConflictDialog,
-  ConfirmDialog,
-  DestinationDialog,
-  ShareLinkDialog,
-  TextPromptDialog,
 } from './Dialogs';
 import { ObjectContextMenu, useObjectContextMenu, type ObjectMenuAction } from './ObjectContextMenu';
 import { PaneChrome } from './PaneChrome';
@@ -91,22 +87,8 @@ export const Explorer: React.FC<ExplorerProps> = ({
   const { prefix, setPrefix, objects, loading, error, setError, listFailed, truncated, fetchDirectory } =
     useObjectListing(sessionId);
 
-  // Modal states
-  const [showCreateFolder, setShowCreateFolder] = useState(false);
-  const [showRename, setShowRename] = useState(false);
-  const [renameTarget, setRenameTarget] = useState<GaleonObject | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<GaleonObject | null>(null);
-  const [showMoveModal, setShowMoveModal] = useState(false);
-  const [moveTarget, setMoveTarget] = useState<GaleonObject | null>(null);
-  const [showCopyModal, setShowCopyModal] = useState(false);
-  const [copyTarget, setCopyTarget] = useState<GaleonObject | null>(null);
-  const [availableFolders, setAvailableFolders] = useState<string[]>([]);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [shareTarget, setShareTarget] = useState<GaleonObject | null>(null);
   // Multi-select states
-  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
-  
+
   const { isDragging, showConflictModal, conflictFile, applyToAll, setApplyToAll,
     pendingConflicts, checkFileExists, startConflictCheck, handleConflictResolve, handleUpload } =
     useUploadPipeline({ sessionId, prefix, onInitiateUpload, onInitiateDownload });
@@ -176,13 +158,13 @@ export const Explorer: React.FC<ExplorerProps> = ({
       case 'download': handleDownload(obj); return;
       case 'downloadHere': handleDownloadHere(obj); return;
       case 'preview': onShowPreview?.(obj); break;
-      case 'share': setShareTarget(obj); setShowShareModal(true); break;
+      case 'share': openShare(obj); break;
       case 'edit': onEditRemoteFile?.(obj.fullKey); break;
       case 'properties': onShowProperties?.(obj); break;
-      case 'rename': setRenameTarget(obj); setShowRename(true); break;
-      case 'move': setMoveTarget(obj); fetchAllFolders(); setShowMoveModal(true); break;
-      case 'copy': setCopyTarget(obj); fetchAllFolders(); setShowCopyModal(true); break;
-      case 'delete': setDeleteTarget(obj); setShowDeleteConfirm(true); break;
+      case 'rename': openRename(obj); break;
+      case 'move': openMove(obj); break;
+      case 'copy': openCopy(obj); break;
+      case 'delete': openDelete(obj); break;
     }
     setActiveMenu(null);
   };
@@ -255,7 +237,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
     if (items.length === 0) return;
 
-    setShowBatchDeleteConfirm(false);
     clearSelection();
     try {
       await onDeleteObjects(items);
@@ -263,6 +244,32 @@ export const Explorer: React.FC<ExplorerProps> = ({
       setError(String(err));
     }
   };
+
+  // -- Dialogs ----------------------------------------------------------------
+  // Create folder, rename, delete, move, copy, share, batch delete: one hook
+  // owns which dialog is open and what each one does.
+  const {
+    dialogs,
+    openCreateFolder,
+    openRename,
+    openDelete,
+    openMove,
+    openCopy,
+    openShare,
+    openBatchDelete,
+  } = useExplorerDialogs({
+    sessionId,
+    prefix,
+    onCreateFolder,
+    onRenameObject,
+    onDeleteObjects,
+    onGeneratePresignedUrl,
+    onGeneratePresignedUploadUrl,
+    onError: setError,
+    refresh: () => fetchDirectory(prefix),
+    selectedCount: selectedItems.size,
+    onBatchDelete: handleBatchDelete,
+  });
 
   useEffect(() => {
     fetchDirectory(prefix);
@@ -361,116 +368,10 @@ export const Explorer: React.FC<ExplorerProps> = ({
   useEffect(() => {
     onRegisterCommands?.({
       refresh: () => refreshRef.current(),
-      newFolder: () => setShowCreateFolder(true),
+      newFolder: () => openCreateFolder(),
       upload: () => uploadRef.current(),
     });
   }, [onRegisterCommands]);
-
-  const handleCreateFolder = async (name: string) => {
-    if (!name.trim()) return;
-    try {
-      await onCreateFolder(prefix, name.trim());
-      setShowCreateFolder(false);
-      await fetchDirectory(prefix);
-    } catch (err: any) {
-      setError(String(err));
-    }
-  };
-
-  const handleRename = async (newName: string) => {
-    if (!renameTarget || !newName.trim()) return;
-    try {
-      // Strip trailing slash from fullKey for proper prefix calculation
-      const cleanFullKey = renameTarget.fullKey.replace(/\/$/, '');
-      const prefixPath = cleanFullKey.substring(0, cleanFullKey.length - renameTarget.name.length);
-      const newKey = prefixPath + newName.trim();
-      await onRenameObject(renameTarget.fullKey, newKey, renameTarget.objectType === 'folder');
-      setShowRename(false);
-      setRenameTarget(null);
-      await fetchDirectory(prefix);
-    } catch (err: any) {
-      setError(String(err));
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    const target = deleteTarget;
-    setShowDeleteConfirm(false);
-    setDeleteTarget(null);
-    try {
-      await onDeleteObjects([{
-        key: target.fullKey,
-        isFolder: target.objectType === 'folder',
-      }]);
-    } catch (err: any) {
-      setError(String(err));
-    }
-  };
-
-  const fetchAllFolders = async () => {
-    try {
-      const result = await invoke<DirectoryListing>('list_directory', {
-        sessionId,
-        prefix: '',
-      });
-      const folders = result.objects
-        .filter(obj => obj.objectType === 'folder')
-        .map(obj => obj.fullKey);
-      setAvailableFolders(folders);
-    } catch (err) {
-      console.error('Failed to fetch folders:', err);
-    }
-  };
-
-  const handleMove = async (destination: string) => {
-    if (!moveTarget || !destination) return;
-    try {
-      const sourcePath = moveTarget.fullKey.replace(/\/$/, '');
-      const sourceName = moveTarget.name;
-      const destPrefix = destination === '/' ? '' : destination.replace(/\/$/, '/');
-      const newKey = destPrefix + sourceName;
-      
-      if (sourcePath === newKey.replace(/\/$/, '')) {
-        setError('Source and destination are the same');
-        return;
-      }
-      
-      await onRenameObject(sourcePath, newKey, moveTarget.objectType === 'folder');
-      setShowMoveModal(false);
-      setMoveTarget(null);
-      await fetchDirectory(prefix);
-    } catch (err: any) {
-      setError(String(err));
-    }
-  };
-
-  const handleCopy = async (destination: string) => {
-    if (!copyTarget || !destination) return;
-    try {
-      const sourcePath = copyTarget.fullKey.replace(/\/$/, '');
-      const sourceName = copyTarget.name;
-      const destPrefix = destination === '/' ? '' : destination.replace(/\/$/, '/');
-      const newKey = destPrefix + sourceName;
-      
-      if (sourcePath === newKey.replace(/\/$/, '')) {
-        setError('Source and destination are the same');
-        return;
-      }
-      
-      await invoke('copy_object', {
-        sessionId,
-        oldKey: sourcePath,
-        newKey,
-        isFolder: copyTarget.objectType === 'folder',
-      });
-      setShowCopyModal(false);
-      setCopyTarget(null);
-      await fetchDirectory(prefix);
-    } catch (err: any) {
-      setError(String(err));
-    }
-  };
 
   const renderPrefixSizeSummary = () => {
     if (!isS3) return null;
@@ -684,7 +585,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
               <span>Upload</span>
             </button>
             <button
-              onClick={() => setShowCreateFolder(true)}
+              onClick={() => openCreateFolder()}
               className="ui-button ui-button-secondary"
             >
               <Plus className="w-4 h-4" />
@@ -863,7 +764,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setShowCreateFolder(true)}
+                                onClick={() => openCreateFolder()}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs font-medium text-zinc-200"
                               >
                                 <Plus className="w-3.5 h-3.5" />
@@ -973,90 +874,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
         />, document.body
       )}
 
-      {/* Create Folder Modal */}
-      {showCreateFolder && (
-        <TextPromptDialog
-          title="Create New Folder"
-          placeholder="Folder name"
-          confirmLabel="Create"
-          onConfirm={handleCreateFolder}
-          onCancel={() => setShowCreateFolder(false)}
-        />
-      )}
-
-      {showRename && renameTarget && (
-        <TextPromptDialog
-          title="Rename"
-          placeholder="New name"
-          confirmLabel="Rename"
-          initialValue={renameTarget.name}
-          onConfirm={handleRename}
-          onCancel={() => { setShowRename(false); setRenameTarget(null); }}
-        />
-      )}
-
-      {showDeleteConfirm && deleteTarget && (
-        <ConfirmDialog
-          title={`Delete ${deleteTarget.objectType === 'folder' ? 'Folder' : 'File'}`}
-          titleClassName="mb-2"
-          confirmLabel="Delete"
-          tone="danger"
-          onCancel={() => { setShowDeleteConfirm(false); setDeleteTarget(null); }}
-          onConfirm={handleDelete}
-        >
-          <p className="text-zinc-400 text-sm mb-4">
-            Are you sure you want to delete <span className="text-zinc-200 font-medium">"{deleteTarget.name}"</span>?
-            {deleteTarget.objectType === 'folder' && (
-              <span className="block mt-1 text-status-warning">This will delete all contents inside the folder.</span>
-            )}
-          </p>
-        </ConfirmDialog>
-      )}
-
-      {showMoveModal && moveTarget && (
-        <DestinationDialog
-          title={`Move "${moveTarget.name}" to...`}
-          folders={availableFolders}
-          confirmLabel="Move"
-          onConfirm={handleMove}
-          onCancel={() => { setShowMoveModal(false); setMoveTarget(null); }}
-        />
-      )}
-
-      {showCopyModal && copyTarget && (
-        <DestinationDialog
-          title={`Copy "${copyTarget.name}" to...`}
-          folders={availableFolders}
-          confirmLabel="Copy"
-          onConfirm={handleCopy}
-          onCancel={() => { setShowCopyModal(false); setCopyTarget(null); }}
-        />
-      )}
-
-      {showShareModal && shareTarget && (
-        <ShareLinkDialog
-          fileName={shareTarget.name}
-          onGenerate={(seconds) => onGeneratePresignedUrl(shareTarget.fullKey, seconds)}
-          onGenerateUpload={onGeneratePresignedUploadUrl ? (seconds) => onGeneratePresignedUploadUrl(shareTarget.fullKey, seconds) : undefined}
-          onError={(message) => setError(message)}
-          onClose={() => { setShowShareModal(false); setShareTarget(null); }}
-        />
-      )}
-
-      {showBatchDeleteConfirm && (
-        <ConfirmDialog
-          title={`Delete ${selectedItems.size} Items`}
-          confirmLabel="Delete All"
-          tone="danger"
-          onCancel={() => setShowBatchDeleteConfirm(false)}
-          onConfirm={handleBatchDelete}
-        >
-          <p className="text-zinc-400 text-sm mb-4">
-            Are you sure you want to delete {selectedItems.size} selected items?
-            <span className="block mt-1 text-status-warning">This action cannot be undone.</span>
-          </p>
-        </ConfirmDialog>
-      )}
+      {dialogs}
 
       {showConflictModal && (
         <ConflictDialog
@@ -1090,7 +908,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
               <span>Download</span>
             </button>
             <button
-              onClick={() => setShowBatchDeleteConfirm(true)}
+              onClick={() => openBatchDelete()}
               className="flex items-center space-x-1 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium"
             >
               <Trash2 className="w-4 h-4" />

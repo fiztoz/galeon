@@ -7,8 +7,10 @@ import type { GaleonObject, StorageProtocol } from './types';
 import { TransferManager, TransferState } from './components/TransferManager';
 import { CommandPalette, CommandAction } from './components/CommandPalette';
 import { PropertiesInspector } from './components/PropertiesInspector';
-import { ActiveEditors, EditSessionInfo } from './components/ActiveEditors';
-import { Columns } from 'lucide-react';
+import type { EditSessionInfo } from './components/ActiveEditors';
+import { ConnectedHeader } from './components/ConnectedHeader';
+import { DisconnectConfirmations } from './components/DisconnectConfirm';
+import { buildCommandActions } from './commandActions';
 import { SyncPanel, SyncProfile } from './components/SyncPanel';
 import { OnboardingWizard, OnboardingProtocol } from './components/OnboardingWizard';
 import { SettingsPanel } from './components/SettingsPanel';
@@ -18,9 +20,7 @@ import { SplitPane } from './components/SplitPane';
 import { PresignHistoryModal } from './components/PresignHistoryModal';
 import { nextThemeMode, THEME_LABELS } from './theme';
 import { useLayoutPreferences } from './hooks/useLayoutPreferences';
-import { ConfirmDialog } from './components/Dialogs';
 import { disconnectNeedsConfirm } from './disconnectGuard';
-import { ConnectionSwitcher } from './components/ConnectionSwitcher';
 
 import type {
   AppSettings,
@@ -28,27 +28,6 @@ import type {
   PresignHistoryEntry,
   ProtocolCapabilities,
 } from './types';
-
-/** Shared warning body for the switch / disconnect confirmations. */
-function EditorWatchWarning({ action, sessions }: { action: string; sessions: EditSessionInfo[] }) {
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-zinc-400">
-        You have {sessions.length} file{sessions.length === 1 ? '' : 's'} open in an external editor.
-        {action} will stop watching them — unsaved changes in your editor won't be re-uploaded.
-      </p>
-      {sessions.length > 0 && (
-        <ul className="max-h-40 overflow-y-auto space-y-1 rounded-lg border border-zinc-800 bg-zinc-950/50 p-2">
-          {sessions.map((s) => (
-            <li key={s.editorId} className="text-sm text-zinc-300 truncate">
-              {s.filename}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 function App() {
   const [session, setSession] = useState<{
@@ -724,59 +703,29 @@ function App() {
     return () => clearTimeout(timer);
   }, [deleteProgress]);
 
-  const paletteActions: CommandAction[] = session
-    ? [
-        { id: 'refresh', label: 'Refresh', hint: 'Reload current folder', keywords: 'reload', run: () => explorerCmdsRef.current?.refresh() },
-        { id: 'new-folder', label: 'New Folder', keywords: 'create directory mkdir', run: () => explorerCmdsRef.current?.newFolder() },
-        { id: 'upload', label: 'Upload Files', keywords: 'put send', run: () => explorerCmdsRef.current?.upload() },
-        { id: 'cycle-theme', label: `Theme: ${THEME_LABELS[themeMode]}`, hint: 'System → Light → Dark', keywords: 'appearance dark light theme mode colours colors', run: () => setThemeMode((prev) => nextThemeMode(prev)) },
-        { id: 'toggle-dual-pane', label: dualPaneEnabled ? 'Hide Local Pane' : 'Show Local Pane', hint: '⌥⌘L', keywords: 'local filesystem split side by side dual pane', run: () => toggleDualPane() },
-        { id: 'inspector', label: 'Open Properties Inspector', keywords: 'metadata details info', run: () => setInspectorOpen(true) },
-        { id: 'links', label: 'Shared Links History', keywords: 'presign url share', run: () => { loadPresignHistory(); setShowHistory(true); } },
-        ...(editSessions.length > 0
-          ? [{ id: 'stop-all-editors', label: 'Stop All External Editors', hint: `${editSessions.length} active`, keywords: 'editor external edit close stop watch', run: handleStopAllEditors }]
-          : []),
-        ...editSessions.map((s) => ({
-          id: `stop-edit-${s.editorId}`,
-          label: `Stop editing ${s.filename}`,
-          hint: s.saveCount > 0 ? `saved ${s.saveCount}×` : 'unsaved',
-          keywords: 'editor external edit close stop watch',
-          run: () => handleStopEditor(s.editorId),
-        })),
-        { id: 'sync-open', label: 'Open Sync', keywords: 'sync mirror upload download diff', run: () => { setSyncPrefillProfile(null); setSyncRunNow(false); setSyncPanelOpen(true); } },
-        ...syncProfiles.map((sp) => ({
-          id: `run-sync-${sp.id}`,
-          label: `Run sync: ${sp.name}`,
-          hint: sp.direction === 'localToRemote' ? '→ remote' : '← local',
-          keywords: 'sync mirror profile run',
-          run: () => { setSyncPrefillProfile(sp); setSyncRunNow(false); setSyncPanelOpen(true); },
-        })),
-        // "Run now" deliberately loads the profile into the panel instead of
-        // executing anything directly: internal profile execution runs the
-        // profile's delete_extraneous deletions with no diff preview and no
-        // confirmation, and no plaintext path for it may remain (DIRECTION.md:
-        // destructive actions always confirmed). The quick re-run affordance
-        // is kept by loading the profile and auto-computing the diff
-        // in SyncPanel — one keystroke still lands on the reviewed plan, and
-        // Apply reuses the existing delete-confirmation block, so the count the
-        // user approves is the count that runs. Errors surface in the panel.
-        ...syncProfiles.map((sp) => ({
-          id: `run-sync-now-${sp.id}`,
-          label: `Run sync profile now: ${sp.name}`,
-          hint: sp.direction === 'localToRemote' ? '→ remote · previews diff' : '← local · previews diff',
-          keywords: 'sync mirror profile run now immediate',
-          run: () => { setSyncPrefillProfile(sp); setSyncRunNow(true); setSyncPanelOpen(true); },
-        })),
-        { id: 'settings', label: 'Open Settings', keywords: 'preferences config about privacy', run: () => setSettingsOpen(true) },
-        { id: 'onboarding', label: 'Show Onboarding', keywords: 'welcome tutorial intro', run: handleShowOnboardingAgain },
-        { id: 'lock-credentials', label: 'Lock Credentials Now', keywords: 'keychain password secure lock', run: handleLockCredentials },
-        { id: 'disconnect', label: 'Disconnect', keywords: 'logout exit close', run: requestDisconnect },
-      ]
-    : [
-        { id: 'settings', label: 'Open Settings', keywords: 'preferences config about privacy', run: () => setSettingsOpen(true) },
-        { id: 'onboarding', label: 'Show Onboarding', keywords: 'welcome tutorial intro', run: handleShowOnboardingAgain },
-        { id: 'lock-credentials', label: 'Lock Credentials Now', keywords: 'keychain password secure lock', run: handleLockCredentials },
-      ];
+  const paletteActions: CommandAction[] = buildCommandActions({
+    connected: session !== null,
+    themeLabel: THEME_LABELS[themeMode],
+    dualPaneEnabled,
+    editSessions,
+    syncProfiles,
+    refresh: () => explorerCmdsRef.current?.refresh(),
+    newFolder: () => explorerCmdsRef.current?.newFolder(),
+    upload: () => explorerCmdsRef.current?.upload(),
+    toggleTheme: () => setThemeMode((prev) => nextThemeMode(prev)),
+    toggleDualPane: () => toggleDualPane(),
+    openInspector: () => setInspectorOpen(true),
+    openLinks: () => { loadPresignHistory(); setShowHistory(true); },
+    stopAllEditors: handleStopAllEditors,
+    stopEditor: (editorId) => handleStopEditor(editorId),
+    openSync: () => { setSyncPrefillProfile(null); setSyncRunNow(false); setSyncPanelOpen(true); },
+    runSync: (sp) => { setSyncPrefillProfile(sp); setSyncRunNow(false); setSyncPanelOpen(true); },
+    runSyncNow: (sp) => { setSyncPrefillProfile(sp); setSyncRunNow(true); setSyncPanelOpen(true); },
+    openSettings: () => setSettingsOpen(true),
+    showOnboarding: handleShowOnboardingAgain,
+    lockCredentials: handleLockCredentials,
+    disconnect: requestDisconnect,
+  });
 
   if (!session) {
     return (
@@ -813,53 +762,19 @@ function App() {
         Native macOS chrome: Overlay titlebar + hiddenTitle keep system traffic
         lights; this header is the draggable toolbar that content lives under.
       */}
-      <header
-        data-tauri-drag-region
-        className="app-titlebar app-titlebar-traffic justify-between gap-3 pr-3 bg-zinc-900 border-b border-zinc-800"
-      >
-        <div data-tauri-drag-region className="flex items-center gap-2 min-w-0">
-          <h1
-            data-tauri-drag-region
-            className="text-[13px] font-semibold tracking-tight text-zinc-100 shrink-0"
-          >
-            Galeon
-          </h1>
-          <span data-tauri-drag-region className="text-zinc-700 shrink-0" aria-hidden>
-            ·
-          </span>
-          <ConnectionSwitcher
-            profiles={switcherProfiles}
-            sessionProfileId={session.profileId}
-            fallbackLabel={session.protocol === 'sftp' || session.protocol === 'ftp' || session.protocol === 'ftps'
-              ? (session.protocol ?? '').toUpperCase()
-              : session.bucket}
-            onConnect={handleSwitchConnection}
-            onDisconnect={requestDisconnect}
-          />
-        </div>
-        <div data-no-drag className="flex items-center gap-1 shrink-0">
-          {session && (
-            <button
-              onClick={() => setDualPaneEnabled((prev) => !prev)}
-              title="Toggle Dual Pane (⌥⌘L)"
-              aria-pressed={dualPaneEnabled}
-              className={`ui-button ${
-                dualPaneEnabled
-                  ? 'text-gale-teal bg-gale-teal/10'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-              }`}
-            >
-              <Columns className="w-3.5 h-3.5" />
-              <span>Local</span>
-            </button>
-          )}
-          <ActiveEditors
-            sessions={editSessions}
-            onStop={handleStopEditor}
-            onStopAll={handleStopAllEditors}
-          />
-        </div>
-      </header>
+      <ConnectedHeader
+        bucket={session.bucket}
+        protocol={session.protocol}
+        profileId={session.profileId}
+        profiles={switcherProfiles}
+        onConnect={handleSwitchConnection}
+        onDisconnect={requestDisconnect}
+        dualPaneEnabled={dualPaneEnabled}
+        onToggleDualPane={() => setDualPaneEnabled((prev) => !prev)}
+        editSessions={editSessions}
+        onStopEditor={handleStopEditor}
+        onStopAllEditors={handleStopAllEditors}
+      />
       <main className="flex-1 min-h-0 overflow-hidden">
         {dualPaneEnabled ? (
           <SplitPane
@@ -992,33 +907,15 @@ function App() {
       />
 
       {/* Disconnect-and-switch confirmation (external edits mid-flight) */}
-      {pendingSwitchProfile && (
-        <ConfirmDialog
-          title="Switch connection?"
-          width="w-[480px]"
-          tone="danger"
-          confirmLabel="Switch anyway"
-          onCancel={cancelSwitchProfile}
-          onConfirm={confirmSwitchProfile}
-        >
-          <EditorWatchWarning action="Switching" sessions={editSessions} />
-        </ConfirmDialog>
-      )}
-
-      {/* Disconnect confirmation (external edits mid-flight) */}
-      {pendingDisconnect && (
-        <ConfirmDialog
-          title="Disconnect?"
-          width="w-[480px]"
-          tone="danger"
-          confirmLabel="Disconnect"
-          cancelLabel="Stay connected"
-          onCancel={() => setPendingDisconnect(false)}
-          onConfirm={() => { setPendingDisconnect(false); performDisconnect(); }}
-        >
-          <EditorWatchWarning action="Disconnecting" sessions={editSessions} />
-        </ConfirmDialog>
-      )}
+      <DisconnectConfirmations
+        switchPending={pendingSwitchProfile !== null}
+        disconnectPending={pendingDisconnect}
+        sessions={editSessions}
+        onCancelSwitch={cancelSwitchProfile}
+        onConfirmSwitch={confirmSwitchProfile}
+        onCancelDisconnect={() => setPendingDisconnect(false)}
+        onConfirmDisconnect={() => { setPendingDisconnect(false); performDisconnect(); }}
+      />
 
       {showOnboarding && (
         <OnboardingWizard
