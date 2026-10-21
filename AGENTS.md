@@ -34,6 +34,7 @@ Product intent lives in [`docs/DIRECTION.md`](docs/DIRECTION.md). UI tokens and 
 | Frontend wire contracts (camelCase payloads) | `src-tauri/src/types.rs` |
 | Listing / prefix sizes / editing / bandwidth | `src-tauri/src/{listing,prefix_size,editing,bandwidth}.rs` |
 | Sync domain (plan, trees, schedules, store) | `src-tauri/src/sync_{plan,tree,types,store}.rs`, `schedule.rs` |
+| Sync model (frontend types + diff rules) | `src/syncModel.ts` |
 | SSH tunnels / config / known hosts | `src-tauri/src/ssh_*.rs` |
 | App bootstrap + `invoke_handler` only | `src-tauri/src/lib.rs` (~180 lines) |
 | Profile import/export UI | `src/components/ProfileImportExport.tsx` |
