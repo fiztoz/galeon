@@ -168,6 +168,13 @@ Styling intent, not a component API dump. Implement with Tailwind + tokens in `s
 ### Navigation chrome
 
 - Sidebar: zinc-900 on zinc-950 shell; active item teal indicator (text or bar).
+- Pane chrome: one row per pane — navigation, path, search, actions, filters.
+  Navigation buttons (back / forward / up) are quiet ghost controls; the
+  primary action in the row stays teal. A pane keeps its own path and its own
+  history — dual pane is two independent rows, never one global path bar.
+- Connection identity: the titlebar shows the current connection and opens a
+  menu of saved ones. The current one is teal text, never a second hue.
+- Keyboard cursor: a rule at the row's edge, not a second selection tint.
 - Transfer drawer: secondary surface; badge count / live speed in Doubloon when active.
 - Command palette: same dark chrome; selected row teal accent; no frosted marketing blur.
 

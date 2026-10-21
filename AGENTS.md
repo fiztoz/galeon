@@ -39,7 +39,14 @@ Product intent lives in [`docs/DIRECTION.md`](docs/DIRECTION.md). UI tokens and 
 | Profile import/export UI | `src/components/ProfileImportExport.tsx` |
 | Connection form / connect flow | `src/components/Connection.tsx` |
 | Local filesystem pane (dual-pane) | `src/components/LocalPane.tsx` |
+| Remote file pane | `src/components/Explorer.tsx` |
+| Pane chrome row (one row per pane) | `src/components/PaneChrome.tsx` |
+| File-list selection + keyboard model | `src/hooks/useMultiSelect.ts`, `src/hooks/useFileListKeyboard.ts` |
+| Pane navigation history (back / forward / up) | `src/pathHistory.ts` |
+| Object dialogs (create / rename / move / copy / share / delete) | `src/hooks/useExplorerDialogs.tsx` |
 | App shell / profiles state | `src/App.tsx` |
+| Connected titlebar / connection switcher | `src/components/ConnectedHeader.tsx`, `src/components/ConnectionSwitcher.tsx` |
+| Command palette action list | `src/commandActions.ts` |
 | Shared frontend wire types (camelCase mirrors of Rust structs) | `src/types.ts` |
 | Layout preferences (dual pane, split ratio, theme) | `src/hooks/useLayoutPreferences.ts` |
 | Theme CSS variables | `src/index.css` |
@@ -47,6 +54,10 @@ Product intent lives in [`docs/DIRECTION.md`](docs/DIRECTION.md). UI tokens and 
 **Do not re-introduce** S3 builder + sanitize + SSL wiring inlined into `connect_bucket` / `connect_storage` / `auto_reconnect`. Use `s3_connect::open_s3_operator` (or the smaller helpers in that module).
 
 **Do not** grow `Connection.tsx` with export/import modals again — that lives in `ProfileImportExport.tsx`.
+
+**Do not** write a second selection gesture in a pane: click semantics live in
+`useMultiSelect` / `applySelection`, and the key model in `useFileListKeyboard`.
+A third file list must use both, not copy the old toggle.
 
 ---
 
