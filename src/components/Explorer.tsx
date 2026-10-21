@@ -315,6 +315,19 @@ export const Explorer: React.FC<ExplorerProps> = ({
       const obj = filteredObjects[index];
       if (obj) handleDoubleClick(obj);
     },
+    onRename: (index) => {
+      const obj = filteredObjects[index];
+      if (obj) openRename(obj);
+    },
+    onDelete: (index) => {
+      // A multi-row selection deletes as a batch; one row deletes on its own.
+      if (selectedItems.size > 1) {
+        openBatchDelete();
+        return;
+      }
+      const obj = filteredObjects[index];
+      if (obj) openDelete(obj);
+    },
     onSelectAll: () => {
       // Select-all is idempotent: pressing it twice must not deselect.
       if (selectedItems.size !== filteredObjects.length) handleSelectAll();

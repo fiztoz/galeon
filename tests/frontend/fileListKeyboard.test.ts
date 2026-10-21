@@ -130,6 +130,27 @@ test('Escape clears the selection', () => {
   expect(fileListKeyAction(key('Escape'), state(3, 1), false)).toEqual({ type: 'clear' });
 });
 
+test('F2 renames the row under the cursor', () => {
+  expect(fileListKeyAction(key('F2'), state(3, 1), false)).toEqual({ type: 'rename', index: 1 });
+  expect(fileListKeyAction(key('F2'), state(3, null), false)).toEqual({ type: 'none' });
+});
+
+test('Cmd or Ctrl+Backspace deletes the row under the cursor', () => {
+  expect(fileListKeyAction(key('Backspace', { metaKey: true }), state(3, 2), false)).toEqual({
+    type: 'delete',
+    index: 2,
+  });
+  expect(fileListKeyAction(key('Backspace', { ctrlKey: true }), state(3, 2), false)).toEqual({
+    type: 'delete',
+    index: 2,
+  });
+  // A bare Backspace belongs to the webview, not to the file list.
+  expect(fileListKeyAction(key('Backspace'), state(3, 2), false)).toEqual({ type: 'none' });
+  expect(fileListKeyAction(key('Backspace', { metaKey: true }), state(3, null), false)).toEqual({
+    type: 'none',
+  });
+});
+
 test('bare letters and other keys do nothing', () => {
   expect(fileListKeyAction(key('a'), state(3), false)).toEqual({ type: 'none' });
   expect(fileListKeyAction(key('x'), state(3), false)).toEqual({ type: 'none' });
@@ -236,6 +257,47 @@ test('the nav handler opens, selects all, and clears', () => {
   expect(opened).toEqual([1]);
   expect(selected).toBe(1);
   expect(cleared).toBe(1);
+});
+
+test('the nav handler renames and deletes when the pane supports it', () => {
+  const renamed: number[] = [];
+  const deleted: number[] = [];
+  const handle = useFileListKeyboardNav({
+    count: 3,
+    cursor: 2,
+    onMove: () => {},
+    onOpen: () => {},
+    onRename: (index) => renamed.push(index),
+    onDelete: (index) => deleted.push(index),
+    onSelectAll: () => {},
+    onClear: () => {},
+  });
+
+  handle(handlerEvent('F2').event);
+  handle(handlerEvent('Backspace', { metaKey: true }).event);
+
+  expect(renamed).toEqual([2]);
+  expect(deleted).toEqual([2]);
+});
+
+test('a pane that cannot rename or delete leaves those keys alone', () => {
+  let prevented = false;
+  const handle = useFileListKeyboardNav({
+    count: 3,
+    cursor: 2,
+    onMove: () => {},
+    onOpen: () => {},
+    onSelectAll: () => {},
+    onClear: () => {},
+  });
+
+  const rename = handlerEvent('F2');
+  handle(rename.event);
+  const remove = handlerEvent('Backspace', { metaKey: true });
+  handle(remove.event);
+
+  expect(rename.wasPrevented()).toBe(false);
+  expect(remove.wasPrevented()).toBe(false);
 });
 
 test('the nav handler ignores keys it has no answer for', () => {

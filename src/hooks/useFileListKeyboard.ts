@@ -11,6 +11,8 @@ export type ListKeyAction =
   | { type: 'none' }
   | { type: 'move'; index: number; extend: boolean }
   | { type: 'open'; index: number }
+  | { type: 'rename'; index: number }
+  | { type: 'delete'; index: number }
   | { type: 'selectAll' }
   | { type: 'clear' };
 
@@ -105,6 +107,13 @@ export function fileListKeyAction(
       return { type: 'move', index: count - 1, extend };
     case 'Enter':
       return cursor === null ? { type: 'none' } : { type: 'open', index: cursor };
+    case 'F2':
+      return cursor === null ? { type: 'none' } : { type: 'rename', index: cursor };
+    case 'Backspace':
+      // Only the modified key is ours: a bare Backspace belongs to the
+      // webview, and in a text field it deletes a word.
+      if (!(event.metaKey || event.ctrlKey)) break;
+      return cursor === null ? { type: 'none' } : { type: 'delete', index: cursor };
     case 'Escape':
       return { type: 'clear' };
     default:
@@ -129,6 +138,10 @@ export type FileListKeyboardOptions = {
   onMove: (index: number, extend: boolean) => void;
   /** The row should be opened (Enter). */
   onOpen: (index: number) => void;
+  /** The row should be renamed (F2). Omitted where renaming is not possible. */
+  onRename?: (index: number) => void;
+  /** The row should be deleted (Cmd/Ctrl+Backspace). */
+  onDelete?: (index: number) => void;
   /** Every row should be selected (Cmd/Ctrl+A). */
   onSelectAll: () => void;
   /** The selection should be cleared (Escape). */
@@ -171,6 +184,17 @@ export function useFileListKeyboardNav(options: FileListKeyboardOptions) {
       case 'selectAll':
         event.preventDefault();
         options.onSelectAll();
+        return;
+      case 'rename':
+        // A pane that cannot rename simply does not bind the key.
+        if (!options.onRename) return;
+        event.preventDefault();
+        options.onRename(action.index);
+        return;
+      case 'delete':
+        if (!options.onDelete) return;
+        event.preventDefault();
+        options.onDelete(action.index);
         return;
       case 'clear':
         event.preventDefault();

@@ -40,6 +40,11 @@
   and **Disconnect** as text buttons are gone from it, because the native menu
   (File / View) and the connection switcher already carry them. Every action
   still works — the menu is the way in now.
+- **Rename and delete from the keyboard.** With a row under the cursor, **F2**
+  renames it and **⌘⌫** (Ctrl+Backspace) deletes it — through the same
+  confirmations the context menu asks for, and a multi-row selection deletes as
+  a batch. The local pane leaves both keys alone: it has nothing to rename or
+  delete.
 
 ### Changed
 
