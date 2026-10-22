@@ -32,6 +32,7 @@ Product intent lives in [`docs/DIRECTION.md`](docs/DIRECTION.md). UI tokens and 
 | **Tauri command layer** (thin) | `src-tauri/src/commands/<feature>.rs` |
 | Runtime state (`GaleonEngine`, sessions, controls) | `src-tauri/src/engine.rs` |
 | Frontend wire contracts (camelCase payloads) | `src-tauri/src/types.rs` |
+| Transfer loops (OpenDAL chunked, native SFTP, native FTP) | `src-tauri/src/commands/{transfer_protocols,sftp_transfers,ftp_transfers}.rs` |
 | Listing / prefix sizes / editing / bandwidth | `src-tauri/src/{listing,prefix_size,editing,bandwidth}.rs` |
 | Sync domain (plan, trees, schedules, store) | `src-tauri/src/sync_{plan,tree,types,store}.rs`, `schedule.rs` |
 | Sync model (frontend types + diff rules) | `src/syncModel.ts` |
