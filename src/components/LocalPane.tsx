@@ -6,7 +6,6 @@ import {
   Folder,
   File,
   ChevronRight,
-  ChevronUp,
   Upload,
   Plus,
   Loader2,
@@ -16,8 +15,15 @@ import {
   ArrowUpToLine,
   Search,
   RotateCw,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
 } from 'lucide-react';
 import { formatSize } from './Explorer';
+import { useMultiSelect } from '../hooks/useMultiSelect';
+import { useFileListKeyboardNav, isInteractiveTarget } from '../hooks/useFileListKeyboard';
+import { PaneChrome } from './PaneChrome';
+import { initialPathHistory, moveWithinHistory, pushPath } from '../pathHistory';
 import {
   GALEON_LOCAL_PATHS_MIME,
   GALEON_REMOTE_KEYS_MIME,
@@ -101,10 +107,6 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
   const [error, setError] = useState('');
   const [listFailed, setListFailed] = useState(false);
 
-  // Selection
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
-
   // Sort & filter
   const [searchQuery, setSearchQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -123,11 +125,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
   // window-level `tauri://drag-drop` listener untouched.
   const [dragOverRemote, setDragOverRemote] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const localDragPaths = (entry: LocalEntry): string[] => {
-    if (selectedItems.has(entry.path) && selectedItems.size > 0) return [...selectedItems];
-    return [entry.path];
-  };
+  const tbodyRef = useRef<HTMLTableSectionElement | null>(null);
   const listNonceRef = useRef(0);
 
   // ── Fetch directory ────────────────────────────────────────────────────────
@@ -187,6 +185,43 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
     return sortEntries(result, sortKey, sortDirection);
   }, [entries, showHidden, searchQuery, sortKey, sortDirection]);
 
+  // ── Selection ──────────────────────────────────────────────────────────────
+  // The same gesture model as the remote pane: a plain click replaces the
+  // selection, Cmd/Ctrl-click toggles, Shift extends.
+  const localRows = useMemo(() => filteredEntries.map(e => ({ fullKey: e.path })), [filteredEntries]);
+  const { selectedItems, cursorIndex, handleSelectItem, handleSelectAll, clearSelection } =
+    useMultiSelect(localRows);
+
+  // Dragging a selected row drags the whole selection.
+  const localDragPaths = (entry: LocalEntry): string[] => {
+    if (selectedItems.has(entry.path) && selectedItems.size > 0) return [...selectedItems];
+    return [entry.path];
+  };
+
+  // ── Navigation history ─────────────────────────────────────────────────────
+  // The local pane keeps its own stack of directories. Back and Forward walk
+  // it; every other move — path segment, folder, Up — records a new entry.
+  const [history, setHistory] = useState(() => initialPathHistory(currentPath));
+
+  /** Move to another directory. `record` is false for back/forward moves. */
+  const goTo = (next: string, record: boolean = true) => {
+    setHistory(h => (record ? pushPath(h, next) : moveWithinHistory(h, next)));
+    setCurrentPath(next);
+    clearSelection();
+  };
+
+  const goBack = () => {
+    const previous = history.past[history.past.length - 1];
+    if (previous === undefined) return;
+    goTo(previous, false);
+  };
+
+  const goForward = () => {
+    const next = history.future[0];
+    if (next === undefined) return;
+    goTo(next, false);
+  };
+
   // ── Sort handler ───────────────────────────────────────────────────────────
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -197,50 +232,47 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
     }
   };
 
-  // ── Selection ──────────────────────────────────────────────────────────────
-  const handleSelectItem = (path: string, index: number, shiftKey: boolean = false) => {
-    const newSelected = new Set(selectedItems);
-
-    if (shiftKey && lastSelectedIndex !== null) {
-      const startIdx = Math.min(lastSelectedIndex, index);
-      const endIdx = Math.max(lastSelectedIndex, index);
-      for (let i = startIdx; i <= endIdx; i++) {
-        if (filteredEntries[i]) {
-          newSelected.add(filteredEntries[i].path);
-        }
-      }
-    } else {
-      if (newSelected.has(path)) {
-        newSelected.delete(path);
-      } else {
-        newSelected.add(path);
-      }
-    }
-
-    setSelectedItems(newSelected);
-    setLastSelectedIndex(index);
-  };
-
-  const handleSelectAll = () => {
-    if (selectedItems.size === filteredEntries.length) {
-      setSelectedItems(new Set());
-    } else {
-      setSelectedItems(new Set(filteredEntries.map((e) => e.path)));
-    }
-  };
-
-  const clearSelection = () => {
-    setSelectedItems(new Set());
-    setLastSelectedIndex(null);
-  };
-
   // ── Navigation ─────────────────────────────────────────────────────────────
   const handleDoubleClick = (entry: LocalEntry) => {
     if (entry.isDir) {
-      setCurrentPath(entry.path);
-      clearSelection();
+      goTo(entry.path);
     }
   };
+
+  // ── Keyboard navigation ────────────────────────────────────────────────────
+  // The pane owns its keys: arrows walk the rows, Enter opens, Cmd+A selects
+  // everything, Escape clears. The listener stays on the pane so dialogs and
+  // the command palette keep their own shortcuts.
+  const paneRef = useRef<HTMLDivElement | null>(null);
+
+  const handlePaneKeyDown = useFileListKeyboardNav({
+    count: filteredEntries.length,
+    cursor: cursorIndex,
+    onMove: (index, extend) => {
+      const entry = filteredEntries[index];
+      if (!entry) return;
+      // A shift move extends from the anchor; the anchor itself must not
+      // move, or the next shift move would range from the wrong row.
+      handleSelectItem(entry.path, index, extend ? { shift: true } : {});
+    },
+    onOpen: (index) => {
+      const entry = filteredEntries[index];
+      if (entry) handleDoubleClick(entry);
+    },
+    onSelectAll: () => {
+      // Select-all is idempotent: pressing it twice must not deselect.
+      if (selectedItems.size !== filteredEntries.length) handleSelectAll();
+    },
+    onClear: clearSelection,
+  });
+
+  // The local list renders every row, so the cursor row only has to be
+  // scrolled into view — no windowed offsets to compute.
+  useEffect(() => {
+    if (cursorIndex === null) return;
+    const row = tbodyRef.current?.querySelector(`[data-row-index="${cursorIndex}"]`);
+    (row as HTMLElement | null)?.scrollIntoView({ block: 'nearest' });
+  }, [cursorIndex]);
 
   const navigateUp = () => {
     // Derive parent from path string (no invoke needed)
@@ -250,8 +282,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
     if (parts.length > 1) {
       parts.pop();
       const parent = parts.join('/') || '/';
-      setCurrentPath(parent);
-      clearSelection();
+      goTo(parent);
     }
   };
 
@@ -294,8 +325,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
 
   const navigateToSegment = (index: number) => {
     const joined = '/' + pathSegments.slice(0, index + 1).join('/');
-    setCurrentPath(joined);
-    clearSelection();
+    goTo(joined);
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -303,7 +333,10 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
 
   return (
     <div
+      ref={paneRef}
       className="file-pane flex flex-col h-full bg-zinc-950 text-zinc-100"
+      tabIndex={0}
+      onKeyDown={handlePaneKeyDown}
       onDragOver={(e) => {
         if (dragHasType(e, GALEON_REMOTE_KEYS_MIME)) {
           e.preventDefault();
@@ -320,43 +353,81 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
         if (keys && keys.length > 0) onDownloadToLocal?.(keys, currentPath);
       }}
     >
-      {/* Path bar */}
-      <div className="pane-path flex items-center justify-between gap-3 py-3 px-4 bg-zinc-900 border-b border-zinc-800 text-sm">
-        <nav aria-label="Local path" className="flex items-center space-x-1 min-w-0 galeon-scrollbar">
-          <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded font-medium mr-1 shrink-0">
-            LOCAL
-          </span>
-          <button
-            onClick={() => { setCurrentPath('/'); clearSelection(); }}
-            className="text-gale-teal hover:text-deep-current font-medium"
-          >
-            /
-          </button>
-          {pathSegments.map((seg, idx) => (
-            <React.Fragment key={idx}>
-              <ChevronRight className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-              <button
-                onClick={() => navigateToSegment(idx)}
-                className="text-gale-teal hover:text-deep-current truncate font-medium"
-              >
-                {seg}
-              </button>
-            </React.Fragment>
-          ))}
-        </nav>
-        <button
-          onClick={navigateUp}
-          disabled={pathSegments.length === 0}
-          className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-          title="Go up one level"
-        >
-          <ChevronUp className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Toolbar */}
-      <div className="pane-toolbar bg-zinc-900/50 border-b border-zinc-800 space-y-3">
-        <div className="pane-toolbar-row">
+      {/* Chrome row */}
+      <PaneChrome
+        navigation={
+          <>
+            <button
+              onClick={goBack}
+              disabled={history.past.length === 0}
+              aria-label="Back"
+              title="Back"
+              className="ui-button ui-button-ghost disabled:opacity-30"
+            >
+              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+            </button>
+            <button
+              onClick={goForward}
+              disabled={history.future.length === 0}
+              aria-label="Forward"
+              title="Forward"
+              className="ui-button ui-button-ghost disabled:opacity-30"
+            >
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </button>
+            <button
+              onClick={navigateUp}
+              disabled={pathSegments.length === 0}
+              aria-label="Go up"
+              title="Go up one level"
+              className="ui-button ui-button-ghost disabled:opacity-30"
+            >
+              <ArrowUp className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </>
+        }
+        path={
+          <nav aria-label="Local path" className="flex items-center space-x-1 min-w-0 galeon-scrollbar">
+            <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded font-medium mr-1 shrink-0">
+              LOCAL
+            </span>
+            <button
+              onClick={() => goTo('/')}
+              className="text-gale-teal hover:text-deep-current font-medium"
+            >
+              /
+            </button>
+            {pathSegments.map((seg, idx) => (
+              <React.Fragment key={idx}>
+                <ChevronRight className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                <button
+                  onClick={() => navigateToSegment(idx)}
+                  className="text-gale-teal hover:text-deep-current truncate font-medium"
+                >
+                  {seg}
+                </button>
+              </React.Fragment>
+            ))}
+          </nav>
+        }
+        search={
+          <div className="pane-search">
+            <Search size={14} aria-hidden="true" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search local files"
+              placeholder="Search local files…"
+              className="connection-field text-zinc-100 placeholder:text-zinc-500"
+              autoCapitalize="off"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+        }
+        actions={
           <div className="pane-actions">
             <button
               onClick={handleUploadSelected}
@@ -382,53 +453,40 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
               <RotateCw size={14} aria-hidden="true" />
             </button>
           </div>
-          <div className="pane-search">
-            <Search size={14} aria-hidden="true" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search local files"
-              placeholder="Search local files…"
-              className="connection-field text-zinc-100 placeholder:text-zinc-500"
-              autoCapitalize="off"
-              autoCorrect="off"
-              autoComplete="off"
-              spellCheck={false}
-            />
+        }
+        filters={
+          <div className="pane-filters">
+            <button
+              onClick={() => setShowHidden(!showHidden)}
+              aria-pressed={showHidden}
+              className="pane-filter-button flex items-center gap-1.5"
+            >
+              {showHidden ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+              Hidden
+            </button>
+            <span className="text-xs text-zinc-500">Sort:</span>
+            {(['name', 'size', 'date'] as SortKey[]).map((key) => (
+              <button
+                key={key}
+                onClick={() => handleSort(key)}
+                aria-pressed={sortKey === key}
+                className="pane-filter-button"
+              >
+                {key === 'name' ? 'Name' : key === 'size' ? 'Size' : 'Date'}
+                {sortKey === key && (sortDirection === 'asc' ? ' ↑' : ' ↓')}
+              </button>
+            ))}
+            {(searchQuery || showHidden) && (
+              <button
+                onClick={() => { setSearchQuery(''); setShowHidden(false); }}
+                className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+              >
+                Clear
+              </button>
+            )}
           </div>
-        </div>
-        <div className="pane-filters">
-          <button
-            onClick={() => setShowHidden(!showHidden)}
-            aria-pressed={showHidden}
-            className="pane-filter-button flex items-center gap-1.5"
-          >
-            {showHidden ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-            Hidden
-          </button>
-          <span className="text-xs text-zinc-500">Sort:</span>
-          {(['name', 'size', 'date'] as SortKey[]).map((key) => (
-            <button
-              key={key}
-              onClick={() => handleSort(key)}
-              aria-pressed={sortKey === key}
-              className="pane-filter-button"
-            >
-              {key === 'name' ? 'Name' : key === 'size' ? 'Size' : 'Date'}
-              {sortKey === key && (sortDirection === 'asc' ? ' ↑' : ' ↓')}
-            </button>
-          ))}
-          {(searchQuery || showHidden) && (
-            <button
-              onClick={() => { setSearchQuery(''); setShowHidden(false); }}
-              className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
+        }
+      />
 
       {/* Content area */}
       <div className={`pane-content flex-1 overflow-auto galeon-scrollbar ${dragOverRemote ? 'ring-2 ring-inset ring-gale-teal/60 bg-gale-teal/5' : ''}`}>
@@ -488,7 +546,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800/50 text-sm text-zinc-200">
+              <tbody ref={tbodyRef} className="divide-y divide-zinc-800/50 text-sm text-zinc-200">
                 {filteredEntries.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-6 py-14 text-center text-zinc-500">
@@ -536,16 +594,28 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                   filteredEntries.map((entry, index) => (
                     <tr
                       key={entry.path}
+                      data-row-index={index}
                       draggable={!entry.isDir}
+                      aria-selected={selectedItems.has(entry.path)}
                       onDragStart={(e) => {
                         if (entry.isDir) { e.preventDefault(); return; }
                         e.dataTransfer.setData(GALEON_LOCAL_PATHS_MIME, JSON.stringify(localDragPaths(entry)));
                         e.dataTransfer.effectAllowed = 'copy';
                       }}
+                      onClick={(e) => {
+                        if (isInteractiveTarget(e.target)) return;
+                        // The pane takes the focus so the arrow keys keep
+                        // walking the rows straight after a click.
+                        paneRef.current?.focus();
+                        handleSelectItem(entry.path, index, {
+                          shift: e.shiftKey,
+                          toggle: e.metaKey || e.ctrlKey,
+                        });
+                      }}
                       onDoubleClick={() => handleDoubleClick(entry)}
                       className={`hover:bg-zinc-800/40 cursor-pointer transition-colors ${
                         selectedItems.has(entry.path) ? 'bg-gale-teal/10 border-l-2 border-gale-teal' : ''
-                      } ${entry.isHidden ? 'opacity-50' : ''}`}
+                      } ${entry.isHidden ? 'opacity-50' : ''} ${index === cursorIndex ? 'is-cursor' : ''}`}
                     >
                       <td className="px-4 py-3">
                         <input
@@ -555,7 +625,10 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                           onChange={() => {}}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleSelectItem(entry.path, index, e.shiftKey);
+                            handleSelectItem(entry.path, index, {
+                              toggle: !e.shiftKey,
+                              shift: e.shiftKey,
+                            });
                           }}
                           className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-gale-teal focus:ring-gale-teal focus:ring-1 accent-gale-teal"
                         />
@@ -568,7 +641,7 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
                           <File className="w-5 h-5 text-zinc-400 flex-shrink-0" />
                         )}
                         <div className="min-w-0">
-                          <button type="button" onClick={(event) => handleSelectItem(entry.path, index, event.shiftKey)}
+                          <button type="button" onClick={(event) => { event.stopPropagation(); handleSelectItem(entry.path, index, { shift: event.shiftKey, toggle: event.metaKey || event.ctrlKey }); }}
                             onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleDoubleClick(entry); } }} title={entry.name} className="block max-w-full hover:text-gale-teal">{entry.name}</button>
                           <span className="compact-date">{formatDate(entry.modifiedMs)}</span>
                         </div>

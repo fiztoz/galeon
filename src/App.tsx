@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Connection } from './components/Connection';
@@ -7,24 +7,35 @@ import type { GaleonObject, StorageProtocol } from './types';
 import { TransferManager, TransferState } from './components/TransferManager';
 import { CommandPalette, CommandAction } from './components/CommandPalette';
 import { PropertiesInspector } from './components/PropertiesInspector';
-import { ActiveEditors, EditSessionInfo } from './components/ActiveEditors';
-import { Link, Command, RefreshCw, Settings, Columns } from 'lucide-react';
-import { SyncPanel, SyncProfile } from './components/SyncPanel';
+import type { EditSessionInfo } from './components/ActiveEditors';
+import { ConnectedHeader } from './components/ConnectedHeader';
+import { DisconnectConfirmations } from './components/DisconnectConfirm';
+import { buildCommandActions } from './commandActions';
+import { SyncPanel } from './components/SyncPanel';
+import type { SyncProfile } from './syncModel';
 import { OnboardingWizard, OnboardingProtocol } from './components/OnboardingWizard';
 import { SettingsPanel } from './components/SettingsPanel';
+import { ShortcutsDialog } from './components/ShortcutsDialog';
+import { detectShortcutPlatform } from './keyboardShortcuts';
 import { DeleteProgressToast, DeleteProgress } from './components/DeleteProgressToast';
 import { LocalPane } from './components/LocalPane';
 import { SplitPane } from './components/SplitPane';
 import { PresignHistoryModal } from './components/PresignHistoryModal';
+import { usePresignHistory } from './hooks/usePresignHistory';
 import { nextThemeMode, THEME_LABELS } from './theme';
 import { useLayoutPreferences } from './hooks/useLayoutPreferences';
+import { disconnectNeedsConfirm } from './disconnectGuard';
 
 import type {
   AppSettings,
   ConnectionProfile,
-  PresignHistoryEntry,
   ProtocolCapabilities,
 } from './types';
+
+// Which glyphs the cheatsheet draws: ⌘ on macOS, Ctrl everywhere else.
+const SHORTCUT_PLATFORM = detectShortcutPlatform(
+  typeof navigator === 'undefined' ? undefined : navigator,
+);
 
 function App() {
   const [session, setSession] = useState<{
@@ -35,8 +46,10 @@ function App() {
   capabilities?: ProtocolCapabilities;
 } | null>(null);
   const [profiles, setProfiles] = useState<ConnectionProfile[]>([]);
-  const [presignHistory, setPresignHistory] = useState<PresignHistoryEntry[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const {
+    presignHistory, loadPresignHistory, clearPresignHistory, deletePresignHistoryEntry,
+  } = usePresignHistory();
 
   // Phase 9 — Power UX state
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -54,6 +67,9 @@ function App() {
   // Phase 10 — profile awaiting a disconnect-and-switch confirmation while
   // external edit sessions are mid-flight; non-null opens the warning modal.
   const [pendingSwitchProfile, setPendingSwitchProfile] = useState<ConnectionProfile | null>(null);
+  // Disconnect awaiting the same warning while external edit sessions are
+  // mid-flight; true opens the confirmation modal.
+  const [pendingDisconnect, setPendingDisconnect] = useState(false);
 
   // Phase 11 — one-way sync
   const [syncProfiles, setSyncProfiles] = useState<SyncProfile[]>([]);
@@ -74,6 +90,7 @@ function App() {
   // Phase 14 — onboarding & settings
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [onboardingProtocol, setOnboardingProtocol] = useState<OnboardingProtocol | null>(null);
 
   // Layout preferences (dual pane, its path, split ratio, theme) live in one
@@ -100,30 +117,83 @@ function App() {
     loadAppSettings();
   }, []);
 
-  // Global keyboard shortcut: ⌥⌘L → toggle dual pane
+  // Native menu: Galeon → Settings… (⌘,), File → Upload / New Folder /
+  // Disconnect, View → Toggle Local Pane / Command Palette / Sync / Shared
+  // Links. One subscription for every item, and each event runs the same
+  // handler the titlebar button runs.
+  //
+  // The subscription lives for the life of the window, so the live session is
+  // mirrored into a ref rather than captured in a stale closure.
+  const sessionRef = useRef(session);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.altKey && e.metaKey && e.key.toLowerCase() === 'l') {
-        e.preventDefault();
-        toggleDualPane();
+    let cancelled = false;
+    const unlisteners: (() => void)[] = [];
+
+    const handleMenuEvent = (name: string) => {
+      switch (name) {
+        case 'menu://preferences':
+          setSettingsOpen(true);
+          return;
+        case 'menu://keyboard-shortcuts':
+          setShortcutsOpen(true);
+          return;
+        case 'menu://command-palette':
+          setPaletteOpen(true);
+          return;
+        case 'menu://toggle-local-pane':
+          toggleDualPane();
+          return;
+        case 'menu://sync':
+          if (!sessionRef.current) return;
+          setSyncPrefillProfile(null);
+          setSyncRunNow(false);
+          setSyncPanelOpen(true);
+          return;
+        case 'menu://links':
+          if (!sessionRef.current) return;
+          loadPresignHistory();
+          setShowHistory(true);
+          return;
+        case 'menu://upload':
+          explorerCmdsRef.current?.upload();
+          return;
+        case 'menu://new-folder':
+          explorerCmdsRef.current?.newFolder();
+          return;
+        case 'menu://disconnect':
+          requestDisconnect();
+          return;
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
 
-  // Native menu: Galeon → Settings… (⌘,)
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    listen('menu://preferences', () => {
-      setSettingsOpen(true);
-    })
-      .then((fn) => {
-        unlisten = fn;
+    const events = [
+      'menu://preferences',
+      'menu://keyboard-shortcuts',
+      'menu://command-palette',
+      'menu://toggle-local-pane',
+      'menu://sync',
+      'menu://links',
+      'menu://upload',
+      'menu://new-folder',
+      'menu://disconnect',
+    ];
+
+    Promise.all(events.map((name) => listen(name, () => handleMenuEvent(name))))
+      .then((fns) => {
+        // An unlisten that resolves after cleanup has to be called right away.
+        if (cancelled) {
+          fns.forEach((fn) => fn());
+          return;
+        }
+        unlisteners.push(...fns);
       })
-      .catch((err) => console.error('Failed to listen for preferences menu:', err));
+      .catch((err) => console.error('Failed to listen for menu events:', err));
+
     return () => {
-      unlisten?.();
+      cancelled = true;
+      unlisteners.forEach((fn) => fn());
     };
   }, []);
 
@@ -193,33 +263,6 @@ function App() {
       setProfiles(loadedProfiles);
     } catch (err) {
       console.error('Failed to load profiles:', err);
-    }
-  };
-
-  const loadPresignHistory = async () => {
-    try {
-      const history = await invoke<PresignHistoryEntry[]>('get_presign_history');
-      setPresignHistory(history);
-    } catch (err) {
-      console.error('Failed to load presign history:', err);
-    }
-  };
-
-  const clearPresignHistory = async () => {
-    try {
-      await invoke('clear_presign_history');
-      setPresignHistory([]);
-    } catch (err) {
-      console.error('Failed to clear presign history:', err);
-    }
-  };
-
-  const deletePresignHistoryEntry = async (entryId: string) => {
-    try {
-      await invoke('delete_presign_history_entry', { entryId });
-      setPresignHistory(prev => prev.filter(e => e.id !== entryId));
-    } catch (err) {
-      console.error('Failed to delete presign history entry:', err);
     }
   };
 
@@ -500,11 +543,36 @@ function App() {
   // Reads the live count from the ref to keep this callback's deps minimal.
   const connectProfile = useCallback(async (profile: ConnectionProfile) => {
     if (editSessionsRef.current.length > 0) {
+      setPendingDisconnect(false);
       setPendingSwitchProfile(profile);
       return;
     }
     await doConnectProfile(profile);
   }, [doConnectProfile]);
+
+  // The titlebar switcher lists saved profiles by name and subtitle only —
+  // never the credentials a profile carries.
+  const switcherProfiles = useMemo(
+    () => profiles.map((p) => ({
+      id: p.id,
+      name: p.name,
+      protocol: p.protocol,
+      username: p.username,
+      host: p.host,
+      port: p.port?.toString(),
+      bucket: p.bucket,
+      endpoint: p.endpoint,
+    })),
+    [profiles],
+  );
+
+  // Switching goes through the same connect path as the palette, so the
+  // editor warning still appears before the session is replaced.
+  const handleSwitchConnection = useCallback((profileId: string) => {
+    const profile = profiles.find((p) => p.id === profileId);
+    if (!profile) return;
+    connectProfile(profile);
+  }, [profiles, connectProfile]);
 
   // "Switch anyway": stop every watcher, then perform the deferred connect.
   const confirmSwitchProfile = useCallback(async () => {
@@ -522,7 +590,7 @@ function App() {
   }, []);
 
   // Stop any active external-editor watchers and tear down the session.
-  const handleDisconnect = useCallback(() => {
+  const performDisconnect = useCallback(() => {
     editSessionsRef.current.forEach((s) => { invoke('stop_editing_file', { editorId: s.editorId }).catch(() => {}); });
     editSessionsRef.current = [];
     setEditSessions([]);
@@ -531,6 +599,18 @@ function App() {
     setRecentPaths([]);
     setSession(null);
   }, []);
+
+  // Gating wrapper: confirm before tearing the session down while external
+  // edit sessions are mid-flight. Reads the live count from the ref to keep
+  // this callback's deps minimal. Only one warning dialog is mounted at a time.
+  const requestDisconnect = useCallback(() => {
+    if (disconnectNeedsConfirm(editSessionsRef.current.length)) {
+      setPendingSwitchProfile(null);
+      setPendingDisconnect(true);
+      return;
+    }
+    performDisconnect();
+  }, [performDisconnect]);
 
   // Mirror edit sessions into a ref so disconnect can read them without a stale
   // closure, and refresh the list on backend lifecycle events while connected.
@@ -611,59 +691,30 @@ function App() {
     return () => clearTimeout(timer);
   }, [deleteProgress]);
 
-  const paletteActions: CommandAction[] = session
-    ? [
-        { id: 'refresh', label: 'Refresh', hint: 'Reload current folder', keywords: 'reload', run: () => explorerCmdsRef.current?.refresh() },
-        { id: 'new-folder', label: 'New Folder', keywords: 'create directory mkdir', run: () => explorerCmdsRef.current?.newFolder() },
-        { id: 'upload', label: 'Upload Files', keywords: 'put send', run: () => explorerCmdsRef.current?.upload() },
-        { id: 'cycle-theme', label: `Theme: ${THEME_LABELS[themeMode]}`, hint: 'System → Light → Dark', keywords: 'appearance dark light theme mode colours colors', run: () => setThemeMode((prev) => nextThemeMode(prev)) },
-        { id: 'toggle-dual-pane', label: dualPaneEnabled ? 'Hide Local Pane' : 'Show Local Pane', hint: '⌥⌘L', keywords: 'local filesystem split side by side dual pane', run: () => toggleDualPane() },
-        { id: 'inspector', label: 'Open Properties Inspector', keywords: 'metadata details info', run: () => setInspectorOpen(true) },
-        { id: 'links', label: 'Shared Links History', keywords: 'presign url share', run: () => { loadPresignHistory(); setShowHistory(true); } },
-        ...(editSessions.length > 0
-          ? [{ id: 'stop-all-editors', label: 'Stop All External Editors', hint: `${editSessions.length} active`, keywords: 'editor external edit close stop watch', run: handleStopAllEditors }]
-          : []),
-        ...editSessions.map((s) => ({
-          id: `stop-edit-${s.editorId}`,
-          label: `Stop editing ${s.filename}`,
-          hint: s.saveCount > 0 ? `saved ${s.saveCount}×` : 'unsaved',
-          keywords: 'editor external edit close stop watch',
-          run: () => handleStopEditor(s.editorId),
-        })),
-        { id: 'sync-open', label: 'Open Sync', keywords: 'sync mirror upload download diff', run: () => { setSyncPrefillProfile(null); setSyncRunNow(false); setSyncPanelOpen(true); } },
-        ...syncProfiles.map((sp) => ({
-          id: `run-sync-${sp.id}`,
-          label: `Run sync: ${sp.name}`,
-          hint: sp.direction === 'localToRemote' ? '→ remote' : '← local',
-          keywords: 'sync mirror profile run',
-          run: () => { setSyncPrefillProfile(sp); setSyncRunNow(false); setSyncPanelOpen(true); },
-        })),
-        // "Run now" deliberately loads the profile into the panel instead of
-        // executing anything directly: internal profile execution runs the
-        // profile's delete_extraneous deletions with no diff preview and no
-        // confirmation, and no plaintext path for it may remain (DIRECTION.md:
-        // destructive actions always confirmed). The quick re-run affordance
-        // is kept by loading the profile and auto-computing the diff
-        // in SyncPanel — one keystroke still lands on the reviewed plan, and
-        // Apply reuses the existing delete-confirmation block, so the count the
-        // user approves is the count that runs. Errors surface in the panel.
-        ...syncProfiles.map((sp) => ({
-          id: `run-sync-now-${sp.id}`,
-          label: `Run sync profile now: ${sp.name}`,
-          hint: sp.direction === 'localToRemote' ? '→ remote · previews diff' : '← local · previews diff',
-          keywords: 'sync mirror profile run now immediate',
-          run: () => { setSyncPrefillProfile(sp); setSyncRunNow(true); setSyncPanelOpen(true); },
-        })),
-        { id: 'settings', label: 'Open Settings', keywords: 'preferences config about privacy', run: () => setSettingsOpen(true) },
-        { id: 'onboarding', label: 'Show Onboarding', keywords: 'welcome tutorial intro', run: handleShowOnboardingAgain },
-        { id: 'lock-credentials', label: 'Lock Credentials Now', keywords: 'keychain password secure lock', run: handleLockCredentials },
-        { id: 'disconnect', label: 'Disconnect', keywords: 'logout exit close', run: handleDisconnect },
-      ]
-    : [
-        { id: 'settings', label: 'Open Settings', keywords: 'preferences config about privacy', run: () => setSettingsOpen(true) },
-        { id: 'onboarding', label: 'Show Onboarding', keywords: 'welcome tutorial intro', run: handleShowOnboardingAgain },
-        { id: 'lock-credentials', label: 'Lock Credentials Now', keywords: 'keychain password secure lock', run: handleLockCredentials },
-      ];
+  const paletteActions: CommandAction[] = buildCommandActions({
+    connected: session !== null,
+    themeLabel: THEME_LABELS[themeMode],
+    dualPaneEnabled,
+    editSessions,
+    syncProfiles,
+    refresh: () => explorerCmdsRef.current?.refresh(),
+    newFolder: () => explorerCmdsRef.current?.newFolder(),
+    upload: () => explorerCmdsRef.current?.upload(),
+    toggleTheme: () => setThemeMode((prev) => nextThemeMode(prev)),
+    toggleDualPane: () => toggleDualPane(),
+    openInspector: () => setInspectorOpen(true),
+    openLinks: () => { loadPresignHistory(); setShowHistory(true); },
+    stopAllEditors: handleStopAllEditors,
+    stopEditor: (editorId) => handleStopEditor(editorId),
+    openSync: () => { setSyncPrefillProfile(null); setSyncRunNow(false); setSyncPanelOpen(true); },
+    runSync: (sp) => { setSyncPrefillProfile(sp); setSyncRunNow(false); setSyncPanelOpen(true); },
+    runSyncNow: (sp) => { setSyncPrefillProfile(sp); setSyncRunNow(true); setSyncPanelOpen(true); },
+    openSettings: () => setSettingsOpen(true),
+    openShortcuts: () => setShortcutsOpen(true),
+    showOnboarding: handleShowOnboardingAgain,
+    lockCredentials: handleLockCredentials,
+    disconnect: requestDisconnect,
+  });
 
   if (!session) {
     return (
@@ -690,6 +741,11 @@ function App() {
           themeMode={themeMode}
           onThemeModeChange={setThemeMode}
         />
+        <ShortcutsDialog
+          open={shortcutsOpen}
+          onClose={() => setShortcutsOpen(false)}
+          platform={SHORTCUT_PLATFORM}
+        />
       </>
     );
   }
@@ -700,94 +756,19 @@ function App() {
         Native macOS chrome: Overlay titlebar + hiddenTitle keep system traffic
         lights; this header is the draggable toolbar that content lives under.
       */}
-      <header
-        data-tauri-drag-region
-        className="app-titlebar app-titlebar-traffic justify-between gap-3 pr-3 bg-zinc-900 border-b border-zinc-800"
-      >
-        <div data-tauri-drag-region className="flex items-center gap-2 min-w-0">
-          <h1
-            data-tauri-drag-region
-            className="text-[13px] font-semibold tracking-tight text-zinc-100 shrink-0"
-          >
-            Galeon
-          </h1>
-          <span data-tauri-drag-region className="text-zinc-700 shrink-0" aria-hidden>
-            ·
-          </span>
-          <span
-            data-tauri-drag-region
-            className="text-[13px] text-zinc-400 truncate"
-            title={session.protocol === 'sftp' || session.protocol === 'ftp' || session.protocol === 'ftps'
-              ? (session.protocol ?? '').toUpperCase()
-              : session.bucket}
-          >
-            {session.protocol === 'sftp' || session.protocol === 'ftp' || session.protocol === 'ftps'
-              ? (session.protocol ?? '').toUpperCase()
-              : session.bucket}
-          </span>
-        </div>
-        <div data-no-drag className="flex items-center gap-1 shrink-0">
-          {session && (
-            <button
-              onClick={() => setDualPaneEnabled((prev) => !prev)}
-              title="Toggle Dual Pane (⌥⌘L)"
-              aria-pressed={dualPaneEnabled}
-              className={`ui-button ${
-                dualPaneEnabled
-                  ? 'text-gale-teal bg-gale-teal/10'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-              }`}
-            >
-              <Columns className="w-3.5 h-3.5" />
-              <span>Local</span>
-            </button>
-          )}
-          <button
-            onClick={() => setPaletteOpen(true)}
-            title="Command Palette (⌘K)"
-            className="ui-button ui-button-ghost"
-          >
-            <Command className="w-3.5 h-3.5" />
-            <span>Commands</span>
-          </button>
-          <ActiveEditors
-            sessions={editSessions}
-            onStop={handleStopEditor}
-            onStopAll={handleStopAllEditors}
-          />
-          <button
-            onClick={() => { setSyncPrefillProfile(null); setSyncRunNow(false); setSyncPanelOpen(true); }}
-            title="Sync"
-            className="ui-button ui-button-ghost"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Sync</span>
-          </button>
-          <button
-            onClick={() => { loadPresignHistory(); setShowHistory(true); }}
-            title="Shared links"
-            className="ui-button ui-button-ghost"
-          >
-            <Link className="w-3.5 h-3.5" />
-            <span>Links</span>
-            {presignHistory.length > 0 && <span className="metric-text">{presignHistory.length}</span>}
-          </button>
-          <button
-            onClick={() => setSettingsOpen(true)}
-            title="Settings (⌘,)"
-            aria-label="Settings"
-            className="ui-button ui-button-ghost"
-          >
-            <Settings className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={handleDisconnect}
-            className="ui-button ui-button-ghost ml-1"
-          >
-            Disconnect
-          </button>
-        </div>
-      </header>
+      <ConnectedHeader
+        bucket={session.bucket}
+        protocol={session.protocol}
+        profileId={session.profileId}
+        profiles={switcherProfiles}
+        onConnect={handleSwitchConnection}
+        onDisconnect={requestDisconnect}
+        dualPaneEnabled={dualPaneEnabled}
+        onToggleDualPane={() => setDualPaneEnabled((prev) => !prev)}
+        editSessions={editSessions}
+        onStopEditor={handleStopEditor}
+        onStopAllEditors={handleStopAllEditors}
+      />
       <main className="flex-1 min-h-0 overflow-hidden">
         {dualPaneEnabled ? (
           <SplitPane
@@ -920,40 +901,15 @@ function App() {
       />
 
       {/* Disconnect-and-switch confirmation (external edits mid-flight) */}
-      {pendingSwitchProfile && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-[480px] max-h-[80vh] shadow-2xl flex flex-col">
-            <h3 className="text-lg font-semibold mb-2">Switch connection?</h3>
-            <p className="text-sm text-zinc-400">
-              You have {editSessions.length} file{editSessions.length === 1 ? '' : 's'} open in an external editor.
-              Switching will stop watching them — unsaved changes in your editor won't be re-uploaded.
-            </p>
-            {editSessions.length > 0 && (
-              <ul className="mt-3 max-h-40 overflow-y-auto space-y-1 rounded-lg border border-zinc-800 bg-zinc-950/50 p-2">
-                {editSessions.map((s) => (
-                  <li key={s.editorId} className="text-sm text-zinc-300 truncate">
-                    {s.filename}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="mt-6 flex justify-end space-x-2">
-              <button
-                onClick={cancelSwitchProfile}
-                className="px-4 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmSwitchProfile}
-                className="px-4 py-2 text-sm rounded-lg bg-rose-600 text-white hover:bg-rose-500"
-              >
-                Switch anyway
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DisconnectConfirmations
+        switchPending={pendingSwitchProfile !== null}
+        disconnectPending={pendingDisconnect}
+        sessions={editSessions}
+        onCancelSwitch={cancelSwitchProfile}
+        onConfirmSwitch={confirmSwitchProfile}
+        onCancelDisconnect={() => setPendingDisconnect(false)}
+        onConfirmDisconnect={() => { setPendingDisconnect(false); performDisconnect(); }}
+      />
 
       {showOnboarding && (
         <OnboardingWizard
@@ -968,6 +924,12 @@ function App() {
         onShowOnboarding={handleShowOnboardingAgain}
         themeMode={themeMode}
         onThemeModeChange={setThemeMode}
+      />
+
+      <ShortcutsDialog
+        open={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
+        platform={SHORTCUT_PLATFORM}
       />
 
       {/* Presign History Modal */}

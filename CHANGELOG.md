@@ -1,3 +1,71 @@
+## [Unreleased]
+
+### Added
+
+- **The keyboard map is in the app.** Galeon had collected a real keyboard
+  model — arrows and F2 in the file lists, ⇧⌘U and ⇧⌘N in the menu, ⌥⌘L for the
+  local pane — with nothing in the window that listed it. **Help → Keyboard
+  Shortcuts** (⌘/, Ctrl+/ elsewhere) opens a cheatsheet grouped by where the
+  keys work: anywhere, the file list, the split pane. The keys are drawn for the
+  platform you are on from one list (`keyboardShortcuts`), and the command
+  palette carries the same entry, so the two cannot disagree. A test reads
+  `menu_bar.rs` and fails when a native accelerator is missing from the sheet.
+- **Keyboard navigation in both file panes.** Arrow keys walk the rows, Shift+Arrow
+  extends the selection, Home/End jump to the ends, Enter opens the row under the
+  cursor, Cmd/Ctrl+A selects everything, and Escape clears the selection. The keys
+  belong to the pane you are in — the search box and the inline editor keep their
+  own — and the remote list scrolls the cursor into view even when the row sits
+  outside the windowed viewport. The rules live in one pure helper
+  (`fileListKeyAction`), shared by the remote and local panes.
+- **Back, Forward, and Up in both file panes.** The remote pane could not go up a
+  folder, and neither pane could return to the folder it had just left — the
+  breadcrumbs jumped to ancestors but could not restore a sibling. Each pane now
+  keeps its own history: **Back** and **Forward** walk it, and **Up** goes to the
+  parent (the remote pane gained it; the local pane already had it). Every other
+  move — a breadcrumb, a folder, a command-palette jump — is recorded, and the
+  selection is cleared when the location changes. The rules are one pure module
+  (`pathHistory`), unit-tested.
+- **The working actions are in the native menu bar.** File carries **Upload…**
+  (⇧⌘U), **New Folder…** (⇧⌘N), and **Disconnect**; View carries **Toggle Local
+  Pane** (⌥⌘L), **Command Palette** (⌘K), **Sync…**, and **Shared Links**. The menu
+  emits events and the existing handlers run, so Disconnect still asks before it
+  tears down a session that has files open in an external editor. The ⌥⌘L
+  shortcut is now the menu's own accelerator, so the pane can no longer toggle
+  twice. The titlebar buttons stay until the pane chrome is collapsed.
+- **Switch saved connections from the titlebar.** The connected window showed a
+  bucket name and a Disconnect button, so choosing another saved connection
+  meant disconnecting and connecting again. The titlebar identity is now a menu
+  of saved profiles: one click to switch, the current one marked in teal,
+  Disconnect as the last row, and the keyboard works (arrows move, Enter picks,
+  Escape closes). Switching goes through the same path as the command palette,
+  so the "files open in an external editor" warning still appears before the
+  session is replaced.
+- **One chrome row per file pane.** A connected window stacked a titlebar, a
+  path bar, and a toolbar before the first file — and dual pane doubled the
+  last two. Each pane now has a single row: navigation, path, search, actions,
+  filters. The window titlebar keeps only the connection switcher, the local
+  toggle, and live editor state; **Commands**, **Sync**, **Links**, **Settings**,
+  and **Disconnect** as text buttons are gone from it, because the native menu
+  (File / View) and the connection switcher already carry them. Every action
+  still works — the menu is the way in now.
+- **Rename and delete from the keyboard.** With a row under the cursor, **F2**
+  renames it and **⌘⌫** (Ctrl+Backspace) deletes it — through the same
+  confirmations the context menu asks for, and a multi-row selection deletes as
+  a batch. The local pane leaves both keys alone: it has nothing to rename or
+  delete.
+
+### Changed
+
+- **Clicking a row now behaves like a file manager.** A plain click *replaces* the
+  selection instead of toggling it (clicking the same row twice used to deselect
+  it), Cmd/Ctrl-click toggles one row, and Shift-click extends a range from the
+  last row you clicked. The checkbox column still behaves like a checkbox. The
+  local pane no longer keeps a second, subtly different copy of these rules — both
+  panes now share one selection model.
+- **The per-row Actions button is gone from the remote list.** Right-click opens
+  the same menu; the column was spending a fifth of the table on a button that
+  duplicated it.
+
 ## [1.0.0-alpha.8] - 2026-10-17
 
 ### Added

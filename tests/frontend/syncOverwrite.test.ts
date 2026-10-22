@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { findOverwrites } from '../../src/components/SyncPanel';
+import { findOverwrites } from '../../src/syncModel';
 
 // One-way sync copies the source over the destination by design, so a differing
 // file is replaced even when the destination is newer. That is correct behaviour,

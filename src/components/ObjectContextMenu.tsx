@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Download, FolderDown, Eye, Share2, PenLine, Info, Pencil, FolderInput, Copy, Trash2 } from 'lucide-react';
-import type { GaleonObject } from '../types';
-import type { ProtocolCapabilities, StorageProtocol } from '../types';
-import { isPreviewableFile } from './PropertiesInspector';
+import type { GaleonObject, ProtocolCapabilities, StorageProtocol } from '../types';
+import { isPreviewableFile } from './preview/previewModel';
 
 export type ObjectMenuAction = 'download' | 'downloadHere' | 'preview' | 'share' | 'edit' | 'properties' | 'rename' | 'move' | 'copy' | 'delete';
 interface ObjectContextMenuProps {
