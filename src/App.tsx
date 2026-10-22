@@ -21,6 +21,7 @@ import { DeleteProgressToast, DeleteProgress } from './components/DeleteProgress
 import { LocalPane } from './components/LocalPane';
 import { SplitPane } from './components/SplitPane';
 import { PresignHistoryModal } from './components/PresignHistoryModal';
+import { usePresignHistory } from './hooks/usePresignHistory';
 import { nextThemeMode, THEME_LABELS } from './theme';
 import { useLayoutPreferences } from './hooks/useLayoutPreferences';
 import { disconnectNeedsConfirm } from './disconnectGuard';
@@ -28,7 +29,6 @@ import { disconnectNeedsConfirm } from './disconnectGuard';
 import type {
   AppSettings,
   ConnectionProfile,
-  PresignHistoryEntry,
   ProtocolCapabilities,
 } from './types';
 
@@ -46,8 +46,10 @@ function App() {
   capabilities?: ProtocolCapabilities;
 } | null>(null);
   const [profiles, setProfiles] = useState<ConnectionProfile[]>([]);
-  const [presignHistory, setPresignHistory] = useState<PresignHistoryEntry[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const {
+    presignHistory, loadPresignHistory, clearPresignHistory, deletePresignHistoryEntry,
+  } = usePresignHistory();
 
   // Phase 9 — Power UX state
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -261,33 +263,6 @@ function App() {
       setProfiles(loadedProfiles);
     } catch (err) {
       console.error('Failed to load profiles:', err);
-    }
-  };
-
-  const loadPresignHistory = async () => {
-    try {
-      const history = await invoke<PresignHistoryEntry[]>('get_presign_history');
-      setPresignHistory(history);
-    } catch (err) {
-      console.error('Failed to load presign history:', err);
-    }
-  };
-
-  const clearPresignHistory = async () => {
-    try {
-      await invoke('clear_presign_history');
-      setPresignHistory([]);
-    } catch (err) {
-      console.error('Failed to clear presign history:', err);
-    }
-  };
-
-  const deletePresignHistoryEntry = async (entryId: string) => {
-    try {
-      await invoke('delete_presign_history_entry', { entryId });
-      setPresignHistory(prev => prev.filter(e => e.id !== entryId));
-    } catch (err) {
-      console.error('Failed to delete presign history entry:', err);
     }
   };
 

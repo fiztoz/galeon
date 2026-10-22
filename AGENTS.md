@@ -48,6 +48,7 @@ Product intent lives in [`docs/DIRECTION.md`](docs/DIRECTION.md). UI tokens and 
 | Pane navigation history (back / forward / up) | `src/pathHistory.ts` |
 | Object dialogs (create / rename / move / copy / share / delete) | `src/hooks/useExplorerDialogs.tsx` |
 | Object properties drawer / preview gate + loader | `src/components/PropertiesInspector.tsx`, `src/components/preview/previewModel.ts`, `src/hooks/useObjectPreview.ts` |
+| Shared-link (presign) history | `src/hooks/usePresignHistory.ts` |
 | App shell / profiles state | `src/App.tsx` |
 | Connected titlebar / connection switcher | `src/components/ConnectedHeader.tsx`, `src/components/ConnectionSwitcher.tsx` |
 | Command palette action list | `src/commandActions.ts` |
