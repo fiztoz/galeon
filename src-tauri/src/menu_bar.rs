@@ -112,6 +112,12 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         "File",
         true,
         &[
+            // macOS keeps Settings in the app menu; every other platform has no
+            // app menu, so File is where its convention puts it.
+            #[cfg(not(target_os = "macos"))]
+            &preferences,
+            #[cfg(not(target_os = "macos"))]
+            &PredefinedMenuItem::separator(app)?,
             &upload,
             &new_folder,
             &PredefinedMenuItem::separator(app)?,
