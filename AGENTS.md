@@ -38,7 +38,8 @@ Product intent lives in [`docs/DIRECTION.md`](docs/DIRECTION.md). UI tokens and 
 | SSH tunnels / config / known hosts | `src-tauri/src/ssh_*.rs` |
 | App bootstrap + `invoke_handler` only | `src-tauri/src/lib.rs` (~180 lines) |
 | Profile import/export UI | `src/components/ProfileImportExport.tsx` |
-| Connection form / connect flow | `src/components/Connection.tsx` |
+| Connection form / connect flow | `src/components/Connection.tsx`, `src/components/connection/connect.ts` |
+| Profile select / connect / save / delete on the connect screen | `src/components/connection/useConnectionProfiles.ts` |
 | Local filesystem pane (dual-pane) | `src/components/LocalPane.tsx` |
 | Remote file pane | `src/components/Explorer.tsx` |
 | Pane chrome row (one row per pane) | `src/components/PaneChrome.tsx` |
