@@ -2,14 +2,14 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { detectShortcutPlatform } from "./keyboardShortcuts";
 import "./index.css";
 
 // CSS defaults to macOS chrome (product is mac-first). Mark other platforms
 // so traffic-light inset is removed where Overlay titlebar does not apply.
 const isMac =
   typeof navigator !== "undefined" &&
-  (/Mac|iPhone|iPod|iPad/i.test(navigator.platform) ||
-    /Mac OS X|Macintosh/i.test(navigator.userAgent));
+  detectShortcutPlatform(navigator) === "mac";
 if (!isMac) {
   document.documentElement.classList.add("platform-other");
 } else {

@@ -45,6 +45,7 @@ const context = (over: Partial<CommandActionContext> = {}): CommandActionContext
   runSync: () => {},
   runSyncNow: () => {},
   openSettings: () => {},
+  openShortcuts: () => {},
   showOnboarding: () => {},
   lockCredentials: () => {},
   disconnect: () => {},
@@ -55,7 +56,7 @@ const ids = (actions: { id: string }[]) => actions.map((a) => a.id);
 
 test('a disconnected window only offers the always-available actions', () => {
   const actions = buildCommandActions(context({ connected: false }));
-  expect(ids(actions)).toEqual(['settings', 'onboarding', 'lock-credentials']);
+  expect(ids(actions)).toEqual(['settings', 'keyboard-shortcuts', 'onboarding', 'lock-credentials']);
   expect(ids(actions)).not.toContain('disconnect');
 });
 

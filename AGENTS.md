@@ -48,6 +48,7 @@ Product intent lives in [`docs/DIRECTION.md`](docs/DIRECTION.md). UI tokens and 
 | App shell / profiles state | `src/App.tsx` |
 | Connected titlebar / connection switcher | `src/components/ConnectedHeader.tsx`, `src/components/ConnectionSwitcher.tsx` |
 | Command palette action list | `src/commandActions.ts` |
+| Keyboard map (shortcut data + cheatsheet dialog) | `src/keyboardShortcuts.ts`, `src/components/ShortcutsDialog.tsx` |
 | Shared frontend wire types (camelCase mirrors of Rust structs) | `src/types.ts` |
 | Layout preferences (dual pane, split ratio, theme) | `src/hooks/useLayoutPreferences.ts` |
 | Theme CSS variables | `src/index.css` |

@@ -31,6 +31,7 @@ export type CommandActionContext = {
   runSync: (profile: SyncProfile) => void;
   runSyncNow: (profile: SyncProfile) => void;
   openSettings: () => void;
+  openShortcuts: () => void;
   showOnboarding: () => void;
   lockCredentials: () => void;
   disconnect: () => void;
@@ -40,6 +41,7 @@ export function buildCommandActions(ctx: CommandActionContext): CommandAction[] 
   if (!ctx.connected) {
     return [
       { id: 'settings', label: 'Open Settings', keywords: 'preferences config about privacy', run: ctx.openSettings },
+      { id: 'keyboard-shortcuts', label: 'Keyboard Shortcuts', keywords: 'keys help cheatsheet bindings map', run: ctx.openShortcuts },
       { id: 'onboarding', label: 'Show Onboarding', keywords: 'welcome tutorial intro', run: ctx.showOnboarding },
       { id: 'lock-credentials', label: 'Lock Credentials Now', keywords: 'keychain password secure lock', run: ctx.lockCredentials },
     ];
@@ -88,6 +90,7 @@ export function buildCommandActions(ctx: CommandActionContext): CommandAction[] 
       run: () => ctx.runSyncNow(sp),
     })),
     { id: 'settings', label: 'Open Settings', keywords: 'preferences config about privacy', run: ctx.openSettings },
+    { id: 'keyboard-shortcuts', label: 'Keyboard Shortcuts', keywords: 'keys help cheatsheet bindings map', run: ctx.openShortcuts },
     { id: 'onboarding', label: 'Show Onboarding', keywords: 'welcome tutorial intro', run: ctx.showOnboarding },
     { id: 'lock-credentials', label: 'Lock Credentials Now', keywords: 'keychain password secure lock', run: ctx.lockCredentials },
     { id: 'disconnect', label: 'Disconnect', keywords: 'logout exit close', run: ctx.disconnect },

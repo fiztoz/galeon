@@ -2,6 +2,14 @@
 
 ### Added
 
+- **The keyboard map is in the app.** Galeon had collected a real keyboard
+  model — arrows and F2 in the file lists, ⇧⌘U and ⇧⌘N in the menu, ⌥⌘L for the
+  local pane — with nothing in the window that listed it. **Help → Keyboard
+  Shortcuts** (⌘/, Ctrl+/ elsewhere) opens a cheatsheet grouped by where the
+  keys work: anywhere, the file list, the split pane. The keys are drawn for the
+  platform you are on from one list (`keyboardShortcuts`), and the command
+  palette carries the same entry, so the two cannot disagree. A test reads
+  `menu_bar.rs` and fails when a native accelerator is missing from the sheet.
 - **Keyboard navigation in both file panes.** Arrow keys walk the rows, Shift+Arrow
   extends the selection, Home/End jump to the ends, Enter opens the row under the
   cursor, Cmd/Ctrl+A selects everything, and Escape clears the selection. The keys

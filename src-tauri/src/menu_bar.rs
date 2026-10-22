@@ -34,6 +34,9 @@ pub const SYNC_EVENT: &str = "menu://sync";
 pub const LINKS_ID: &str = "links";
 pub const LINKS_EVENT: &str = "menu://links";
 
+pub const KEYBOARD_SHORTCUTS_ID: &str = "keyboard-shortcuts";
+pub const KEYBOARD_SHORTCUTS_EVENT: &str = "menu://keyboard-shortcuts";
+
 /// Build and install the app menu; wire every item → frontend event.
 pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let pkg = app.package_info();
@@ -73,6 +76,16 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     )?;
     let sync = MenuItem::with_id(app, SYNC_ID, "Sync…", true, None::<&str>)?;
     let links = MenuItem::with_id(app, LINKS_ID, "Shared Links", true, None::<&str>)?;
+
+    // Help is where a user looks for the key map; ⌘/ is the shortcut every
+    // keyboard-first app already teaches.
+    let keyboard_shortcuts = MenuItem::with_id(
+        app,
+        KEYBOARD_SHORTCUTS_ID,
+        "Keyboard Shortcuts",
+        true,
+        Some("CmdOrCtrl+/"),
+    )?;
 
     #[cfg(target_os = "macos")]
     let app_submenu = Submenu::with_items(
@@ -166,6 +179,9 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         "Help",
         true,
         &[
+            &keyboard_shortcuts,
+            #[cfg(not(target_os = "macos"))]
+            &PredefinedMenuItem::separator(app)?,
             #[cfg(not(target_os = "macos"))]
             &PredefinedMenuItem::about(app, Some("About Galeon"), Some(about))?,
         ],
@@ -196,6 +212,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             COMMAND_PALETTE_ID => COMMAND_PALETTE_EVENT,
             SYNC_ID => SYNC_EVENT,
             LINKS_ID => LINKS_EVENT,
+            KEYBOARD_SHORTCUTS_ID => KEYBOARD_SHORTCUTS_EVENT,
             _ => return,
         };
         let _ = app.emit(event_name, ());
@@ -219,6 +236,7 @@ mod tests {
             COMMAND_PALETTE_EVENT,
             SYNC_EVENT,
             LINKS_EVENT,
+            KEYBOARD_SHORTCUTS_EVENT,
         ];
         let mut seen = std::collections::BTreeSet::new();
         for event in events {

@@ -15,6 +15,8 @@ import { SyncPanel } from './components/SyncPanel';
 import type { SyncProfile } from './syncModel';
 import { OnboardingWizard, OnboardingProtocol } from './components/OnboardingWizard';
 import { SettingsPanel } from './components/SettingsPanel';
+import { ShortcutsDialog } from './components/ShortcutsDialog';
+import { detectShortcutPlatform } from './keyboardShortcuts';
 import { DeleteProgressToast, DeleteProgress } from './components/DeleteProgressToast';
 import { LocalPane } from './components/LocalPane';
 import { SplitPane } from './components/SplitPane';
@@ -29,6 +31,11 @@ import type {
   PresignHistoryEntry,
   ProtocolCapabilities,
 } from './types';
+
+// Which glyphs the cheatsheet draws: ⌘ on macOS, Ctrl everywhere else.
+const SHORTCUT_PLATFORM = detectShortcutPlatform(
+  typeof navigator === 'undefined' ? undefined : navigator,
+);
 
 function App() {
   const [session, setSession] = useState<{
@@ -81,6 +88,7 @@ function App() {
   // Phase 14 — onboarding & settings
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [onboardingProtocol, setOnboardingProtocol] = useState<OnboardingProtocol | null>(null);
 
   // Layout preferences (dual pane, its path, split ratio, theme) live in one
@@ -126,6 +134,9 @@ function App() {
         case 'menu://preferences':
           setSettingsOpen(true);
           return;
+        case 'menu://keyboard-shortcuts':
+          setShortcutsOpen(true);
+          return;
         case 'menu://command-palette':
           setPaletteOpen(true);
           return;
@@ -157,6 +168,7 @@ function App() {
 
     const events = [
       'menu://preferences',
+      'menu://keyboard-shortcuts',
       'menu://command-palette',
       'menu://toggle-local-pane',
       'menu://sync',
@@ -723,6 +735,7 @@ function App() {
     runSync: (sp) => { setSyncPrefillProfile(sp); setSyncRunNow(false); setSyncPanelOpen(true); },
     runSyncNow: (sp) => { setSyncPrefillProfile(sp); setSyncRunNow(true); setSyncPanelOpen(true); },
     openSettings: () => setSettingsOpen(true),
+    openShortcuts: () => setShortcutsOpen(true),
     showOnboarding: handleShowOnboardingAgain,
     lockCredentials: handleLockCredentials,
     disconnect: requestDisconnect,
@@ -752,6 +765,11 @@ function App() {
           onShowOnboarding={handleShowOnboardingAgain}
           themeMode={themeMode}
           onThemeModeChange={setThemeMode}
+        />
+        <ShortcutsDialog
+          open={shortcutsOpen}
+          onClose={() => setShortcutsOpen(false)}
+          platform={SHORTCUT_PLATFORM}
         />
       </>
     );
@@ -931,6 +949,12 @@ function App() {
         onShowOnboarding={handleShowOnboardingAgain}
         themeMode={themeMode}
         onThemeModeChange={setThemeMode}
+      />
+
+      <ShortcutsDialog
+        open={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
+        platform={SHORTCUT_PLATFORM}
       />
 
       {/* Presign History Modal */}
