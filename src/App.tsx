@@ -243,7 +243,9 @@ function App() {
     try {
       const result = await invoke<{ sessionId: string; bucket: string; profileId: string; protocol?: StorageProtocol } | null>('auto_reconnect');
       if (result) {
-        console.log('[App] Auto-reconnected to profile:', result.profileId);
+        if (import.meta.env.DEV) {
+          console.debug('[App] Auto-reconnected to profile:', result.profileId);
+        }
         // Fetch capabilities for the protocol
         let caps: ProtocolCapabilities | undefined;
         try {

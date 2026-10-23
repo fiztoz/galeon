@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { ArrowDownToLine, ArrowUpFromLine, Loader2, CheckCircle, XCircle, Pause, Play, X, RotateCcw } from 'lucide-react';
 import { formatSize } from './Explorer';
+import { shouldPersistProgress } from './transferPersist';
 
 export interface TransferState {
   id: string;
@@ -135,16 +136,35 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
   const [isOpen, setIsOpen] = useState(false);
   const [restoredCount, setRestoredCount] = useState(0);
 
+  // The list as of the last update, read synchronously by the event listeners.
+  // Every change goes through `updateTransfers`, so listeners can work out the
+  // next row — and whether to persist it — outside a setState updater. Updaters
+  // must stay pure: React may run them twice (StrictMode) or late.
+  const transfersRef = useRef<Record<string, TransferState>>({});
+  const updateTransfers = useCallback(
+    (next: (prev: Record<string, TransferState>) => Record<string, TransferState>) => {
+      const updated = next(transfersRef.current);
+      if (updated === transfersRef.current) return;
+      transfersRef.current = updated;
+      setTransfers(updated);
+    },
+    [],
+  );
+  // When each transfer (by remote key) was last written to the queue.
+  const lastPersistedAtRef = useRef<Map<string, number>>(new Map());
+
   // Load persisted transfers on mount
   useEffect(() => {
     const loadPersistedTransfers = async () => {
       try {
-        console.log('[TransferManager] Loading persisted transfers...');
         const queue = await invoke<TransferQueueEntry[]>('restore_transfers');
-        console.log('[TransferManager] Restored transfers:', queue.length, queue);
+        // Count only: the entries carry local paths and profile ids.
+        if (import.meta.env.DEV) {
+          console.debug('[TransferManager] Restored transfers:', queue.length);
+        }
         if (queue.length > 0) {
           setRestoredCount(queue.length);
-          setTransfers(prev => {
+          updateTransfers(prev => {
             const updated = { ...prev };
             for (const entry of queue) {
               updated[entry.remote_key] = {
@@ -169,10 +189,11 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
       }
     };
     loadPersistedTransfers();
-  }, []);
+  }, [updateTransfers]);
 
   // Persist transfer to queue
   const persistTransfer = useCallback(async (transfer: TransferState) => {
+    lastPersistedAtRef.current.set(transfer.remoteKey, Date.now());
     try {
       const entry: TransferQueueEntry = {
         id: transfer.id,
@@ -203,23 +224,21 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
       profileId: string;
     }>('transfer-started', (event) => {
       const p = event.payload;
-      setTransfers((prev) => {
-        const existing = prev[p.remoteKey];
-        const updated: TransferState = {
-          id: p.id,
-          remoteKey: p.remoteKey,
-          bytesTransferred: existing?.bytesTransferred ?? 0,
-          totalBytes: p.totalBytes || existing?.totalBytes || 0,
-          percentage: existing?.percentage ?? 0,
-          bytesPerSecond: 0,
-          status: 'active',
-          direction: (p.direction as 'upload' | 'download') || 'download',
-          profileId: p.profileId || existing?.profileId,
-          localPath: p.localPath || existing?.localPath,
-        };
-        persistTransfer(updated);
-        return { ...prev, [p.remoteKey]: updated };
-      });
+      const existing = transfersRef.current[p.remoteKey];
+      const updated: TransferState = {
+        id: p.id,
+        remoteKey: p.remoteKey,
+        bytesTransferred: existing?.bytesTransferred ?? 0,
+        totalBytes: p.totalBytes || existing?.totalBytes || 0,
+        percentage: existing?.percentage ?? 0,
+        bytesPerSecond: 0,
+        status: 'active',
+        direction: (p.direction as 'upload' | 'download') || 'download',
+        profileId: p.profileId || existing?.profileId,
+        localPath: p.localPath || existing?.localPath,
+      };
+      updateTransfers((prev) => ({ ...prev, [p.remoteKey]: updated }));
+      persistTransfer(updated);
       setIsOpen(true);
     });
 
@@ -232,42 +251,39 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
       direction: string;
     }>('transfer-progress', (event) => {
       const payload = event.payload;
-      setTransfers((prev) => {
-        const existing = prev[payload.remoteKey];
-        const updated: TransferState = {
-          id: existing?.id || payload.remoteKey,
-          remoteKey: payload.remoteKey,
-          bytesTransferred: payload.bytesTransferred,
-          totalBytes: payload.totalBytes,
-          percentage: payload.percentage,
-          bytesPerSecond: payload.bytesPerSecond,
-          status: 'active',
-          direction: (payload.direction as 'upload' | 'download') || existing?.direction || 'download',
-          profileId: existing?.profileId,
-          localPath: existing?.localPath,
-        };
-        // A chunk in flight when pause was clicked still emits one progress
-        // event after transfer-paused; don't let it flip the row back to active.
-        if (existing?.status === 'paused') {
-          updated.status = 'paused';
-        }
-        // Debounced persist - only persist every 5 seconds
-        if (!existing || Date.now() % 5000 < 100) {
-          persistTransfer(updated);
-        }
-        return { ...prev, [payload.remoteKey]: updated };
-      });
+      const existing = transfersRef.current[payload.remoteKey];
+      const updated: TransferState = {
+        id: existing?.id || payload.remoteKey,
+        remoteKey: payload.remoteKey,
+        bytesTransferred: payload.bytesTransferred,
+        totalBytes: payload.totalBytes,
+        percentage: payload.percentage,
+        bytesPerSecond: payload.bytesPerSecond,
+        status: 'active',
+        direction: (payload.direction as 'upload' | 'download') || existing?.direction || 'download',
+        profileId: existing?.profileId,
+        localPath: existing?.localPath,
+      };
+      // A chunk in flight when pause was clicked still emits one progress
+      // event after transfer-paused; don't let it flip the row back to active.
+      if (existing?.status === 'paused') {
+        updated.status = 'paused';
+      }
+      updateTransfers((prev) => ({ ...prev, [payload.remoteKey]: updated }));
+      // Progress is saved at most every few seconds per transfer, so a crash
+      // resumes from a recent offset without writing the queue on every chunk.
+      if (shouldPersistProgress(lastPersistedAtRef.current.get(payload.remoteKey), Date.now())) {
+        persistTransfer(updated);
+      }
     });
 
     const unlistenComplete = listen<string>('transfer-complete', (event) => {
       const remoteKey = event.payload;
-      setTransfers((prev) => {
-        const item = prev[remoteKey];
-        if (!item) return prev;
-        const updated = { ...item, percentage: 100, status: 'completed' as const };
-        persistTransfer(updated);
-        return { ...prev, [remoteKey]: updated };
-      });
+      const item = transfersRef.current[remoteKey];
+      if (!item) return;
+      const updated = { ...item, percentage: 100, status: 'completed' as const };
+      updateTransfers((prev) => ({ ...prev, [remoteKey]: updated }));
+      persistTransfer(updated);
     });
 
     const unlistenFailed = listen<{
@@ -277,24 +293,22 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
       direction?: string;
     }>('transfer-failed', (event) => {
       const payload = event.payload;
-      setTransfers((prev) => {
-        const item = prev[payload.remoteKey];
-        const updated: TransferState = {
-          id: item?.id || payload.remoteKey,
-          remoteKey: payload.remoteKey,
-          bytesTransferred: item?.bytesTransferred || 0,
-          totalBytes: item?.totalBytes || 0,
-          percentage: item?.percentage || 0,
-          bytesPerSecond: 0,
-          status: 'failed',
-          direction: (payload.direction as 'upload' | 'download') || item?.direction || 'download',
-          error: payload.error,
-          profileId: item?.profileId,
-          localPath: payload.localPath || item?.localPath,
-        };
-        persistTransfer(updated);
-        return { ...prev, [payload.remoteKey]: updated };
-      });
+      const item = transfersRef.current[payload.remoteKey];
+      const updated: TransferState = {
+        id: item?.id || payload.remoteKey,
+        remoteKey: payload.remoteKey,
+        bytesTransferred: item?.bytesTransferred || 0,
+        totalBytes: item?.totalBytes || 0,
+        percentage: item?.percentage || 0,
+        bytesPerSecond: 0,
+        status: 'failed',
+        direction: (payload.direction as 'upload' | 'download') || item?.direction || 'download',
+        error: payload.error,
+        profileId: item?.profileId,
+        localPath: payload.localPath || item?.localPath,
+      };
+      updateTransfers((prev) => ({ ...prev, [payload.remoteKey]: updated }));
+      persistTransfer(updated);
     });
 
     const unlistenRetrying = listen<{
@@ -305,7 +319,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
       message: string;
     }>('transfer-retrying', (event) => {
       const p = event.payload;
-      setTransfers((prev) => {
+      updateTransfers((prev) => {
         const item = prev[p.remoteKey];
         if (!item) return prev;
         return {
@@ -322,55 +336,40 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
       });
     });
 
+    // Paused / resumed / verifying / cancelled: set the status and save it.
+    const setStatus = (item: TransferState | undefined, status: TransferState['status']) => {
+      if (!item) return undefined;
+      const updated = { ...item, status };
+      updateTransfers((prev) => ({ ...prev, [item.remoteKey]: updated }));
+      persistTransfer(updated);
+      return updated;
+    };
+    const byId = (transferId: string) =>
+      Object.values(transfersRef.current).find((t) => t.id === transferId);
+
     const unlistenPaused = listen<string>('transfer-paused', (event) => {
-      const transferId = event.payload;
-      setTransfers((prev) => {
-        const item = Object.values(prev).find(t => t.id === transferId);
-        if (!item) return prev;
-        const updated = { ...item, status: 'paused' as const };
-        persistTransfer(updated);
-        return { ...prev, [item.remoteKey]: updated };
-      });
+      setStatus(byId(event.payload), 'paused');
     });
 
     const unlistenResumed = listen<string>('transfer-resumed', (event) => {
-      const transferId = event.payload;
-      setTransfers((prev) => {
-        const item = Object.values(prev).find(t => t.id === transferId);
-        if (!item) return prev;
-        const updated = { ...item, status: 'active' as const };
-        persistTransfer(updated);
-        return { ...prev, [item.remoteKey]: updated };
-      });
+      setStatus(byId(event.payload), 'active');
     });
 
     const unlistenVerifying = listen<string>('transfer-verifying', (event) => {
-      const remoteKey = event.payload;
-      setTransfers((prev) => {
-        const item = prev[remoteKey];
-        if (!item) return prev;
-        const updated = { ...item, status: 'verifying' as const };
-        persistTransfer(updated);
-        return { ...prev, [remoteKey]: updated };
-      });
+      setStatus(transfersRef.current[event.payload], 'verifying');
     });
 
     const unlistenCancelled = listen<string>('transfer-cancelled', (event) => {
-      const transferId = event.payload;
-      setTransfers((prev) => {
-        const item = Object.values(prev).find(t => t.id === transferId);
-        if (!item) return prev;
-        const updated = { ...item, status: 'cancelled' as const };
-        persistTransfer(updated);
-        // Remove cancelled transfers after a short delay
-        setTimeout(() => {
-          setTransfers(p => {
-            const { [item.remoteKey]: _, ...rest } = p;
-            return rest;
-          });
-        }, 2000);
-        return { ...prev, [item.remoteKey]: updated };
-      });
+      const updated = setStatus(byId(event.payload), 'cancelled');
+      if (!updated) return;
+      // Remove cancelled transfers after a short delay
+      setTimeout(() => {
+        updateTransfers((p) => {
+          const { [updated.remoteKey]: _, ...rest } = p;
+          return rest;
+        });
+        lastPersistedAtRef.current.delete(updated.remoteKey);
+      }, 2000);
     });
 
     return () => {
@@ -384,7 +383,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
       unlistenCancelled.then((f) => f());
       unlistenVerifying.then((f) => f());
     };
-  }, [persistTransfer]);
+  }, [persistTransfer, updateTransfers]);
 
   const handlePause = async (transferId: string) => {
     try {
@@ -401,7 +400,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
       // No live worker (transfer restored from a previous session):
       // mark it cancelled in the queue and drop the row locally.
       persistTransfer({ ...transfer, status: 'cancelled' });
-      setTransfers((prev) => {
+      updateTransfers((prev) => {
         const { [transfer.remoteKey]: _, ...rest } = prev;
         return rest;
       });
@@ -417,7 +416,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
       // Downloads pick up from the .part file offset automatically.
       if (onRetry && transfer.localPath) {
         onRetry(transfer);
-        setTransfers((prev) => {
+        updateTransfers((prev) => {
           const { [transfer.remoteKey]: _, ...rest } = prev;
           return rest;
         });
@@ -428,7 +427,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
   const handleClearCompleted = async () => {
     try {
       await invoke('clear_completed_transfers');
-      setTransfers(prev => {
+      updateTransfers(prev => {
         const updated: Record<string, TransferState> = {};
         for (const [key, transfer] of Object.entries(prev)) {
           if (transfer.status !== 'completed' && transfer.status !== 'cancelled') {
@@ -614,7 +613,7 @@ export const TransferManager: React.FC<TransferManagerProps> = ({ onRetry }) => 
                         e.stopPropagation();
                         onRetry(transfer);
                         // Remove failed transfer from list
-                        setTransfers(prev => {
+                        updateTransfers(prev => {
                           const { [transfer.remoteKey]: _, ...rest } = prev;
                           return rest;
                         });
