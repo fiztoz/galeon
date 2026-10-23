@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { useObjectListing, useObjectSorting } from '../hooks/useObjectListing';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import { useWindowedRows } from '../hooks/useWindowedRows';
-import { useFileListKeyboardNav, isInteractiveTarget } from '../hooks/useFileListKeyboard';
+import { useFileListKeyboardNav, isInteractiveTarget, initialTypeAhead, measurePageSize } from '../hooks/useFileListKeyboard';
 import { useExplorerDialogs } from '../hooks/useExplorerDialogs';
 import {
   initialPathHistory,
@@ -300,6 +300,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
   // everything, Escape clears. The listener stays on the pane so dialogs and
   // the command palette keep their own shortcuts.
   const paneRef = useRef<HTMLDivElement | null>(null);
+  const typeAheadRef = useRef(initialTypeAhead());
 
   const handlePaneKeyDown = useFileListKeyboardNav({
     count: filteredObjects.length,
@@ -334,6 +335,8 @@ export const Explorer: React.FC<ExplorerProps> = ({
     },
     onClear: clearSelection,
     onScrollTo: scrollToIndex,
+    pageSize: () => measurePageSize(scrollRef.current),
+    typeAhead: { names: filteredObjects.map((obj) => obj.name), state: typeAheadRef },
   });
 
   const handleDownload = async (obj: GaleonObject) => {

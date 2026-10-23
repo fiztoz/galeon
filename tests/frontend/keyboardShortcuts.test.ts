@@ -78,7 +78,7 @@ test('each platform draws only its own modifier names', () => {
 test('the file list keys that exist are the ones documented', () => {
   const fileList = shortcutGroups().find((group) => group.id === 'file-list');
   const chords = fileList?.rows.flatMap((row) => row.chords) ?? [];
-  for (const chord of ['ArrowUp', 'ArrowDown', 'Shift+ArrowUp', 'Home', 'End', 'Enter', 'F2', 'Mod+A', 'Mod+Backspace', 'Escape']) {
+  for (const chord of ['ArrowUp', 'ArrowDown', 'Shift+ArrowUp', 'Home', 'End', 'Enter', 'F2', 'Mod+A', 'Mod+Backspace', 'Delete', 'PageUp', 'PageDown', 'Escape']) {
     expect(chords).toContain(chord);
   }
 });

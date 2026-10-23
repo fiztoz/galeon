@@ -1,5 +1,6 @@
 import { test, expect } from 'bun:test';
 import {
+  DEFAULT_PAGE_SIZE,
   fileListKeyAction,
   isInteractiveTarget,
   isTypingTarget,
@@ -151,10 +152,42 @@ test('Cmd or Ctrl+Backspace deletes the row under the cursor', () => {
   });
 });
 
-test('bare letters and other keys do nothing', () => {
-  expect(fileListKeyAction(key('a'), state(3), false)).toEqual({ type: 'none' });
-  expect(fileListKeyAction(key('x'), state(3), false)).toEqual({ type: 'none' });
+test('the Delete key deletes the row under the cursor', () => {
+  expect(fileListKeyAction(key('Delete'), state(3, 1), false)).toEqual({ type: 'delete', index: 1 });
+  expect(fileListKeyAction(key('Delete'), state(3, null), false)).toEqual({ type: 'none' });
+  // In a text field Delete edits the text.
+  expect(fileListKeyAction(key('Delete'), state(3, 1), true)).toEqual({ type: 'none' });
+});
+
+test('PageUp and PageDown move a page and clamp at both ends', () => {
+  const paged = (count: number, cursor: number | null, pageSize: number) => ({ count, cursor, pageSize });
+  expect(fileListKeyAction(key('PageDown'), paged(50, 3, 10), false)).toEqual({ type: 'move', index: 13, extend: false });
+  expect(fileListKeyAction(key('PageUp'), paged(50, 13, 10), false)).toEqual({ type: 'move', index: 3, extend: false });
+  expect(fileListKeyAction(key('PageDown'), paged(50, 45, 10), false)).toEqual({ type: 'move', index: 49, extend: false });
+  expect(fileListKeyAction(key('PageUp'), paged(50, 4, 10), false)).toEqual({ type: 'move', index: 0, extend: false });
+  // From no cursor, the first page lands a page in from the edge it moves toward.
+  expect(fileListKeyAction(key('PageDown'), paged(50, null, 10), false)).toEqual({ type: 'move', index: 9, extend: false });
+  expect(fileListKeyAction(key('PageUp'), paged(50, null, 10), false)).toEqual({ type: 'move', index: 40, extend: false });
+  expect(fileListKeyAction(key('PageDown'), paged(4, null, 10), false)).toEqual({ type: 'move', index: 3, extend: false });
+  expect(fileListKeyAction(key('PageUp'), paged(4, null, 10), false)).toEqual({ type: 'move', index: 0, extend: false });
+  // Shift extends, like the arrows.
+  expect(fileListKeyAction(key('PageDown', { shiftKey: true }), paged(50, 0, 10), false)).toEqual({ type: 'move', index: 10, extend: true });
+  // No page size means the default; a nonsense one still moves a row.
+  expect(fileListKeyAction(key('PageDown'), state(50, 0), false)).toEqual({ type: 'move', index: DEFAULT_PAGE_SIZE, extend: false });
+  expect(fileListKeyAction(key('PageDown'), paged(50, 0, 0), false)).toEqual({ type: 'move', index: 1, extend: false });
+  expect(fileListKeyAction(key('PageDown'), paged(0, null, 10), false)).toEqual({ type: 'none' });
+  expect(fileListKeyAction(key('PageDown'), paged(50, 3, 10), true)).toEqual({ type: 'none' });
+});
+
+test('printable characters are type-ahead, command chords and other keys are not', () => {
+  expect(fileListKeyAction(key('a'), state(3), false)).toEqual({ type: 'typeAhead', char: 'a' });
+  expect(fileListKeyAction(key('R', { shiftKey: true }), state(3), false)).toEqual({ type: 'typeAhead', char: 'R' });
+  expect(fileListKeyAction(key('x', { altKey: true }), state(3), false)).toEqual({ type: 'none' });
+  expect(fileListKeyAction(key('x', { ctrlKey: true }), state(3), false)).toEqual({ type: 'none' });
+  expect(fileListKeyAction(key('x', { metaKey: true }), state(3), false)).toEqual({ type: 'none' });
+  expect(fileListKeyAction(key('x'), state(3), true)).toEqual({ type: 'none' });
   expect(fileListKeyAction(key('Tab'), state(3), false)).toEqual({ type: 'none' });
+  expect(fileListKeyAction(key('F5'), state(3), false)).toEqual({ type: 'none' });
 });
 
 test('typing targets are recognised', () => {
@@ -275,9 +308,10 @@ test('the nav handler renames and deletes when the pane supports it', () => {
 
   handle(handlerEvent('F2').event);
   handle(handlerEvent('Backspace', { metaKey: true }).event);
+  handle(handlerEvent('Delete').event);
 
   expect(renamed).toEqual([2]);
-  expect(deleted).toEqual([2]);
+  expect(deleted).toEqual([2, 2]);
 });
 
 test('a pane that cannot rename or delete leaves those keys alone', () => {
@@ -295,9 +329,12 @@ test('a pane that cannot rename or delete leaves those keys alone', () => {
   handle(rename.event);
   const remove = handlerEvent('Backspace', { metaKey: true });
   handle(remove.event);
+  const forwardDelete = handlerEvent('Delete');
+  handle(forwardDelete.event);
 
   expect(rename.wasPrevented()).toBe(false);
   expect(remove.wasPrevented()).toBe(false);
+  expect(forwardDelete.wasPrevented()).toBe(false);
 });
 
 test('the nav handler ignores keys it has no answer for', () => {

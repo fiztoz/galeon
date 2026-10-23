@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { formatSize } from './Explorer';
 import { useMultiSelect } from '../hooks/useMultiSelect';
-import { useFileListKeyboardNav, isInteractiveTarget } from '../hooks/useFileListKeyboard';
+import { useFileListKeyboardNav, isInteractiveTarget, initialTypeAhead, measurePageSize } from '../hooks/useFileListKeyboard';
 import { PaneChrome } from './PaneChrome';
 import { initialPathHistory, moveWithinHistory, pushPath } from '../pathHistory';
 import {
@@ -245,6 +245,8 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
   // the command palette keep their own shortcuts.
   const paneRef = useRef<HTMLDivElement | null>(null);
 
+  const typeAheadRef = useRef(initialTypeAhead());
+
   const handlePaneKeyDown = useFileListKeyboardNav({
     count: filteredEntries.length,
     cursor: cursorIndex,
@@ -264,6 +266,9 @@ export const LocalPane: React.FC<LocalPaneProps> = ({
       if (selectedItems.size !== filteredEntries.length) handleSelectAll();
     },
     onClear: clearSelection,
+    // The list scrolls inside `.pane-content`, not the pane itself.
+    pageSize: () => measurePageSize(tbodyRef.current?.closest('.pane-content')),
+    typeAhead: { names: filteredEntries.map((entry) => entry.name), state: typeAheadRef },
   });
 
   // The local list renders every row, so the cursor row only has to be
