@@ -2,6 +2,16 @@
 
 ### Added
 
+- **Delete, PageUp/PageDown and type-ahead in the file lists.** The forward
+  Delete key now deletes the selected rows in the remote pane (same confirm as
+  ⌘⌫ / Ctrl+Backspace; it is how Windows and Linux file managers delete, and
+  Fn+Backspace sends it on a Mac). PageUp and PageDown move the cursor a screen
+  at a time in both panes, measured from the visible rows, and Shift extends
+  the selection as it does with the arrows. Typing a name jumps to the first
+  row that starts with it (case-insensitive; a pause of 0.7 s starts over;
+  pressing the same letter again cycles through the matches). The local pane
+  still leaves Delete alone. All three are in the keyboard cheatsheet.
+
 - **The keyboard map is in the app.** Galeon had collected a real keyboard
   model — arrows and F2 in the file lists, ⇧⌘U and ⇧⌘N in the menu, ⌥⌘L for the
   local pane — with nothing in the window that listed it. **Help → Keyboard

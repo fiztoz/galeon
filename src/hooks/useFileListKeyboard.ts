@@ -14,7 +14,8 @@ export type ListKeyAction =
   | { type: 'rename'; index: number }
   | { type: 'delete'; index: number }
   | { type: 'selectAll' }
-  | { type: 'clear' };
+  | { type: 'clear' }
+  | { type: 'typeAhead'; char: string };
 
 export type FileListKeyEvent = {
   key: string;
@@ -83,9 +84,15 @@ export function isInteractiveTarget(target: EventTarget | null): boolean {
   return el.getAttribute?.('contenteditable') === 'true';
 }
 
+/** Rows a PageUp / PageDown moves when the pane cannot measure its viewport. */
+export const DEFAULT_PAGE_SIZE = 10;
+
+/** A pause longer than this starts a new type-ahead search. */
+export const TYPE_AHEAD_TIMEOUT_MS = 700;
+
 export function fileListKeyAction(
   event: FileListKeyEvent,
-  state: { count: number; cursor: number | null },
+  state: { count: number; cursor: number | null; pageSize?: number },
   typing: boolean,
 ): ListKeyAction {
   if (typing || event.defaultPrevented) return { type: 'none' };
@@ -95,6 +102,7 @@ export function fileListKeyAction(
   if (count === 0) return { type: 'none' };
 
   const extend = event.shiftKey;
+  const page = Math.max(1, Math.floor(state.pageSize ?? DEFAULT_PAGE_SIZE));
 
   switch (event.key) {
     case 'ArrowDown':
@@ -105,6 +113,18 @@ export function fileListKeyAction(
       return { type: 'move', index: 0, extend };
     case 'End':
       return { type: 'move', index: count - 1, extend };
+    case 'PageDown':
+      return {
+        type: 'move',
+        index: cursor === null ? Math.min(page - 1, count - 1) : Math.min(cursor + page, count - 1),
+        extend,
+      };
+    case 'PageUp':
+      return {
+        type: 'move',
+        index: cursor === null ? Math.max(count - page, 0) : Math.max(cursor - page, 0),
+        extend,
+      };
     case 'Enter':
       return cursor === null ? { type: 'none' } : { type: 'open', index: cursor };
     case 'F2':
@@ -113,6 +133,11 @@ export function fileListKeyAction(
       // Only the modified key is ours: a bare Backspace belongs to the
       // webview, and in a text field it deletes a word.
       if (!(event.metaKey || event.ctrlKey)) break;
+      return cursor === null ? { type: 'none' } : { type: 'delete', index: cursor };
+    case 'Delete':
+      // The forward-delete key is how Windows and Linux file managers delete,
+      // and Fn+Backspace sends it on a Mac. It never edits text here: typing
+      // targets were already excluded above.
       return cursor === null ? { type: 'none' } : { type: 'delete', index: cursor };
     case 'Escape':
       return { type: 'clear' };
@@ -126,7 +151,82 @@ export function fileListKeyAction(
     return { type: 'selectAll' };
   }
 
+  // A printable character with no command modifier is type-ahead: it jumps to
+  // the row whose name starts with what was typed. Shift is allowed — it only
+  // changes the case, and matching ignores case anyway.
+  if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    return { type: 'typeAhead', char: event.key };
+  }
+
   return { type: 'none' };
+}
+
+/** What the user has typed so far, and when they last typed. */
+export type TypeAheadState = { query: string; at: number };
+
+export function initialTypeAhead(): TypeAheadState {
+  return { query: '', at: 0 };
+}
+
+/**
+ * Add one character to the type-ahead query.
+ *
+ * A pause longer than `timeoutMs` starts a fresh query, so typing `re` after a
+ * break searches for `re`, not for whatever was typed a minute ago.
+ */
+export function appendTypeAhead(
+  state: TypeAheadState,
+  char: string,
+  now: number,
+  timeoutMs: number = TYPE_AHEAD_TIMEOUT_MS,
+): TypeAheadState {
+  const fresh = state.query === '' || now - state.at > timeoutMs;
+  return { query: (fresh ? '' : state.query) + char, at: now };
+}
+
+/**
+ * The row a type-ahead query lands on, or null when no name matches.
+ *
+ * Matching is a case-insensitive prefix. A one-letter query — or the same
+ * letter pressed again and again (`ddd`) — steps to the *next* match after the
+ * cursor, so repeated presses cycle through every name starting with that
+ * letter. A longer query refines in place: it keeps the cursor row while that
+ * row still matches. The search wraps past the end of the list.
+ */
+export function typeAheadMatch(
+  names: readonly string[],
+  query: string,
+  cursor: number | null,
+): number | null {
+  if (names.length === 0 || query === '') return null;
+  const lower = query.toLocaleLowerCase();
+  const repeated = [...lower].every((c) => c === lower[0]);
+  const needle = repeated ? lower[0] : lower;
+  const start = cursor === null ? 0 : repeated ? cursor + 1 : cursor;
+  for (let step = 0; step < names.length; step += 1) {
+    const index = (start + step) % names.length;
+    if (names[index].toLocaleLowerCase().startsWith(needle)) return index;
+  }
+  return null;
+}
+
+/**
+ * How many rows fit in a scrolling list, for PageUp / PageDown.
+ *
+ * One row less than the viewport holds, so the row the cursor leaves stays in
+ * sight — the way a desktop list pages. Falls back to `DEFAULT_PAGE_SIZE`
+ * before the list has been laid out.
+ */
+export function pageSizeFor(viewportHeight: number, rowHeight: number): number {
+  if (!(viewportHeight > 0) || !(rowHeight > 0)) return DEFAULT_PAGE_SIZE;
+  return Math.max(1, Math.floor(viewportHeight / rowHeight) - 1);
+}
+
+/** Measure the page size of a scroll container whose rows carry `data-row-index`. */
+export function measurePageSize(scroller: Element | null | undefined): number {
+  if (!scroller) return DEFAULT_PAGE_SIZE;
+  const row = scroller.querySelector('[data-row-index]') as HTMLElement | null;
+  return pageSizeFor(scroller.clientHeight, row?.offsetHeight ?? 0);
 }
 
 export type FileListKeyboardOptions = {
@@ -140,7 +240,7 @@ export type FileListKeyboardOptions = {
   onOpen: (index: number) => void;
   /** The row should be renamed (F2). Omitted where renaming is not possible. */
   onRename?: (index: number) => void;
-  /** The row should be deleted (Cmd/Ctrl+Backspace). */
+  /** The row should be deleted (Delete, or Cmd/Ctrl+Backspace). */
   onDelete?: (index: number) => void;
   /** Every row should be selected (Cmd/Ctrl+A). */
   onSelectAll: () => void;
@@ -148,6 +248,16 @@ export type FileListKeyboardOptions = {
   onClear: () => void;
   /** Bring a row into view — windowed lists need it, plain ones do not. */
   onScrollTo?: (index: number) => void;
+  /** Rows per PageUp / PageDown, read when the key is pressed. */
+  pageSize?: () => number;
+  /**
+   * Type-ahead: the row names in list order, and where the pane keeps the
+   * query between key presses (a `useRef` in a component). Omitted, letters do
+   * nothing.
+   */
+  typeAhead?: { names: readonly string[]; state: { current: TypeAheadState } };
+  /** Clock for type-ahead pauses; tests pass a fake one. */
+  now?: () => number;
 };
 
 /**
@@ -161,7 +271,7 @@ export function useFileListKeyboardNav(options: FileListKeyboardOptions) {
   return (event: FileListKeyHandlerEvent) => {
     const action = fileListKeyAction(
       event,
-      { count: options.count, cursor: options.cursor },
+      { count: options.count, cursor: options.cursor, pageSize: options.pageSize?.() },
       isTypingTarget(event.target),
     );
 
@@ -200,6 +310,23 @@ export function useFileListKeyboardNav(options: FileListKeyboardOptions) {
         event.preventDefault();
         options.onClear();
         return;
+      case 'typeAhead': {
+        const typeAhead = options.typeAhead;
+        if (!typeAhead) return;
+        const now = (options.now ?? Date.now)();
+        const ref = typeAhead.state;
+        // A space only belongs to the query once a name is being typed; on
+        // its own it stays with the focused control (a checkbox toggles).
+        const fresh = ref.current.query === '' || now - ref.current.at > TYPE_AHEAD_TIMEOUT_MS;
+        if (action.char === ' ' && fresh) return;
+        ref.current = appendTypeAhead(ref.current, action.char, now);
+        event.preventDefault();
+        const index = typeAheadMatch(typeAhead.names, ref.current.query, options.cursor);
+        if (index === null) return;
+        options.onMove(index, false);
+        options.onScrollTo?.(index);
+        return;
+      }
     }
   };
 }
