@@ -76,6 +76,20 @@
   the same menu; the column was spending a fifth of the table on a button that
   duplicated it.
 
+### Fixed
+
+- **Transfer progress is saved on a real interval.** In-flight progress was
+  written to the transfer queue only when `Date.now() % 5000 < 100` — a save
+  depended on where events happened to land on the wall clock, so a transfer
+  could run for minutes without its resume offset being saved. Progress is now
+  saved at most every 5 s per transfer, timed from its last save
+  (`transferPersist.shouldPersistProgress`, tested). The transfer listeners
+  also no longer call `invoke` or `setTimeout` from inside React state
+  updaters, which React may run twice; they work out the next row first, then
+  update and save. The startup log that printed the full restored queue
+  (local paths, profile ids) and the auto-reconnect log now print only in
+  development builds, and the queue log prints just the count.
+
 ## [1.0.0-alpha.8] - 2026-10-17
 
 ### Added
