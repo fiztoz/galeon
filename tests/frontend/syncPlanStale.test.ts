@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { isSyncPlanStale, type SyncDiffInputs } from '../../src/components/SyncPanel';
+import { isSyncPlanStale, type SyncDiffInputs } from '../../src/syncModel';
 
 // execute_sync_plan resolves deleteLocal/deleteRemote entries against the LIVE
 // local path + remote prefix, so the plan must be invalidated whenever an input

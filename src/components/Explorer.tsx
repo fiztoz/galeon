@@ -4,21 +4,25 @@ import { createPortal } from 'react-dom';
 import { useObjectListing, useObjectSorting } from '../hooks/useObjectListing';
 import { useMultiSelect } from '../hooks/useMultiSelect';
 import { useWindowedRows } from '../hooks/useWindowedRows';
+import { useFileListKeyboardNav, isInteractiveTarget, initialTypeAhead, measurePageSize } from '../hooks/useFileListKeyboard';
+import { useExplorerDialogs } from '../hooks/useExplorerDialogs';
+import {
+  initialPathHistory,
+  moveWithinHistory,
+  parentPrefix,
+  pushPath,
+} from '../pathHistory';
 import React, { useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { useFolderSizes } from '../hooks/useFolderSizes';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { useUploadPipeline, type PendingConflict } from '../hooks/useUploadPipeline';
-import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, MoreVertical, Loader2, AlertTriangle, Search, RotateCw } from 'lucide-react';
-import { ProtocolCapabilities, DirectoryListing, GaleonObject, StorageProtocol } from '../types';
+import { Folder, File, ChevronRight, Download, Upload, Plus, Trash2, Loader2, AlertTriangle, Search, RotateCw, ArrowLeft, ArrowRight, ArrowUp } from 'lucide-react';
+import { ProtocolCapabilities, GaleonObject, StorageProtocol } from '../types';
 import {
   ConflictDialog,
-  ConfirmDialog,
-  DestinationDialog,
-  ShareLinkDialog,
-  TextPromptDialog,
 } from './Dialogs';
 import { ObjectContextMenu, useObjectContextMenu, type ObjectMenuAction } from './ObjectContextMenu';
+import { PaneChrome } from './PaneChrome';
 import {
   GALEON_LOCAL_PATHS_MIME,
   GALEON_REMOTE_KEYS_MIME,
@@ -83,22 +87,8 @@ export const Explorer: React.FC<ExplorerProps> = ({
   const { prefix, setPrefix, objects, loading, error, setError, listFailed, truncated, fetchDirectory } =
     useObjectListing(sessionId);
 
-  // Modal states
-  const [showCreateFolder, setShowCreateFolder] = useState(false);
-  const [showRename, setShowRename] = useState(false);
-  const [renameTarget, setRenameTarget] = useState<GaleonObject | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<GaleonObject | null>(null);
-  const [showMoveModal, setShowMoveModal] = useState(false);
-  const [moveTarget, setMoveTarget] = useState<GaleonObject | null>(null);
-  const [showCopyModal, setShowCopyModal] = useState(false);
-  const [copyTarget, setCopyTarget] = useState<GaleonObject | null>(null);
-  const [availableFolders, setAvailableFolders] = useState<string[]>([]);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [shareTarget, setShareTarget] = useState<GaleonObject | null>(null);
   // Multi-select states
-  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
-  
+
   const { isDragging, showConflictModal, conflictFile, applyToAll, setApplyToAll,
     pendingConflicts, checkFileExists, startConflictCheck, handleConflictResolve, handleUpload } =
     useUploadPipeline({ sessionId, prefix, onInitiateUpload, onInitiateDownload });
@@ -108,7 +98,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
   const { searchQuery, setSearchQuery, filterType, setFilterType, sortKey, sortDirection, filteredObjects, handleSort } =
     useObjectSorting(objects, folderSizes);
 
-  const { selectedItems, setSelectedItems, setLastSelectedIndex, handleSelectItem, handleSelectAll, clearSelection } =
+  const { selectedItems, setSelectedItems, setLastSelectedIndex, cursorIndex, handleSelectItem, handleSelectAll, clearSelection } =
     useMultiSelect(filteredObjects);
 
   // -- Windowed rendering -----------------------------------------------------
@@ -117,8 +107,39 @@ export const Explorer: React.FC<ExplorerProps> = ({
   // spreads `visibleRows` between two spacer rows.
   const {
     scrollRef, tbodyRef, visibleRows, indexOf: rowIndexOf,
-    topSpacer, bottomSpacer, hasTopSpacer, hasBottomSpacer,
+    topSpacer, bottomSpacer, hasTopSpacer, hasBottomSpacer, scrollToIndex,
   } = useWindowedRows(filteredObjects, objects);
+
+  // -- Navigation history ----------------------------------------------------
+  // The remote pane keeps its own stack of prefixes. Back and Forward walk
+  // it; every other move — breadcrumb, folder, palette jump, Up — records a
+  // new entry. The rules live in `pathHistory`; this only wires them up.
+  const [history, setHistory] = useState(() => initialPathHistory(prefix));
+
+  /** Move to another location. `record` is false for back/forward moves. */
+  const goTo = (next: string, record: boolean = true) => {
+    setHistory(h => (record ? pushPath(h, next) : moveWithinHistory(h, next)));
+    setPrefix(next);
+    clearSelection();
+  };
+
+  const goBack = () => {
+    const previous = history.past[history.past.length - 1];
+    if (previous === undefined) return;
+    goTo(previous, false);
+  };
+
+  const goForward = () => {
+    const next = history.future[0];
+    if (next === undefined) return;
+    goTo(next, false);
+  };
+
+  const goUp = () => {
+    const parent = parentPrefix(prefix, isFsProtocol);
+    if (parent === null) return;
+    goTo(parent, true);
+  };
 
   // In-app drag state (local → remote). HTML5 only, additive over the native
   // OS drop overlay (`isDragging`): we only preventDefault for our own MIME.
@@ -129,7 +150,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
     return [obj.fullKey];
   };
 
-  const { activeMenu, setActiveMenu, menuPosition, openItemMenu, handleRowContextMenu } =
+  const { activeMenu, setActiveMenu, menuPosition, handleRowContextMenu } =
     useObjectContextMenu(selectedItems, setSelectedItems, setLastSelectedIndex);
 
   const handleMenuAction = (action: ObjectMenuAction, obj: GaleonObject) => {
@@ -137,13 +158,13 @@ export const Explorer: React.FC<ExplorerProps> = ({
       case 'download': handleDownload(obj); return;
       case 'downloadHere': handleDownloadHere(obj); return;
       case 'preview': onShowPreview?.(obj); break;
-      case 'share': setShareTarget(obj); setShowShareModal(true); break;
+      case 'share': openShare(obj); break;
       case 'edit': onEditRemoteFile?.(obj.fullKey); break;
       case 'properties': onShowProperties?.(obj); break;
-      case 'rename': setRenameTarget(obj); setShowRename(true); break;
-      case 'move': setMoveTarget(obj); fetchAllFolders(); setShowMoveModal(true); break;
-      case 'copy': setCopyTarget(obj); fetchAllFolders(); setShowCopyModal(true); break;
-      case 'delete': setDeleteTarget(obj); setShowDeleteConfirm(true); break;
+      case 'rename': openRename(obj); break;
+      case 'move': openMove(obj); break;
+      case 'copy': openCopy(obj); break;
+      case 'delete': openDelete(obj); break;
     }
     setActiveMenu(null);
   };
@@ -216,7 +237,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
     if (items.length === 0) return;
 
-    setShowBatchDeleteConfirm(false);
     clearSelection();
     try {
       await onDeleteObjects(items);
@@ -224,6 +244,32 @@ export const Explorer: React.FC<ExplorerProps> = ({
       setError(String(err));
     }
   };
+
+  // -- Dialogs ----------------------------------------------------------------
+  // Create folder, rename, delete, move, copy, share, batch delete: one hook
+  // owns which dialog is open and what each one does.
+  const {
+    dialogs,
+    openCreateFolder,
+    openRename,
+    openDelete,
+    openMove,
+    openCopy,
+    openShare,
+    openBatchDelete,
+  } = useExplorerDialogs({
+    sessionId,
+    prefix,
+    onCreateFolder,
+    onRenameObject,
+    onDeleteObjects,
+    onGeneratePresignedUrl,
+    onGeneratePresignedUploadUrl,
+    onError: setError,
+    refresh: () => fetchDirectory(prefix),
+    selectedCount: selectedItems.size,
+    onBatchDelete: handleBatchDelete,
+  });
 
   useEffect(() => {
     fetchDirectory(prefix);
@@ -238,16 +284,60 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
   // Cross-component navigation (e.g. Command Palette "Go to path")
   useEffect(() => {
-    if (navRequest) setPrefix(navRequest.path);
+    if (navRequest) goTo(navRequest.path);
   }, [navRequest?.nonce]);
 
   const normalizeFsPath = (path: string) => path.replace(/\/+/g, '/');
 
   const handleDoubleClick = (obj: GaleonObject) => {
     if (obj.objectType === 'folder') {
-      setPrefix(isFsProtocol ? normalizeFsPath(obj.fullKey) : obj.fullKey);
+      goTo(isFsProtocol ? normalizeFsPath(obj.fullKey) : obj.fullKey);
     }
   };
+
+  // -- Keyboard navigation ----------------------------------------------------
+  // The pane owns its keys: arrows walk the rows, Enter opens, Cmd+A selects
+  // everything, Escape clears. The listener stays on the pane so dialogs and
+  // the command palette keep their own shortcuts.
+  const paneRef = useRef<HTMLDivElement | null>(null);
+  const typeAheadRef = useRef(initialTypeAhead());
+
+  const handlePaneKeyDown = useFileListKeyboardNav({
+    count: filteredObjects.length,
+    cursor: cursorIndex,
+    onMove: (index, extend) => {
+      const obj = filteredObjects[index];
+      if (!obj) return;
+      // A shift move extends from the anchor; the anchor itself must not
+      // move, or the next shift move would range from the wrong row.
+      handleSelectItem(obj.fullKey, index, extend ? { shift: true } : {});
+    },
+    onOpen: (index) => {
+      const obj = filteredObjects[index];
+      if (obj) handleDoubleClick(obj);
+    },
+    onRename: (index) => {
+      const obj = filteredObjects[index];
+      if (obj) openRename(obj);
+    },
+    onDelete: (index) => {
+      // A multi-row selection deletes as a batch; one row deletes on its own.
+      if (selectedItems.size > 1) {
+        openBatchDelete();
+        return;
+      }
+      const obj = filteredObjects[index];
+      if (obj) openDelete(obj);
+    },
+    onSelectAll: () => {
+      // Select-all is idempotent: pressing it twice must not deselect.
+      if (selectedItems.size !== filteredObjects.length) handleSelectAll();
+    },
+    onClear: clearSelection,
+    onScrollTo: scrollToIndex,
+    pageSize: () => measurePageSize(scrollRef.current),
+    typeAhead: { names: filteredObjects.map((obj) => obj.name), state: typeAheadRef },
+  });
 
   const handleDownload = async (obj: GaleonObject) => {
     if (obj.objectType === 'folder') {
@@ -294,130 +384,24 @@ export const Explorer: React.FC<ExplorerProps> = ({
   useEffect(() => {
     onRegisterCommands?.({
       refresh: () => refreshRef.current(),
-      newFolder: () => setShowCreateFolder(true),
+      newFolder: () => openCreateFolder(),
       upload: () => uploadRef.current(),
     });
   }, [onRegisterCommands]);
-
-  const handleCreateFolder = async (name: string) => {
-    if (!name.trim()) return;
-    try {
-      await onCreateFolder(prefix, name.trim());
-      setShowCreateFolder(false);
-      await fetchDirectory(prefix);
-    } catch (err: any) {
-      setError(String(err));
-    }
-  };
-
-  const handleRename = async (newName: string) => {
-    if (!renameTarget || !newName.trim()) return;
-    try {
-      // Strip trailing slash from fullKey for proper prefix calculation
-      const cleanFullKey = renameTarget.fullKey.replace(/\/$/, '');
-      const prefixPath = cleanFullKey.substring(0, cleanFullKey.length - renameTarget.name.length);
-      const newKey = prefixPath + newName.trim();
-      await onRenameObject(renameTarget.fullKey, newKey, renameTarget.objectType === 'folder');
-      setShowRename(false);
-      setRenameTarget(null);
-      await fetchDirectory(prefix);
-    } catch (err: any) {
-      setError(String(err));
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    const target = deleteTarget;
-    setShowDeleteConfirm(false);
-    setDeleteTarget(null);
-    try {
-      await onDeleteObjects([{
-        key: target.fullKey,
-        isFolder: target.objectType === 'folder',
-      }]);
-    } catch (err: any) {
-      setError(String(err));
-    }
-  };
-
-  const fetchAllFolders = async () => {
-    try {
-      const result = await invoke<DirectoryListing>('list_directory', {
-        sessionId,
-        prefix: '',
-      });
-      const folders = result.objects
-        .filter(obj => obj.objectType === 'folder')
-        .map(obj => obj.fullKey);
-      setAvailableFolders(folders);
-    } catch (err) {
-      console.error('Failed to fetch folders:', err);
-    }
-  };
-
-  const handleMove = async (destination: string) => {
-    if (!moveTarget || !destination) return;
-    try {
-      const sourcePath = moveTarget.fullKey.replace(/\/$/, '');
-      const sourceName = moveTarget.name;
-      const destPrefix = destination === '/' ? '' : destination.replace(/\/$/, '/');
-      const newKey = destPrefix + sourceName;
-      
-      if (sourcePath === newKey.replace(/\/$/, '')) {
-        setError('Source and destination are the same');
-        return;
-      }
-      
-      await onRenameObject(sourcePath, newKey, moveTarget.objectType === 'folder');
-      setShowMoveModal(false);
-      setMoveTarget(null);
-      await fetchDirectory(prefix);
-    } catch (err: any) {
-      setError(String(err));
-    }
-  };
-
-  const handleCopy = async (destination: string) => {
-    if (!copyTarget || !destination) return;
-    try {
-      const sourcePath = copyTarget.fullKey.replace(/\/$/, '');
-      const sourceName = copyTarget.name;
-      const destPrefix = destination === '/' ? '' : destination.replace(/\/$/, '/');
-      const newKey = destPrefix + sourceName;
-      
-      if (sourcePath === newKey.replace(/\/$/, '')) {
-        setError('Source and destination are the same');
-        return;
-      }
-      
-      await invoke('copy_object', {
-        sessionId,
-        oldKey: sourcePath,
-        newKey,
-        isFolder: copyTarget.objectType === 'folder',
-      });
-      setShowCopyModal(false);
-      setCopyTarget(null);
-      await fetchDirectory(prefix);
-    } catch (err: any) {
-      setError(String(err));
-    }
-  };
 
   const renderPrefixSizeSummary = () => {
     if (!isS3) return null;
     const label = prefix ? 'Folder total' : 'Bucket total';
     if (prefixSizeError) {
       return (
-        <span className="text-xs text-status-danger whitespace-nowrap" title={prefixSizeError}>
+        <span className="text-xs text-status-danger whitespace-nowrap shrink-0" title={prefixSizeError}>
           {label}: unavailable
         </span>
       );
     }
     if (prefixSizeLoading && prefixSizeBytes === null) {
       return (
-        <span className="flex items-center gap-1.5 text-xs text-zinc-500 whitespace-nowrap">
+        <span className="flex items-center gap-1.5 text-xs text-zinc-500 whitespace-nowrap shrink-0">
           <Loader2 className="w-3 h-3 animate-spin" />
           <span>Calculating {label.toLowerCase()}…</span>
         </span>
@@ -429,7 +413,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
           ? ` · ${prefixFileCount.toLocaleString()} file${prefixFileCount === 1 ? '' : 's'}`
           : '';
       return (
-        <span className="flex items-center gap-1.5 text-xs text-zinc-500 whitespace-nowrap metric-text">
+        <span className="flex items-center gap-1.5 text-xs text-zinc-500 whitespace-nowrap metric-text shrink-0">
           {prefixSizeLoading && <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />}
           <span>
             {label}: {formatSize(prefixSizeBytes)}
@@ -477,7 +461,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
         ? normalizeFsPath('/' + parts.slice(0, index + 1).join('/'))
         : parts.slice(0, index + 1).join('/') + '/';
     return (
-      <div className="pane-path flex items-center justify-between gap-3 py-3 px-4 bg-zinc-900 border-b border-zinc-800 text-sm">
+      <>
         <nav aria-label="Remote path" className="flex items-center space-x-1 min-w-0 galeon-scrollbar">
         {protocol === 'sftp' && (
           <span className="text-xs bg-status-success/10 text-status-success px-2 py-0.5 rounded font-medium mr-1">
@@ -494,7 +478,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
             FTPS
           </span>
         )}
-        <button onClick={() => setPrefix('')} className="text-gale-teal hover:text-deep-current font-medium">
+        <button onClick={() => goTo('')} className="text-gale-teal hover:text-deep-current font-medium">
           {bucket}
         </button>
         {parts.map((part, index) => {
@@ -502,7 +486,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
           return (
             <React.Fragment key={index}>
               <ChevronRight className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-              <button onClick={() => setPrefix(path)} className="text-gale-teal hover:text-deep-current truncate font-medium">
+              <button onClick={() => goTo(path)} className="text-gale-teal hover:text-deep-current truncate font-medium">
                 {part}
               </button>
             </React.Fragment>
@@ -510,13 +494,16 @@ export const Explorer: React.FC<ExplorerProps> = ({
         })}
         </nav>
         {renderPrefixSizeSummary()}
-      </div>
+      </>
     );
   };
 
   return (
     <div
+      ref={paneRef}
       className="file-pane flex flex-col h-full bg-zinc-950 text-zinc-100"
+      tabIndex={0}
+      onKeyDown={handlePaneKeyDown}
       onDragOver={(e) => {
         if (dragHasType(e, GALEON_LOCAL_PATHS_MIME)) {
           e.preventDefault();
@@ -537,8 +524,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
         }
       }}
     >
-      {renderBreadcrumbs()}
-      
       {/* Drag & Drop Visual Overlay */}
       {isDragging && (
         <div className="fixed inset-0 bg-gale-teal/5 border-2 border-dashed border-gale-teal/60 rounded-xl z-50 flex items-center justify-center pointer-events-none backdrop-blur-sm">
@@ -555,33 +540,41 @@ export const Explorer: React.FC<ExplorerProps> = ({
         </div>
       )}
 
-      {/* Toolbar */}
-      <div className="pane-toolbar bg-zinc-900/50 border-b border-zinc-800 space-y-3">
-        <div className="pane-toolbar-row">
-          <div className="pane-actions">
+      {/* Chrome row */}
+      <PaneChrome
+        navigation={
+          <>
             <button
-              onClick={handleUpload}
-              className="ui-button ui-button-primary"
+              onClick={goBack}
+              disabled={history.past.length === 0}
+              aria-label="Back"
+              title="Back"
+              className="ui-button ui-button-ghost disabled:opacity-30"
             >
-              <Upload className="w-4 h-4" />
-              <span>Upload</span>
+              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
             </button>
             <button
-              onClick={() => setShowCreateFolder(true)}
-              className="ui-button ui-button-secondary"
+              onClick={goForward}
+              disabled={history.future.length === 0}
+              aria-label="Forward"
+              title="Forward"
+              className="ui-button ui-button-ghost disabled:opacity-30"
             >
-              <Plus className="w-4 h-4" />
-              <span>New folder</span>
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </button>
             <button
-              onClick={() => fetchDirectory(prefix)}
-              className="ui-button ui-button-ghost"
-              aria-label="Refresh files"
-              title="Refresh files"
+              onClick={goUp}
+              disabled={parentPrefix(prefix, isFsProtocol) === null}
+              aria-label="Go up"
+              title="Go up one level"
+              className="ui-button ui-button-ghost disabled:opacity-30"
             >
-              <RotateCw size={14} aria-hidden="true" />
+              <ArrowUp className="w-4 h-4" aria-hidden="true" />
             </button>
-          </div>
+          </>
+        }
+        path={renderBreadcrumbs()}
+        search={
           <div className="pane-search">
             <Search size={14} aria-hidden="true" />
             <input
@@ -597,55 +590,83 @@ export const Explorer: React.FC<ExplorerProps> = ({
               spellCheck={false}
             />
           </div>
-        </div>
-        <div className="pane-filters">
-          <span className="sr-only">Filter:</span>
-          <button
-            onClick={() => setFilterType('all')}
-            aria-pressed={filterType === 'all'}
-            className="pane-filter-button"
-          >
-            All
-          </button>
-          <button
-            onClick={() => setFilterType('folders')}
-            aria-pressed={filterType === 'folders'}
-            className="pane-filter-button"
-          >
-            Folders
-          </button>
-          <button
-            onClick={() => setFilterType('files')}
-            aria-pressed={filterType === 'files'}
-            className="pane-filter-button"
-          >
-            Files
-          </button>
-          {(searchQuery || filterType !== 'all') && (
+        }
+        actions={
+          <div className="pane-actions">
             <button
-              onClick={() => { setSearchQuery(''); setFilterType('all'); }}
-              className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+              onClick={handleUpload}
+              className="ui-button ui-button-primary"
             >
-              Clear
+              <Upload className="w-4 h-4" />
+              <span>Upload</span>
             </button>
-          )}
-          <div className="compact-sort items-center gap-2">
-            <Select
-              aria-label="Sort remote files by"
-              value={sortKey}
-              onValueChange={(value) => handleSort(value as 'name' | 'size' | 'date')}
-              className="min-w-0 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300"
+            <button
+              onClick={() => openCreateFolder()}
+              className="ui-button ui-button-secondary"
             >
-              <option value="name">Name</option>
-              <option value="size">Size</option>
-              <option value="date">Modified</option>
-            </Select>
-            <button type="button" onClick={() => handleSort(sortKey)} aria-label={`Sort ${sortDirection === 'asc' ? 'descending' : 'ascending'}`} className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">
-              {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+              <Plus className="w-4 h-4" />
+              <span>New folder</span>
+            </button>
+            <button
+              onClick={() => fetchDirectory(prefix)}
+              className="ui-button ui-button-ghost"
+              aria-label="Refresh files"
+              title="Refresh files"
+            >
+              <RotateCw size={14} aria-hidden="true" />
             </button>
           </div>
-        </div>
-      </div>
+        }
+        filters={
+          <div className="pane-filters">
+            <span className="sr-only">Filter:</span>
+            <button
+              onClick={() => setFilterType('all')}
+              aria-pressed={filterType === 'all'}
+              className="pane-filter-button"
+            >
+              All
+            </button>
+            <button
+              onClick={() => setFilterType('folders')}
+              aria-pressed={filterType === 'folders'}
+              className="pane-filter-button"
+            >
+              Folders
+            </button>
+            <button
+              onClick={() => setFilterType('files')}
+              aria-pressed={filterType === 'files'}
+              className="pane-filter-button"
+            >
+              Files
+            </button>
+            {(searchQuery || filterType !== 'all') && (
+              <button
+                onClick={() => { setSearchQuery(''); setFilterType('all'); }}
+                className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+              >
+                Clear
+              </button>
+            )}
+            <div className="compact-sort items-center gap-2">
+              <Select
+                aria-label="Sort remote files by"
+                value={sortKey}
+                onValueChange={(value) => handleSort(value as 'name' | 'size' | 'date')}
+                className="min-w-0 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300"
+              >
+                <option value="name">Name</option>
+                <option value="size">Size</option>
+                <option value="date">Modified</option>
+              </Select>
+              <button type="button" onClick={() => handleSort(sortKey)} aria-label={`Sort ${sortDirection === 'asc' ? 'descending' : 'ascending'}`} className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">
+                {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+              </button>
+            </div>
+          </div>
+        }
+      />
 
       <div ref={scrollRef} className="pane-content flex-1 overflow-auto galeon-scrollbar">
         {error && (
@@ -707,13 +728,12 @@ export const Explorer: React.FC<ExplorerProps> = ({
                   >
                     <button type="button" onClick={() => handleSort('date')}>Last Modified {sortKey === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}</button>
                   </th>
-                  <th className="px-6 py-3 w-20 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody ref={tbodyRef} className="divide-y divide-zinc-800/50 text-sm text-zinc-200">
                 {filteredObjects.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-14 text-center text-zinc-500">
+                    <td colSpan={4} className="px-6 py-14 text-center text-zinc-500">
                       <div className="flex flex-col items-center gap-3 max-w-sm mx-auto">
                         {listFailed ? (
                           <>
@@ -760,7 +780,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setShowCreateFolder(true)}
+                                onClick={() => openCreateFolder()}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs font-medium text-zinc-200"
                               >
                                 <Plus className="w-3.5 h-3.5" />
@@ -776,7 +796,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
                   <>
                     {hasTopSpacer && (
                       <tr aria-hidden="true" className="galeon-spacer">
-                        <td colSpan={5} style={{ height: topSpacer }} />
+                        <td colSpan={4} style={{ height: topSpacer }} />
                       </tr>
                     )}
                     {visibleRows.map((obj, windowIndex) => {
@@ -786,16 +806,27 @@ export const Explorer: React.FC<ExplorerProps> = ({
                       key={obj.fullKey}
                       data-row-index={index}
                       draggable={obj.objectType === 'file'}
+                      aria-selected={selectedItems.has(obj.fullKey)}
                       onDragStart={(e) => {
                         if (obj.objectType !== 'file') { e.preventDefault(); return; }
                         e.dataTransfer.setData(GALEON_REMOTE_KEYS_MIME, JSON.stringify(remoteDragKeys(obj)));
                         e.dataTransfer.effectAllowed = 'copy';
                       }}
+                      onClick={(e) => {
+                        if (isInteractiveTarget(e.target)) return;
+                        // The pane takes the focus so the arrow keys keep
+                        // walking the rows straight after a click.
+                        paneRef.current?.focus();
+                        handleSelectItem(obj.fullKey, index, {
+                          shift: e.shiftKey,
+                          toggle: e.metaKey || e.ctrlKey,
+                        });
+                      }}
                       onDoubleClick={() => handleDoubleClick(obj)}
                       onContextMenu={(e) => handleRowContextMenu(e, obj, index)}
                       className={`hover:bg-zinc-800/40 cursor-pointer transition-colors ${
                         selectedItems.has(obj.fullKey) ? 'bg-gale-teal/10 border-l-2 border-gale-teal' : ''
-                      }`}
+                      } ${index === cursorIndex ? 'is-cursor' : ''}`}
                     >
                       <td className="px-4 py-4">
                         <input
@@ -805,7 +836,10 @@ export const Explorer: React.FC<ExplorerProps> = ({
                           onChange={() => {}}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleSelectItem(obj.fullKey, index, e.shiftKey);
+                            handleSelectItem(obj.fullKey, index, {
+                              toggle: !e.shiftKey,
+                              shift: e.shiftKey,
+                            });
                           }}
                           className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-gale-teal focus:ring-gale-teal focus:ring-1 accent-gale-teal"
                         />
@@ -818,7 +852,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
                           <File className="w-5 h-5 text-zinc-400 flex-shrink-0" />
                         )}
                         <div className="min-w-0">
-                          <button type="button" onClick={(event) => handleSelectItem(obj.fullKey, index, event.shiftKey)}
+                          <button type="button" onClick={(event) => { event.stopPropagation(); handleSelectItem(obj.fullKey, index, { shift: event.shiftKey, toggle: event.metaKey || event.ctrlKey }); }}
                             onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleDoubleClick(obj); } }} title={obj.name} className="block max-w-full hover:text-gale-teal">{obj.name}</button>
                           <span className="compact-date">{obj.lastModified ? new Date(obj.lastModified).toLocaleString() : '—'}</span>
                         </div>
@@ -828,29 +862,12 @@ export const Explorer: React.FC<ExplorerProps> = ({
                       <td className="px-6 py-4 text-zinc-400 metric-text">
                         {obj.lastModified ? new Date(obj.lastModified).toLocaleString() : '-'}
                       </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (activeMenu === obj.fullKey) {
-                              setActiveMenu(null);
-                              return;
-                            }
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            openItemMenu(obj, rect.right - 160, rect.bottom + 4);
-                          }}
-                          aria-label={`Actions for ${obj.name}`}
-                          className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-200 transition-colors"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                      </td>
                     </tr>
                       );
                     })}
                     {hasBottomSpacer && (
                       <tr aria-hidden="true" className="galeon-spacer">
-                        <td colSpan={5} style={{ height: bottomSpacer }} />
+                        <td colSpan={4} style={{ height: bottomSpacer }} />
                       </tr>
                     )}
                   </>
@@ -873,90 +890,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
         />, document.body
       )}
 
-      {/* Create Folder Modal */}
-      {showCreateFolder && (
-        <TextPromptDialog
-          title="Create New Folder"
-          placeholder="Folder name"
-          confirmLabel="Create"
-          onConfirm={handleCreateFolder}
-          onCancel={() => setShowCreateFolder(false)}
-        />
-      )}
-
-      {showRename && renameTarget && (
-        <TextPromptDialog
-          title="Rename"
-          placeholder="New name"
-          confirmLabel="Rename"
-          initialValue={renameTarget.name}
-          onConfirm={handleRename}
-          onCancel={() => { setShowRename(false); setRenameTarget(null); }}
-        />
-      )}
-
-      {showDeleteConfirm && deleteTarget && (
-        <ConfirmDialog
-          title={`Delete ${deleteTarget.objectType === 'folder' ? 'Folder' : 'File'}`}
-          titleClassName="mb-2"
-          confirmLabel="Delete"
-          tone="danger"
-          onCancel={() => { setShowDeleteConfirm(false); setDeleteTarget(null); }}
-          onConfirm={handleDelete}
-        >
-          <p className="text-zinc-400 text-sm mb-4">
-            Are you sure you want to delete <span className="text-zinc-200 font-medium">"{deleteTarget.name}"</span>?
-            {deleteTarget.objectType === 'folder' && (
-              <span className="block mt-1 text-status-warning">This will delete all contents inside the folder.</span>
-            )}
-          </p>
-        </ConfirmDialog>
-      )}
-
-      {showMoveModal && moveTarget && (
-        <DestinationDialog
-          title={`Move "${moveTarget.name}" to...`}
-          folders={availableFolders}
-          confirmLabel="Move"
-          onConfirm={handleMove}
-          onCancel={() => { setShowMoveModal(false); setMoveTarget(null); }}
-        />
-      )}
-
-      {showCopyModal && copyTarget && (
-        <DestinationDialog
-          title={`Copy "${copyTarget.name}" to...`}
-          folders={availableFolders}
-          confirmLabel="Copy"
-          onConfirm={handleCopy}
-          onCancel={() => { setShowCopyModal(false); setCopyTarget(null); }}
-        />
-      )}
-
-      {showShareModal && shareTarget && (
-        <ShareLinkDialog
-          fileName={shareTarget.name}
-          onGenerate={(seconds) => onGeneratePresignedUrl(shareTarget.fullKey, seconds)}
-          onGenerateUpload={onGeneratePresignedUploadUrl ? (seconds) => onGeneratePresignedUploadUrl(shareTarget.fullKey, seconds) : undefined}
-          onError={(message) => setError(message)}
-          onClose={() => { setShowShareModal(false); setShareTarget(null); }}
-        />
-      )}
-
-      {showBatchDeleteConfirm && (
-        <ConfirmDialog
-          title={`Delete ${selectedItems.size} Items`}
-          confirmLabel="Delete All"
-          tone="danger"
-          onCancel={() => setShowBatchDeleteConfirm(false)}
-          onConfirm={handleBatchDelete}
-        >
-          <p className="text-zinc-400 text-sm mb-4">
-            Are you sure you want to delete {selectedItems.size} selected items?
-            <span className="block mt-1 text-status-warning">This action cannot be undone.</span>
-          </p>
-        </ConfirmDialog>
-      )}
+      {dialogs}
 
       {showConflictModal && (
         <ConflictDialog
@@ -990,7 +924,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
               <span>Download</span>
             </button>
             <button
-              onClick={() => setShowBatchDeleteConfirm(true)}
+              onClick={() => openBatchDelete()}
               className="flex items-center space-x-1 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium"
             >
               <Trash2 className="w-4 h-4" />

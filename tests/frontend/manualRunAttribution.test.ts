@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { manualRunAttribution } from '../../src/components/SyncPanel';
+import { manualRunAttribution } from '../../src/syncModel';
 
 /**
  * The case the history must not lie about: a run is attributed to a saved

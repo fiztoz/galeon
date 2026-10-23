@@ -1,10 +1,15 @@
 import { Select } from './Select';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
 import { X, FileText, Folder, Database, Tag, Clock, HardDrive, Loader2, AlertCircle, Save, ShieldCheck, Copy, Check, Eye, ExternalLink } from 'lucide-react';
-import type { GaleonObject } from '../types';
-import { ProtocolCapabilities, StorageProtocol } from '../types';
+import type { GaleonObject, ProtocolCapabilities, StorageProtocol } from '../types';
+import {
+  PREVIEW_TEXT_BYTES,
+  deriveContentType,
+  type PreviewKind,
+} from './preview/previewModel';
+import { useObjectPreview } from '../hooks/useObjectPreview';
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -48,34 +53,6 @@ const S3_STORAGE_CLASSES = [
   'DEEP_ARCHIVE',
 ];
 
-const MIME_MAP: Record<string, string> = {
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  gif: 'image/gif',
-  webp: 'image/webp',
-  svg: 'image/svg+xml',
-  mp4: 'video/mp4',
-  webm: 'video/webm',
-  mp3: 'audio/mpeg',
-  wav: 'audio/wav',
-  pdf: 'application/pdf',
-  zip: 'application/zip',
-  gz: 'application/gzip',
-  tar: 'application/x-tar',
-  json: 'application/json',
-  xml: 'application/xml',
-  html: 'text/html',
-  htm: 'text/html',
-  css: 'text/css',
-  js: 'text/javascript',
-  ts: 'text/typescript',
-  txt: 'text/plain',
-  md: 'text/markdown',
-  csv: 'text/csv',
-  yaml: 'application/yaml',
-  yml: 'application/yaml',
-};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -97,52 +74,6 @@ function formatDate(dateStr: string | null): string {
   }
 }
 
-export function deriveContentType(key: string): string | null {
-  const ext = key.split('.').pop()?.toLowerCase();
-  if (!ext) return null;
-  return MIME_MAP[ext] ?? null;
-}
-
-type PreviewKind = 'image' | 'pdf' | 'text';
-
-// Application/content types that are text under the hood despite an `application/*`
-// prefix. Used alongside the `text/*` family to decide what we can show as text.
-const TEXTUAL_APP_TYPES = new Set([
-  'application/json',
-  'application/xml',
-  'application/yaml',
-  'application/x-yaml',
-  'application/javascript',
-  'application/x-javascript',
-  'application/typescript',
-]);
-
-// Only common, safely-renderable types get a preview — everything else falls back
-// to metadata only. This is the "by seeing the application type" gate: previews
-// are driven off the resolved content type, not blindly off every file.
-function previewKindFor(contentType: string | null): PreviewKind | null {
-  if (!contentType) return null;
-  const ct = contentType.split(';')[0].trim().toLowerCase();
-  if (ct === 'application/pdf') return 'pdf';
-  if (ct.startsWith('image/')) return 'image';
-  if (ct.startsWith('text/') || TEXTUAL_APP_TYPES.has(ct)) return 'text';
-  return null;
-}
-
-export function isPreviewableFile(
-  key: string,
-  protocol?: StorageProtocol,
-): boolean {
-  const isS3 = !protocol || protocol === 's3';
-  if (!isS3) return false;
-  return previewKindFor(deriveContentType(key)) !== null;
-}
-
-// Whole-file types (image/pdf) must fit under this cap to be previewed; larger
-// objects show a "download to view" hint instead of being pulled into memory.
-const PREVIEW_BINARY_MAX = 20 * 1024 * 1024; // 20 MB
-// Text is bounded server-side: we only ever fetch the first slice for display.
-const PREVIEW_TEXT_BYTES = 256 * 1024; // 256 KB
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -352,34 +283,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
-  // Inline preview state (images/pdf rendered from an object URL, text decoded inline)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewText, setPreviewText] = useState<string | null>(null);
-  const [previewKind, setPreviewKind] = useState<PreviewKind | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [previewTruncated, setPreviewTruncated] = useState(false);
-  const [previewTooLarge, setPreviewTooLarge] = useState(false);
-  const [pdfPreviewOpened, setPdfPreviewOpened] = useState(false);
 
-  const openPdfPreview = useCallback(async () => {
-    if (!object || object.objectType !== 'file') return;
-    setPreviewKind('pdf');
-    setPreviewLoading(true);
-    setPreviewError(null);
-    try {
-      await invoke('preview_remote_file', {
-        sessionId,
-        key: object.fullKey,
-      });
-      setPdfPreviewOpened(true);
-    } catch (err: unknown) {
-      setPreviewError(typeof err === 'string' ? err : 'Could not open in Preview.');
-      setPdfPreviewOpened(false);
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, [object, sessionId]);
 
   // Fetch metadata when drawer opens or object changes
   useEffect(() => {
@@ -435,80 +339,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     metadata?.contentType ?? (object ? deriveContentType(object.fullKey) : null);
   const resolvedSize = metadata?.contentLength ?? object?.sizeBytes ?? null;
 
-  // Build an inline preview, but only for common, previewable types — the gate is
-  // the resolved content type ("application type"), not the raw file. Native
-  // SFTP/FTP expose no content type, so preview is offered for S3 objects only.
-  useEffect(() => {
-    // Reset on every change and revoke any object URL from the previous object.
-    setPreviewKind(null);
-    setPreviewText(null);
-    setPreviewError(null);
-    setPreviewTruncated(false);
-    setPreviewTooLarge(false);
-    setPdfPreviewOpened(false);
-    setPreviewUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
+  const {
+    previewUrl, previewText, previewKind, previewLoading, previewError,
+    previewTruncated, previewTooLarge, pdfPreviewOpened, openPdfPreview,
+  } = useObjectPreview({ open, object, sessionId, protocol, previewOnly, contentType, resolvedSize });
 
-    const isS3Session = !protocol || protocol === 's3';
-    if (!open || !object || object.objectType !== 'file' || !isS3Session) return;
-
-    const kind = previewKindFor(contentType);
-    if (!kind) return;
-
-    // PDFs open in macOS Preview — WKWebView's embedded PDF viewer has broken zoom.
-    if (kind === 'pdf') {
-      setPreviewKind('pdf');
-      if (previewOnly) {
-        void openPdfPreview();
-      }
-      return;
-    }
-
-    // Images must fit the cap; text is bounded server-side.
-    if (kind === 'image' && resolvedSize !== null && resolvedSize > PREVIEW_BINARY_MAX) {
-      setPreviewKind(kind);
-      setPreviewTooLarge(true);
-      return;
-    }
-
-    const maxBytes = kind === 'text' ? PREVIEW_TEXT_BYTES : (resolvedSize ?? PREVIEW_BINARY_MAX);
-
-    let cancelled = false;
-    let createdUrl: string | null = null;
-    setPreviewKind(kind);
-    setPreviewLoading(true);
-
-    invoke<ArrayBuffer>('read_object_preview', {
-      sessionId,
-      key: object.fullKey,
-      maxBytes,
-    })
-      .then((buf) => {
-        if (cancelled) return;
-        const bytes = new Uint8Array(buf);
-        if (kind === 'text') {
-          setPreviewText(new TextDecoder('utf-8', { fatal: false }).decode(bytes));
-          setPreviewTruncated(resolvedSize !== null && resolvedSize > bytes.byteLength);
-        } else {
-          const blob = new Blob([bytes], { type: contentType ?? 'application/octet-stream' });
-          createdUrl = URL.createObjectURL(blob);
-          setPreviewUrl(createdUrl);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setPreviewError(typeof err === 'string' ? err : 'Could not load preview.');
-      })
-      .finally(() => {
-        if (!cancelled) setPreviewLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-      if (createdUrl) URL.revokeObjectURL(createdUrl);
-    };
-  }, [open, object?.fullKey, sessionId, protocol, contentType, resolvedSize, previewOnly, openPdfPreview]);
 
   const handleSaveContentType = async () => {
     if (!object) return;
