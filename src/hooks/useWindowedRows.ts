@@ -71,6 +71,29 @@ export function useWindowedRows<T>(items: readonly T[], resetKey: unknown) {
     return () => observer.disconnect();
   }, [start, end, rowHeights]);
 
+  /**
+   * Bring a row into view without disturbing the rest of the scroll position.
+   *
+   * Only the mounted window exists in the DOM, so moving the keyboard cursor
+   * to a row outside it means scrolling the container first — the row is
+   * mounted on the next render.
+   */
+  const scrollToIndex = (index: number) => {
+    const el = scrollRef.current;
+    if (!el || index < 0 || index >= count) return;
+
+    const top = offsets[index] ?? index * DEFAULT_ROW_HEIGHT;
+    const bottom = top + (rowHeights[index] || DEFAULT_ROW_HEIGHT);
+    const viewTop = el.scrollTop;
+    const viewBottom = viewTop + el.clientHeight;
+
+    if (top < viewTop) {
+      el.scrollTo({ top });
+    } else if (bottom > viewBottom) {
+      el.scrollTo({ top: bottom - el.clientHeight });
+    }
+  };
+
   return {
     scrollRef,
     tbodyRef,
@@ -81,5 +104,6 @@ export function useWindowedRows<T>(items: readonly T[], resetKey: unknown) {
     bottomSpacer: end < count ? Math.max(0, totalHeight - (offsets[end] ?? totalHeight)) : 0,
     hasTopSpacer: start > 0,
     hasBottomSpacer: end < count,
+    scrollToIndex,
   };
 }

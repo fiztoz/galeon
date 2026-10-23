@@ -32,14 +32,27 @@ Product intent lives in [`docs/DIRECTION.md`](docs/DIRECTION.md). UI tokens and 
 | **Tauri command layer** (thin) | `src-tauri/src/commands/<feature>.rs` |
 | Runtime state (`GaleonEngine`, sessions, controls) | `src-tauri/src/engine.rs` |
 | Frontend wire contracts (camelCase payloads) | `src-tauri/src/types.rs` |
+| Transfer loops (OpenDAL chunked, native SFTP, native FTP) | `src-tauri/src/commands/{transfer_protocols,sftp_transfers,ftp_transfers}.rs` |
 | Listing / prefix sizes / editing / bandwidth | `src-tauri/src/{listing,prefix_size,editing,bandwidth}.rs` |
 | Sync domain (plan, trees, schedules, store) | `src-tauri/src/sync_{plan,tree,types,store}.rs`, `schedule.rs` |
+| Sync model (frontend types + diff rules) | `src/syncModel.ts` |
 | SSH tunnels / config / known hosts | `src-tauri/src/ssh_*.rs` |
 | App bootstrap + `invoke_handler` only | `src-tauri/src/lib.rs` (~180 lines) |
 | Profile import/export UI | `src/components/ProfileImportExport.tsx` |
-| Connection form / connect flow | `src/components/Connection.tsx` |
+| Connection form / connect flow | `src/components/Connection.tsx`, `src/components/connection/connect.ts` |
+| Profile select / connect / save / delete on the connect screen | `src/components/connection/useConnectionProfiles.ts` |
 | Local filesystem pane (dual-pane) | `src/components/LocalPane.tsx` |
+| Remote file pane | `src/components/Explorer.tsx` |
+| Pane chrome row (one row per pane) | `src/components/PaneChrome.tsx` |
+| File-list selection + keyboard model | `src/hooks/useMultiSelect.ts`, `src/hooks/useFileListKeyboard.ts` |
+| Pane navigation history (back / forward / up) | `src/pathHistory.ts` |
+| Object dialogs (create / rename / move / copy / share / delete) | `src/hooks/useExplorerDialogs.tsx` |
+| Object properties drawer / preview gate + loader | `src/components/PropertiesInspector.tsx`, `src/components/preview/previewModel.ts`, `src/hooks/useObjectPreview.ts` |
+| Shared-link (presign) history | `src/hooks/usePresignHistory.ts` |
 | App shell / profiles state | `src/App.tsx` |
+| Connected titlebar / connection switcher | `src/components/ConnectedHeader.tsx`, `src/components/ConnectionSwitcher.tsx` |
+| Command palette action list | `src/commandActions.ts` |
+| Keyboard map (shortcut data + cheatsheet dialog) | `src/keyboardShortcuts.ts`, `src/components/ShortcutsDialog.tsx` |
 | Shared frontend wire types (camelCase mirrors of Rust structs) | `src/types.ts` |
 | Layout preferences (dual pane, split ratio, theme) | `src/hooks/useLayoutPreferences.ts` |
 | Theme CSS variables | `src/index.css` |
@@ -47,6 +60,10 @@ Product intent lives in [`docs/DIRECTION.md`](docs/DIRECTION.md). UI tokens and 
 **Do not re-introduce** S3 builder + sanitize + SSL wiring inlined into `connect_bucket` / `connect_storage` / `auto_reconnect`. Use `s3_connect::open_s3_operator` (or the smaller helpers in that module).
 
 **Do not** grow `Connection.tsx` with export/import modals again — that lives in `ProfileImportExport.tsx`.
+
+**Do not** write a second selection gesture in a pane: click semantics live in
+`useMultiSelect` / `applySelection`, and the key model in `useFileListKeyboard`.
+A third file list must use both, not copy the old toggle.
 
 ---
 
