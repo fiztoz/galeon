@@ -4,6 +4,7 @@ import { Select } from './Select';
 import { DEFAULT_SFTP_PORT, DEFAULT_FTP_PORT, defaultPortFor } from './connection/defaults';
 import { ProfileSidebar } from './connection/ProfileSidebar';
 import { SaveProfileDialog } from './connection/SaveProfileDialog';
+import { OverwriteProfileDialog } from './connection/OverwriteProfileDialog';
 import { BandwidthRulesEditor, useBandwidthRuleDraft } from './connection/BandwidthRulesEditor';
 import { FIELD } from './connection/field';
 import { ProtocolFields } from './connection/ProtocolFields';
@@ -94,7 +95,8 @@ export const Connection: React.FC<ConnectionProps> = ({
     selectedProfileId, credsLoading, showSaveModal, profileName, setProfileName,
     editingProfile, closeSaveModal, resolveSecretsForConnect, handleProfileRowClick,
     handleDoubleClickProfile, handleSaveProfile, handleEditProfile, handleSaveButton,
-    handleSaveAsNewProfile, handleDeleteProfile, resetFormToDefaults,
+    handleSaveAsNewProfile, finalizeConnect, overwritePrompt, respondOverwritePrompt,
+    handleDeleteProfile, resetFormToDefaults,
     handleSshConfigSelect, handleClearCredentials,
   } = useConnectionProfiles({
     form,
@@ -265,9 +267,15 @@ export const Connection: React.FC<ConnectionProps> = ({
           : trimmedUsername
             ? `${trimmedUsername}@${hostOfEndpoint(trimmedEndpoint)}`
             : hostOfEndpoint(trimmedEndpoint);
-      // The selected profile (if any) travels with the session so the
-      // transfer queue can record which saved profile a transfer belongs to
-      onConnected(sessionId, displayName, selectedProfileId ?? undefined, protocol);
+      // An unsaved form (no profile selected) becomes a profile with a random
+      // name; a selected profile that the form changed asks whether to
+      // overwrite it. Both happen only after the backend accepted, so failed
+      // attempts do not litter the sidebar or rewrite anything.
+      const savedProfileId = await finalizeConnect(resolved);
+
+      // The selected (or just saved) profile travels with the session so
+      // the transfer queue can record which saved profile a transfer belongs to
+      onConnected(sessionId, displayName, savedProfileId, protocol);
     } catch (err: unknown) {
       setError(formatConnectError(err));
     } finally {
@@ -447,6 +455,14 @@ export const Connection: React.FC<ConnectionProps> = ({
           setProfileName={setProfileName}
           handleSaveProfile={handleSaveProfile}
           onCancel={closeSaveModal}
+        />
+      )}
+
+      {overwritePrompt && (
+        <OverwriteProfileDialog
+          profileName={overwritePrompt.profileName}
+          onOverwrite={() => respondOverwritePrompt(true)}
+          onSkip={() => respondOverwritePrompt(false)}
         />
       )}
 
