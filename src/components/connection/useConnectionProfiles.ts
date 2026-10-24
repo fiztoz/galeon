@@ -12,7 +12,7 @@ import { useRef, useState, type MutableRefObject } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { ConnectionProfile, StorageProtocol } from '../../types';
 import { DEFAULT_S3_ENDPOINT, DEFAULT_S3_REGION, defaultPortFor } from './defaults';
-import { formatConnectError, hostOfEndpoint, isFileProtocol, isHttpProtocol } from './connect';
+import { formatConnectError, hostOfEndpoint, isFileProtocol, isHttpProtocol, randomProfileName, selectedProfileChanged, uniqueProfileName } from './connect';
 import { EMPTY_SSH_TUNNEL, sshTunnelFormFromProfile, sshTunnelForProfile } from '../sshTunnel';
 import type { SshConfigConnection } from '../SshConfigImport';
 import type { useConnectionForm } from './useConnectionForm';
@@ -24,6 +24,14 @@ export type ConnectHandler = (
   profileId?: string,
   protocol?: StorageProtocol,
 ) => void;
+
+/** The fill-in-from-vault values `resolveSecretsForConnect` hands to a connect. */
+export type ResolvedConnectSecrets = {
+  accessKey: string;
+  secretKey: string;
+  sftpPassword: string;
+  sshTunnelPassword: string;
+};
 
 export type ConnectionProfilesOptions = {
   /** The live form, owned by the screen and shared with its Connect button. */
@@ -542,6 +550,116 @@ export function useConnectionProfiles({
     setShowSaveModal(true);
   };
 
+  /**
+   * Form fields over `base` (the profile being overwritten, or fresh), with the
+   * values that just connected. Resolved secrets are injected because the form
+   * state in this render's closure may still hold the pre-vault-read values
+   * that `resolveSecretsForConnect` filled moments earlier.
+   */
+  const buildConnectProfile = (
+    resolvedSecrets: ResolvedConnectSecrets,
+    base?: ConnectionProfile,
+  ): ConnectionProfile => {
+    const profile = buildProfileFromForm(base);
+    if (protocol === 's3') {
+      profile.accessKey = resolvedSecrets.accessKey || undefined;
+      profile.secretKey = resolvedSecrets.secretKey || undefined;
+    }
+    return profile;
+  };
+
+  /** Same precedence as formSecret: S3 keys ride the profile, and a GCS
+   * credential file on disk wins over a pasted JSON. */
+  const connectSecret = (resolvedSecrets: ResolvedConnectSecrets): string | null =>
+    protocol === 's3' || (protocol === 'gcs' && credentialPath.trim())
+      ? null
+      : resolvedSecrets.sftpPassword || null;
+
+  /**
+   * The Connect press came from an unsaved form (no profile selected): keep the
+   * connection automatically instead of losing it — nothing can be overwritten,
+   * so no prompt. Names it (a typed name wins, otherwise a random one) and
+   * stores secrets through the same keyring-backed save.
+   */
+  const autoSaveUnsavedProfile = async (
+    resolvedSecrets: ResolvedConnectSecrets,
+  ): Promise<string | undefined> => {
+    if (selectedProfileId) return undefined;
+    try {
+      const profile = buildConnectProfile(resolvedSecrets);
+      profile.name = uniqueProfileName(
+        profileName.trim() || randomProfileName(),
+        profiles.map((p) => p.name),
+      );
+      await onSaveProfile(profile, connectSecret(resolvedSecrets), resolvedSecrets.sshTunnelPassword || null);
+      setShowSaveModal(false);
+      setEditingProfile(null);
+      // Select it so a disconnect returns to the saved profile, like a dialog save does.
+      setSelectedProfileId(profile.id);
+      return profile.id;
+    } catch (err) {
+      // The connection itself is open; a failed save must not break the session.
+      console.error('Auto-saving the connection failed:', err);
+      return undefined;
+    }
+  };
+
+  /** Pending "overwrite?" question shown in the connect screen's dialog. */
+  const overwriteResolverRef = useRef<((overwrite: boolean) => void) | null>(null);
+  const [overwritePrompt, setOverwritePrompt] = useState<{ profileName: string } | null>(null);
+
+  /** The user answered the overwrite question; the awaiting finalizeConnect proceeds. */
+  const respondOverwritePrompt = (overwrite: boolean) => {
+    setOverwritePrompt(null);
+    overwriteResolverRef.current?.(overwrite);
+    overwriteResolverRef.current = null;
+  };
+
+  const askToOverwrite = (
+    selected: ConnectionProfile,
+  ): Promise<boolean> =>
+    new Promise((resolve) => {
+      overwriteResolverRef.current = resolve;
+      setOverwritePrompt({ profileName: selected.name });
+    });
+
+  /**
+   * Decide what a successful Connect should leave behind, and return the id the
+   * session should carry in `onConnected`.
+   *
+   * - No selected profile: silently auto-save with a random name (nothing can
+   *   be overwritten).
+   * - Selected profile unchanged: nothing to do.
+   * - Selected profile changed: ask — overwriting a saved profile is the
+   *   user's call. The question resolves when the dialog is answered; the
+   *   session opens only after that, keeping the Connect spinner honest.
+   */
+  const finalizeConnect = async (
+    resolvedSecrets: ResolvedConnectSecrets,
+  ): Promise<string | undefined> => {
+    if (!selectedProfileId) return autoSaveUnsavedProfile(resolvedSecrets);
+    const selected = profiles.find((p) => p.id === selectedProfileId);
+    if (!selected) return selectedProfileId;
+
+    const candidate = buildConnectProfile(resolvedSecrets, selected);
+    if (!selectedProfileChanged(selected, candidate)) return selectedProfileId;
+
+    const overwrite = await askToOverwrite(selected);
+    if (!overwrite) return selectedProfileId;
+    try {
+      await onSaveProfile(
+        candidate,
+        connectSecret(resolvedSecrets),
+        resolvedSecrets.sshTunnelPassword || null,
+      );
+      return candidate.id;
+    } catch (err) {
+      // The session is open even if the save failed — never strand it over config IO.
+      console.error('Overwriting the profile after connect failed:', err);
+      return selectedProfileId;
+    }
+  };
+
   const handleDeleteProfile = async (profileId: string) => {
     await onDeleteProfile(profileId);
     if (selectedProfileId === profileId) {
@@ -625,6 +743,9 @@ export function useConnectionProfiles({
     handleEditProfile,
     handleSaveButton,
     handleSaveAsNewProfile,
+    finalizeConnect,
+    overwritePrompt,
+    respondOverwritePrompt,
     handleDeleteProfile,
     resetFormToDefaults,
     handleSshConfigSelect,
